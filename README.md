@@ -34,6 +34,45 @@ uvicorn app.main:app --reload
 
 Create `backend/.env` from `backend/.env.example`.
 
+## Production Deploy
+
+Spree is production-ready to deploy as two Vercel projects from the same GitHub repository:
+
+- Frontend project: repository root (`/`)
+- Backend project: [`backend`](/Users/lyte/Spree/spree/backend)
+
+Frontend Vercel environment variables:
+
+```text
+BACKEND_API_URL=https://your-backend-domain/api/v1
+BACKEND_INTERNAL_API_KEY=<same-value-as-backend-internal-api-key>
+NEXTAUTH_URL=https://your-frontend-domain
+NEXTAUTH_SECRET=<long-random-secret>
+```
+
+You can also set `BACKEND_URL=https://your-backend-domain` instead of `BACKEND_API_URL`.
+
+Backend Vercel environment variables:
+
+```text
+ENVIRONMENT=production
+DATABASE_URL=<managed-postgres-url>
+CORS_ORIGINS=["https://your-frontend-domain"]
+SEED_ADMIN_NAME=<admin-name>
+SEED_ADMIN_EMAIL=<admin-email>
+SEED_ADMIN_PASSWORD=<admin-password>
+INTERNAL_API_KEY=<long-random-secret>
+AUTO_INITIALIZE_DATABASE=true
+LOG_LEVEL=INFO
+```
+
+Notes:
+
+- `backend/index.py` is the Vercel entrypoint for the FastAPI app.
+- If `DATABASE_URL` is omitted on Vercel, the backend falls back to an ephemeral SQLite database in `/tmp`. That is useful for previews, not persistent production data.
+- On deployed environments, admin auto-seeding only runs when all `SEED_ADMIN_*` values are explicitly configured.
+- `CORS_ORIGINS` accepts either a JSON array or a comma-separated list.
+
 ## Local Infrastructure
 
 ```bash
@@ -48,3 +87,15 @@ npm run typecheck
 npm run build
 cd backend && ./.venv/bin/pytest
 ```
+
+## CI/CD
+
+GitHub Actions now runs:
+
+- `npm ci`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `backend` `pytest`
+
+Once both Vercel projects are connected to the repository, every push triggers Vercel deployments and GitHub will show the deployment URLs alongside the CI checks.

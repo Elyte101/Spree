@@ -1,6 +1,7 @@
 import { withAuth } from "next-auth/middleware";
+import { getNextAuthSecret } from "@/lib/runtimeConfig";
 
-const authSecret = process.env.NEXTAUTH_SECRET ?? "spree-dev-secret-change-me";
+const authSecret = getNextAuthSecret();
 
 export default withAuth({
   pages: {

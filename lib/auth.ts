@@ -1,9 +1,9 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import { getBackendApiBaseUrl, getNextAuthSecret } from "@/lib/runtimeConfig";
 import { UserRole } from "@/types/types";
 
-const DEFAULT_BACKEND_API_URL = "http://127.0.0.1:8000/api/v1";
-const authSecret = process.env.NEXTAUTH_SECRET ?? "spree-dev-secret-change-me";
+const authSecret = getNextAuthSecret();
 
 interface BackendAuthUser {
   id: string;
@@ -11,9 +11,6 @@ interface BackendAuthUser {
   email: string;
   role: UserRole;
 }
-
-const getBackendBaseUrl = () =>
-  (process.env.BACKEND_API_URL ?? DEFAULT_BACKEND_API_URL).replace(/\/$/, "");
 
 export const authOptions: NextAuthOptions = {
   secret: authSecret,
@@ -45,7 +42,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          const response = await fetch(`${getBackendBaseUrl()}/auth/login`, {
+          const response = await fetch(`${getBackendApiBaseUrl()}/auth/login`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

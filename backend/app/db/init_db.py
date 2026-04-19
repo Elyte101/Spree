@@ -1,9 +1,13 @@
+import logging
+
 from sqlalchemy import inspect, select, text
 
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.models import Base, User
 from app.db.session import SessionLocal, engine
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_user_profile_columns() -> None:
@@ -47,6 +51,12 @@ def initialize_database() -> None:
 
     Base.metadata.create_all(bind=engine)
     _ensure_user_profile_columns()
+
+    if not settings.should_seed_admin:
+        logger.warning(
+            "Skipping admin auto-seed because deployed SEED_ADMIN_* environment variables are not fully configured."
+        )
+        return
 
     with SessionLocal() as session:
         admin_user = session.scalar(select(User).where(User.email == settings.seed_admin_email))

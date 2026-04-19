@@ -15,9 +15,8 @@ import {
 } from "@/types/types";
 import { buildQueryString } from "@/lib/api/queryString";
 import { ProductQueryParams } from "@/lib/api/types";
+import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 
-const DEFAULT_BACKEND_API_URL = "http://127.0.0.1:8000/api/v1";
-const DEFAULT_BACKEND_INTERNAL_API_KEY = "spree-internal-dev-key";
 const DEFAULT_STANDARD_SHIPPING = 12;
 
 export const BACKEND_UNAVAILABLE_MESSAGE =
@@ -26,14 +25,8 @@ export const BACKEND_UNAVAILABLE_CART_ID = "cart-backend-unavailable";
 
 const reportedUnavailablePaths = new Set<string>();
 
-const getBackendBaseUrl = () =>
-  (process.env.BACKEND_API_URL ?? DEFAULT_BACKEND_API_URL).replace(/\/$/, "");
-
-const getBackendInternalApiKey = () =>
-  process.env.BACKEND_INTERNAL_API_KEY ?? DEFAULT_BACKEND_INTERNAL_API_KEY;
-
 const buildBackendUrl = (path: string) =>
-  `${getBackendBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  `${getBackendApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 
 const createFallbackHomeFeed = (): HomeFeed => ({
   hero: {
