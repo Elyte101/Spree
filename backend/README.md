@@ -18,7 +18,7 @@ The API starts at `http://127.0.0.1:8000` and exposes the storefront endpoints u
 
 Copy `backend/.env.example` to `backend/.env` to override defaults.
 
-For Vercel deployments, [`index.py`](/Users/lyte/Spree/spree/backend/index.py) exports the FastAPI application and [`vercel.json`](/Users/lyte/Spree/spree/backend/vercel.json) trims local-only files from the bundle.
+For Vercel deployments, [`server.py`](/Users/lyte/Spree/spree/backend/server.py) exports the FastAPI application directly and [`pyproject.toml`](/Users/lyte/Spree/spree/backend/pyproject.toml) points Vercel at that app.
 
 The local development seed also creates an admin account:
 

@@ -68,7 +68,7 @@ LOG_LEVEL=INFO
 
 Notes:
 
-- `backend/index.py` is the Vercel entrypoint for the FastAPI app.
+- `backend/server.py` is the Vercel entrypoint for the FastAPI app.
 - If `DATABASE_URL` is omitted on Vercel, the backend falls back to an ephemeral SQLite database in `/tmp`. That is useful for previews, not persistent production data.
 - On deployed environments, admin auto-seeding only runs when all `SEED_ADMIN_*` values are explicitly configured.
 - `CORS_ORIGINS` accepts either a JSON array or a comma-separated list.
