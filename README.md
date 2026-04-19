@@ -1,5 +1,7 @@
 # Spree
 
+This system was built end-to-end by `Lyte952` for `Elyte101`.
+
 Spree is a Next.js storefront with a FastAPI backend for catalog, auth, cart, profile, notifications, and admin product management.
 
 ## Stack
