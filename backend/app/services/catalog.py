@@ -1,0 +1,694 @@
+import re
+from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
+from math import ceil
+from uuid import uuid4
+
+from fastapi import HTTPException, status
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, selectinload
+
+from app.db.models import Brand, Category, Collection, Product, PromoBanner, User
+from app.schemas.catalog import ProductCreateIn
+
+
+@dataclass(slots=True)
+class ProductListParams:
+    ids: list[str] | None = None
+    category: str | None = None
+    brand: str | None = None
+    collection: str | None = None
+    tag: str | None = None
+    search: str | None = None
+    sort: str = "featured"
+    page: int = 1
+    limit: int = 12
+    in_stock: bool | None = None
+    min_price: float | None = None
+    max_price: float | None = None
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower().strip()).strip("-")
+    return slug or "product"
+
+
+def _normalize_tags(tags: list[str]) -> list[str]:
+    normalized: list[str] = []
+    for tag in tags:
+        cleaned = _slugify(tag)
+        if cleaned and cleaned not in normalized:
+            normalized.append(cleaned)
+    return normalized
+
+
+def _quantize_money(value: Decimal) -> float:
+    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _build_original_price(price: Decimal, discount: Decimal) -> float | None:
+    if discount <= 0 or discount >= 100:
+        return None
+
+    divisor = Decimal("1") - (discount / Decimal("100"))
+    if divisor <= 0:
+        return None
+
+    return _quantize_money(price / divisor)
+
+
+def _extract_unique_values(variants: list[dict], key: str) -> list[str]:
+    values: list[str] = []
+    for variant in variants:
+        value = variant.get(key)
+        if value and value not in values:
+            values.append(value)
+    return values
+
+
+def _product_to_dict(product: Product) -> dict:
+    images = product.images or ["/product-placeholder.svg"]
+    variants = product.variants or []
+    discount = Decimal(str(product.discount_percentage))
+
+    return {
+        "id": product.id,
+        "slug": product.slug,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "discount": float(discount),
+        "images": images,
+        "image": images[0],
+        "category": product.category.name,
+        "categoryId": product.category.id,
+        "categorySlug": product.category.slug,
+        "brand": product.brand.name,
+        "brandId": product.brand.id,
+        "brandSlug": product.brand.slug,
+        "collection": product.collection.slug if product.collection else None,
+        "collectionId": product.collection.id if product.collection else None,
+        "stock": product.stock,
+        "rating": float(product.rating),
+        "reviewsCount": product.reviews_count,
+        "reviewCount": product.reviews_count,
+        "variants": variants,
+        "createdAt": product.created_at,
+        "originalPrice": _build_original_price(Decimal(str(product.price)), discount),
+        "badge": product.badge,
+        "inStock": product.stock > 0,
+        "colors": _extract_unique_values(variants, "color"),
+        "sizes": _extract_unique_values(variants, "size"),
+        "tags": product.tags or [],
+    }
+
+
+def _category_to_dict(category: Category, count: int) -> dict:
+    return {
+        "id": category.id,
+        "name": category.name,
+        "slug": category.slug,
+        "image": category.image,
+        "itemCount": count,
+    }
+
+
+def _brand_to_dict(brand: Brand, count: int) -> dict:
+    return {
+        "id": brand.id,
+        "name": brand.name,
+        "slug": brand.slug,
+        "logo": brand.logo,
+        "productCount": count,
+    }
+
+
+def _collection_to_dict(collection: Collection, count: int) -> dict:
+    return {
+        "id": collection.id,
+        "name": collection.name,
+        "slug": collection.slug,
+        "description": collection.description,
+        "image": collection.image,
+        "productCount": count,
+    }
+
+
+def _base_product_query():
+    return (
+        select(Product)
+        .join(Product.brand)
+        .join(Product.category)
+        .outerjoin(Product.collection)
+        .options(
+            selectinload(Product.brand),
+            selectinload(Product.category),
+            selectinload(Product.collection),
+        )
+    )
+
+
+def _apply_product_filters(statement, params: ProductListParams):
+    if params.ids:
+        statement = statement.where(Product.id.in_(params.ids))
+
+    if params.category:
+        normalized_category = params.category.strip().lower()
+        statement = statement.where(
+            or_(
+                Category.id == params.category,
+                Category.slug == params.category,
+                func.lower(Category.name) == normalized_category,
+            )
+        )
+
+    if params.brand:
+        normalized_brand = params.brand.strip().lower()
+        statement = statement.where(
+            or_(
+                Brand.id == params.brand,
+                Brand.slug == params.brand,
+                func.lower(Brand.name) == normalized_brand,
+            )
+        )
+
+    if params.collection:
+        normalized_collection = params.collection.strip().lower()
+        statement = statement.where(
+            or_(
+                Collection.id == params.collection,
+                Collection.slug == params.collection,
+                func.lower(Collection.name) == normalized_collection,
+            )
+        )
+
+    if params.search:
+        query = f"%{params.search.strip().lower()}%"
+        statement = statement.where(
+            or_(
+                func.lower(Product.name).like(query),
+                func.lower(Product.description).like(query),
+                func.lower(Brand.name).like(query),
+                func.lower(Category.name).like(query),
+                func.lower(func.coalesce(Collection.name, "")).like(query),
+            )
+        )
+
+    if params.in_stock is not None:
+        statement = statement.where(Product.stock > 0 if params.in_stock else Product.stock <= 0)
+
+    if params.min_price is not None:
+        statement = statement.where(Product.price >= params.min_price)
+
+    if params.max_price is not None:
+        statement = statement.where(Product.price <= params.max_price)
+
+    return statement
+
+
+def _sort_product_query(statement, sort: str):
+    if sort == "price-asc":
+        return statement.order_by(Product.price.asc(), Product.rating.desc())
+
+    if sort == "price-desc":
+        return statement.order_by(Product.price.desc(), Product.rating.desc())
+
+    if sort == "rating":
+        return statement.order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.desc())
+
+    if sort == "newest":
+        return statement.order_by(Product.is_new_arrival.desc(), Product.created_at.desc(), Product.rating.desc())
+
+    return statement.order_by(
+        Product.is_featured.desc(),
+        Product.rating.desc(),
+        Product.reviews_count.desc(),
+        Product.created_at.desc(),
+    )
+
+
+def _load_products(db: Session, params: ProductListParams) -> list[Product]:
+    statement = _sort_product_query(_apply_product_filters(_base_product_query(), params), params.sort)
+    products = list(db.scalars(statement).unique().all())
+
+    if params.tag:
+        normalized_tag = _slugify(params.tag)
+        products = [product for product in products if normalized_tag in (product.tags or [])]
+
+    return products
+
+
+def _catalog_filters(db: Session) -> dict:
+    price_row = db.execute(select(func.min(Product.price), func.max(Product.price))).one()
+    tag_rows = db.scalars(select(Product.tags)).all()
+
+    return {
+        "categories": sorted(db.scalars(select(Category.name).order_by(Category.name.asc())).all()),
+        "brands": sorted(db.scalars(select(Brand.name).order_by(Brand.name.asc())).all()),
+        "tags": sorted({tag for tags in tag_rows for tag in (tags or [])}),
+        "collections": sorted(db.scalars(select(Collection.slug).order_by(Collection.name.asc())).all()),
+        "priceRange": {
+            "min": float(price_row[0] or 0),
+            "max": float(price_row[1] or 0),
+        },
+    }
+
+
+def _build_variant_sku(product_slug: str, color: str | None, size: str | None) -> str:
+    parts = [product_slug]
+    if color:
+        parts.append(_slugify(color))
+    if size:
+        parts.append(_slugify(size))
+    return "-".join(parts).upper()
+
+
+def _build_variants(
+    product_slug: str,
+    images: list[str],
+    stock: int,
+    payload_variants: list[dict],
+    colors: list[str],
+    sizes: list[str],
+) -> list[dict]:
+    if payload_variants:
+        variants: list[dict] = []
+        for index, variant in enumerate(payload_variants, start=1):
+            variants.append(
+                {
+                    "id": f"{product_slug}-variant-{index}",
+                    "sku": _build_variant_sku(product_slug, variant.get("color"), variant.get("size")),
+                    "label": variant["label"],
+                    "color": variant.get("color"),
+                    "size": variant.get("size"),
+                    "stock": int(variant.get("stock", 0)),
+                    "image": variant.get("image") or images[0],
+                }
+            )
+        return variants
+
+    normalized_colors = colors or [None]
+    normalized_sizes = sizes or [None]
+    combinations = max(1, len(normalized_colors) * len(normalized_sizes))
+    per_variant = stock // combinations if combinations else stock
+    remainder = stock % combinations if combinations else 0
+    variants: list[dict] = []
+    sequence = 1
+
+    for color in normalized_colors:
+        for size in normalized_sizes:
+            variant_stock = per_variant + (1 if sequence <= remainder else 0)
+            label_parts = [part for part in [color, size] if part]
+            variants.append(
+                {
+                    "id": f"{product_slug}-variant-{sequence}",
+                    "sku": _build_variant_sku(product_slug, color, size),
+                    "label": " / ".join(label_parts) if label_parts else "Default",
+                    "color": color,
+                    "size": size,
+                    "stock": variant_stock,
+                    "image": images[0],
+                }
+            )
+            sequence += 1
+
+    return variants
+
+
+def _resolve_category(
+    db: Session,
+    category_id: str | None,
+    category_name: str | None,
+    default_image: str,
+) -> Category:
+    if category_id:
+        category = db.get(Category, category_id)
+        if category is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+        return category
+
+    normalized_name = (category_name or "").strip()
+    normalized_slug = _slugify(normalized_name)
+    category = db.scalar(
+        select(Category).where(
+            or_(
+                Category.slug == normalized_slug,
+                func.lower(Category.name) == normalized_name.lower(),
+            )
+        )
+    )
+    if category is not None:
+        return category
+
+    category = Category(
+        id=f"cat-{uuid4().hex[:12]}",
+        name=normalized_name,
+        slug=normalized_slug,
+        image=default_image,
+    )
+    db.add(category)
+    db.flush()
+    return category
+
+
+def _resolve_brand(
+    db: Session,
+    brand_id: str | None,
+    brand_name: str | None,
+    default_logo: str,
+) -> Brand:
+    if brand_id:
+        brand = db.get(Brand, brand_id)
+        if brand is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
+        return brand
+
+    normalized_name = (brand_name or "").strip()
+    normalized_slug = _slugify(normalized_name)
+    brand = db.scalar(
+        select(Brand).where(
+            or_(
+                Brand.slug == normalized_slug,
+                func.lower(Brand.name) == normalized_name.lower(),
+            )
+        )
+    )
+    if brand is not None:
+        return brand
+
+    brand = Brand(
+        id=f"brand-{uuid4().hex[:12]}",
+        name=normalized_name,
+        slug=normalized_slug,
+        logo=default_logo,
+    )
+    db.add(brand)
+    db.flush()
+    return brand
+
+
+def _resolve_collection(
+    db: Session,
+    collection_id: str | None,
+    collection_name: str | None,
+    default_description: str,
+    default_image: str,
+) -> Collection | None:
+    if collection_id:
+        collection = db.get(Collection, collection_id)
+        if collection is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Collection not found")
+        return collection
+
+    normalized_name = (collection_name or "").strip()
+    if not normalized_name:
+        return None
+
+    normalized_slug = _slugify(normalized_name)
+    collection = db.scalar(
+        select(Collection).where(
+            or_(
+                Collection.slug == normalized_slug,
+                func.lower(Collection.name) == normalized_name.lower(),
+            )
+        )
+    )
+    if collection is not None:
+        return collection
+
+    collection = Collection(
+        id=f"collection-{uuid4().hex[:12]}",
+        name=normalized_name,
+        slug=normalized_slug,
+        description=default_description,
+        image=default_image,
+    )
+    db.add(collection)
+    db.flush()
+    return collection
+
+
+def get_home_feed(db: Session) -> dict:
+    banner = db.scalar(select(PromoBanner).limit(1))
+
+    featured_products = db.scalars(
+        _sort_product_query(
+            _base_product_query().where(Product.is_featured.is_(True)),
+            "featured",
+        ).limit(8)
+    ).unique().all()
+    new_arrivals = db.scalars(
+        _sort_product_query(
+            _base_product_query().where(Product.is_new_arrival.is_(True)),
+            "newest",
+        ).limit(6)
+    ).unique().all()
+
+    if not featured_products:
+        featured_products = db.scalars(_sort_product_query(_base_product_query(), "featured").limit(8)).unique().all()
+
+    if not new_arrivals:
+        new_arrivals = db.scalars(_sort_product_query(_base_product_query(), "newest").limit(6)).unique().all()
+
+    return {
+        "hero": (
+            {
+                "id": banner.id,
+                "title": banner.title,
+                "subtitle": banner.subtitle,
+                "ctaLabel": banner.cta_label,
+                "ctaHref": banner.cta_href,
+                "image": banner.image,
+            }
+            if banner
+            else None
+        ),
+        "featuredProducts": [_product_to_dict(product) for product in featured_products],
+        "newArrivals": [_product_to_dict(product) for product in new_arrivals],
+        "categories": list_categories(db),
+        "collections": list_collections(db),
+        "brands": list_brands(db),
+    }
+
+
+def list_products(db: Session, params: ProductListParams) -> dict:
+    products = _load_products(db, params)
+    total = len(products)
+    page = max(params.page, 1)
+    limit = max(params.limit, 1)
+    total_pages = max(1, ceil(total / limit)) if total else 1
+    start = (page - 1) * limit
+    end = start + limit
+
+    return {
+        "items": [_product_to_dict(product) for product in products[start:end]],
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "totalPages": total_pages,
+        "sort": params.sort,
+        "filters": _catalog_filters(db),
+    }
+
+
+def get_product(db: Session, identifier: str) -> dict | None:
+    product = db.scalar(
+        _base_product_query().where(or_(Product.id == identifier, Product.slug == identifier))
+    )
+    return _product_to_dict(product) if product else None
+
+
+def create_product(db: Session, payload: ProductCreateIn) -> dict:
+    images = [image.strip() for image in payload.images if image.strip()]
+    if not images:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one product image is required",
+        )
+
+    category = _resolve_category(
+        db,
+        payload.categoryId,
+        payload.categoryName,
+        images[0],
+    )
+    brand = _resolve_brand(
+        db,
+        payload.brandId,
+        payload.brandName,
+        images[0],
+    )
+    collection = _resolve_collection(
+        db,
+        payload.collectionId,
+        payload.collectionName,
+        payload.description.strip(),
+        images[0],
+    )
+
+    product_slug = _slugify(payload.slug or payload.name)
+    existing_product = db.scalar(select(Product).where(Product.slug == product_slug))
+    if existing_product is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A product with that slug already exists",
+        )
+
+    normalized_tags = _normalize_tags(payload.tags)
+    variants = _build_variants(
+        product_slug,
+        images,
+        payload.stock,
+        [variant.model_dump() for variant in payload.variants],
+        payload.colors,
+        payload.sizes,
+    )
+    stock = max(payload.stock, sum(variant["stock"] for variant in variants))
+
+    product = Product(
+        id=f"prod-{uuid4().hex[:12]}",
+        slug=product_slug,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        price=Decimal(str(payload.price)),
+        discount_percentage=Decimal(str(payload.discount)),
+        images=images,
+        category_id=category.id,
+        brand_id=brand.id,
+        collection_id=collection.id if collection else None,
+        stock=stock,
+        rating=payload.rating,
+        reviews_count=payload.reviewsCount,
+        variants=variants,
+        badge=payload.badge,
+        tags=normalized_tags,
+        is_featured="featured" in normalized_tags,
+        is_new_arrival="new" in normalized_tags or "new-arrival" in normalized_tags,
+    )
+    db.add(product)
+    db.commit()
+
+    created_product = db.scalar(
+        _base_product_query().where(Product.id == product.id)
+    )
+    if created_product is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Product creation failed",
+        )
+
+    return _product_to_dict(created_product)
+
+
+def get_related_products(db: Session, identifier: str, limit: int = 4) -> list[dict]:
+    product = db.scalar(
+        _base_product_query().where(or_(Product.id == identifier, Product.slug == identifier))
+    )
+    if product is None:
+        return []
+
+    related_products = db.scalars(
+        _sort_product_query(
+            _base_product_query().where(
+                Product.id != product.id,
+                or_(
+                    Product.category_id == product.category_id,
+                    Product.collection_id == product.collection_id,
+                ),
+            ),
+            "featured",
+        ).limit(limit)
+    ).unique().all()
+
+    return [_product_to_dict(candidate) for candidate in related_products]
+
+
+def list_categories(db: Session) -> list[dict]:
+    rows = db.execute(
+        select(Category, func.count(Product.id))
+        .outerjoin(Product, Product.category_id == Category.id)
+        .group_by(Category.id)
+        .order_by(Category.name.asc())
+    ).all()
+    return [_category_to_dict(category, count) for category, count in rows]
+
+
+def list_brands(db: Session) -> list[dict]:
+    rows = db.execute(
+        select(Brand, func.count(Product.id))
+        .outerjoin(Product, Product.brand_id == Brand.id)
+        .group_by(Brand.id)
+        .order_by(Brand.name.asc())
+    ).all()
+    return [_brand_to_dict(brand, count) for brand, count in rows]
+
+
+def list_collections(db: Session) -> list[dict]:
+    rows = db.execute(
+        select(Collection, func.count(Product.id))
+        .outerjoin(Product, Product.collection_id == Collection.id)
+        .group_by(Collection.id)
+        .order_by(Collection.name.asc())
+    ).all()
+    return [_collection_to_dict(collection, count) for collection, count in rows]
+
+
+def search_storefront(db: Session, query: str) -> dict:
+    trimmed_query = query.strip()
+
+    if not trimmed_query:
+        return {
+            "query": "",
+            "products": [],
+            "categories": [],
+            "brands": [],
+            "collections": [],
+        }
+
+    products = _load_products(db, ProductListParams(search=trimmed_query, limit=6))
+    query_lower = trimmed_query.lower()
+
+    categories = [category for category in list_categories(db) if query_lower in category["name"].lower()]
+    brands = [brand for brand in list_brands(db) if query_lower in brand["name"].lower()]
+    collections = [
+        collection
+        for collection in list_collections(db)
+        if query_lower in collection["name"].lower() or query_lower in collection["description"].lower()
+    ]
+
+    return {
+        "query": trimmed_query,
+        "products": [_product_to_dict(product) for product in products[:6]],
+        "categories": categories[:5],
+        "brands": brands[:5],
+        "collections": collections[:5],
+    }
+
+
+def get_admin_overview(db: Session) -> dict:
+    recent_products = db.scalars(
+        _sort_product_query(_base_product_query(), "newest").limit(5)
+    ).unique().all()
+    average_rating = db.scalar(select(func.avg(Product.rating))) or 0
+
+    return {
+        "productCount": db.scalar(select(func.count(Product.id))) or 0,
+        "categoryCount": db.scalar(select(func.count(Category.id))) or 0,
+        "brandCount": db.scalar(select(func.count(Brand.id))) or 0,
+        "collectionCount": db.scalar(select(func.count(Collection.id))) or 0,
+        "userCount": db.scalar(select(func.count(User.id))) or 0,
+        "lowStockCount": db.scalar(select(func.count(Product.id)).where(Product.stock.between(1, 9))) or 0,
+        "outOfStockCount": db.scalar(select(func.count(Product.id)).where(Product.stock <= 0)) or 0,
+        "averageRating": round(float(average_rating), 2),
+        "recentProducts": [
+            {
+                "id": product.id,
+                "slug": product.slug,
+                "name": product.name,
+                "price": float(product.price),
+                "stock": product.stock,
+                "createdAt": product.created_at,
+            }
+            for product in recent_products
+        ],
+    }

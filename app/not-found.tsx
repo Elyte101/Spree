@@ -1,0 +1,66 @@
+'use client';
+
+import Link from "next/link";
+import { SentimentDissatisfiedRounded } from "@mui/icons-material";
+import { alpha, Box, Button, Chip, Paper, Stack, Typography } from "@mui/material";
+
+export default function NotFound() {
+  return (
+    <Box
+      sx={(theme) => ({
+        minHeight: "100%",
+        px: { xs: 2, sm: 3, md: 5 },
+        py: { xs: 3, md: 5 },
+        display: "grid",
+        placeItems: "center",
+        background: `radial-gradient(circle at top left, ${alpha(
+          theme.palette.primary.main,
+          theme.palette.mode === "dark" ? 0.16 : 0.08
+        )}, transparent 24%), linear-gradient(180deg, ${
+          theme.palette.background.default
+        } 0%, ${theme.palette.background.paper} 100%)`,
+      })}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          width: "100%",
+          maxWidth: 720,
+          p: { xs: 3, md: 5 },
+          borderRadius: 4,
+          border: "1px solid",
+          borderColor: "divider",
+          textAlign: "center",
+        }}
+      >
+        <Stack spacing={2.5} alignItems="center">
+          <Chip icon={<SentimentDissatisfiedRounded />} label="Page not found" />
+          <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
+            That page doesn’t exist.
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520 }}>
+            The route may have moved, or the product you tried to open is no longer available.
+          </Typography>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Button
+              component={Link}
+              href="/"
+              variant="contained"
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+            >
+              Go home
+            </Button>
+            <Button
+              component={Link}
+              href="/products"
+              variant="outlined"
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+            >
+              Browse products
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
+    </Box>
+  );
+}
