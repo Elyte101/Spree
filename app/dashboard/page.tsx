@@ -12,8 +12,24 @@ import {
 
 import { authOptions } from "@/lib/auth";
 import { canCreateProductsRole } from "@/lib/roles";
-import { BACKEND_UNAVAILABLE_MESSAGE, getAdminOverview } from "@/lib/serverApi";
-import { ThemedPageShell } from "@/components/ui/themedPageShell";
+import {
+  BACKEND_UNAVAILABLE_MESSAGE,
+  getAdminOverview,
+  getProducts,
+} from "@/lib/serverApi";
+
+const formatPrice = (price: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(price);
+
+const formatDate = (value: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 
 export default async function Dashboard() {
   const session = await getServerSession(authOptions);
@@ -24,50 +40,130 @@ export default async function Dashboard() {
 
   const isAdmin = session.user.role === "admin";
   const canCreateProducts = canCreateProductsRole(session.user.role);
-  const overview = isAdmin ? await getAdminOverview() : null;
+  const userName = session.user.name ?? "Spree user";
+  const userEmail = session.user.email ?? "Not available";
+  const [overview, catalog] = await Promise.all([
+    isAdmin ? getAdminOverview() : Promise.resolve(null),
+    canCreateProducts ? getProducts({ limit: 6, sort: "newest" }) : Promise.resolve(null),
+  ]);
+  const firstName = userName.split(" ")[0] ?? userName;
+  const recentProducts =
+    overview?.recentProducts ??
+    catalog?.items.map((product) => ({
+      id: product.id,
+      slug: product.slug,
+      name: product.name,
+      price: product.price,
+      stock: product.stock,
+      createdAt: product.createdAt,
+    })) ??
+    [];
+  const productCount = overview?.productCount ?? catalog?.total ?? 0;
 
   return (
-    <ThemedPageShell>
-      <Stack spacing={3}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 3, md: 4 },
-            borderRadius: 4,
-            border: "1px solid",
-            borderColor: "divider",
-          }}
+    <Stack spacing={3}>
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 3, md: 4 },
+          borderRadius: 4,
+          border: "1px solid",
+          borderColor: "divider",
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", lg: "row" }}
+          spacing={2.5}
+          justifyContent="space-between"
+          alignItems={{ xs: "flex-start", lg: "center" }}
         >
-          <Stack spacing={2}>
-            <Chip label="Signed in" color="primary" sx={{ width: "fit-content", borderRadius: 999 }} />
+          <Box sx={{ maxWidth: 720 }}>
+            <Chip
+              label={canCreateProducts ? "Merchant overview" : "Account overview"}
+              color="primary"
+              sx={{ mb: 1.5, borderRadius: 999 }}
+            />
             <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-              Welcome to the Spree dashboard.
+              Welcome back, {firstName}.
             </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Keep your account details, shop information, and product tools in one place.
+            <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+              {canCreateProducts
+                ? "Check the pulse of your catalog, keep merchandising sharp, and move quickly on the next product update."
+                : "Your account is ready. Keep your profile and shopping preferences up to date here."}
             </Typography>
-            <Stack spacing={1}>
-              <Typography variant="body1">
-                <strong>Name:</strong> {session.user.name}
-              </Typography>
-              <Typography variant="body1">
-                <strong>Email:</strong> {session.user.email}
-              </Typography>
-              <Typography variant="body1">
-                <strong>Account type:</strong> {session.user.role}
-              </Typography>
-            </Stack>
+          </Box>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <Button
+              href={canCreateProducts ? "/dashboard/products/new" : "/profile"}
+              variant="contained"
+              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+            >
+              {canCreateProducts ? "Create product" : "Open profile"}
+            </Button>
+            <Button
+              href="/products"
+              variant="outlined"
+              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+            >
+              View storefront
+            </Button>
           </Stack>
-        </Paper>
+        </Stack>
+      </Paper>
 
-        {isAdmin && !overview ? (
-          <Alert severity="warning" sx={{ borderRadius: 3 }}>
-            {BACKEND_UNAVAILABLE_MESSAGE}
-          </Alert>
-        ) : null}
+      {isAdmin && !overview ? (
+        <Alert severity="warning" sx={{ borderRadius: 3 }}>
+          {BACKEND_UNAVAILABLE_MESSAGE}
+        </Alert>
+      ) : null}
 
-        {canCreateProducts ? (
-          <>
+      {canCreateProducts ? (
+        <>
+          <Box
+            sx={{
+              display: "grid",
+              gap: 2,
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, minmax(0, 1fr))",
+                xl: "repeat(4, minmax(0, 1fr))",
+              },
+            }}
+          >
+            {[
+              { label: "Products", value: productCount },
+              { label: "Categories", value: overview?.categoryCount ?? "Live catalog" },
+              { label: "Collections", value: overview?.collectionCount ?? "Curated" },
+              { label: "Avg. rating", value: overview?.averageRating ?? "Growing" },
+            ].map((item) => (
+              <Paper
+                key={item.label}
+                elevation={0}
+                sx={{
+                  p: 2.5,
+                  borderRadius: 3,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  {item.label}
+                </Typography>
+                <Typography variant="h4" sx={{ mt: 0.75, fontWeight: 900 }}>
+                  {item.value}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+
+          <Box
+            sx={{
+              display: "grid",
+              gap: 3,
+              gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1.45fr) minmax(320px, 0.9fr)" },
+            }}
+          >
             <Paper
               elevation={0}
               sx={{
@@ -77,129 +173,76 @@ export default async function Dashboard() {
                 borderColor: "divider",
               }}
             >
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                justifyContent="space-between"
-                spacing={2}
-                alignItems={{ xs: "flex-start", md: "center" }}
-              >
-                <Box>
-                  <Chip
-                    label={isAdmin ? "Store overview" : "Shop tools"}
-                    color="secondary"
-                    sx={{ mb: 1.5, borderRadius: 999 }}
-                  />
-                  <Typography variant="h4" sx={{ fontWeight: 900, lineHeight: 1 }}>
-                    {isAdmin ? "See how your shop is doing" : "Your shop is ready for new items"}
-                  </Typography>
-                  <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                    {isAdmin
-                      ? "View a quick summary of your products, collections, and shoppers."
-                      : "Add products and keep your shop fresh whenever you're ready."}
-                  </Typography>
-                </Box>
-                <Button
-                  href="/dashboard/products/new"
-                  variant="contained"
-                  sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+              <Stack spacing={2.5}>
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  justifyContent="space-between"
+                  spacing={1.5}
                 >
-                  Create product
-                </Button>
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                      Recent catalog activity
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Your newest additions and the items worth checking first.
+                    </Typography>
+                  </Box>
+                  <Button
+                    href="/dashboard/products"
+                    variant="text"
+                    sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 800 }}
+                  >
+                    Open product workspace
+                  </Button>
+                </Stack>
+
+                <Stack spacing={1.5}>
+                  {recentProducts.length ? (
+                    recentProducts.map((product) => (
+                      <Paper
+                        key={product.id}
+                        elevation={0}
+                        sx={{
+                          p: 2,
+                          borderRadius: 3,
+                          border: "1px solid",
+                          borderColor: "divider",
+                        }}
+                      >
+                        <Stack
+                          direction={{ xs: "column", md: "row" }}
+                          justifyContent="space-between"
+                          spacing={1.5}
+                        >
+                          <Box>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                              {product.name}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {product.slug} · Added {formatDate(product.createdAt)}
+                            </Typography>
+                          </Box>
+                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                            <Chip label={`Stock ${product.stock}`} size="small" />
+                            <Chip
+                              label={formatPrice(product.price)}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Products will appear here as soon as you add them.
+                    </Typography>
+                  )}
+                </Stack>
               </Stack>
             </Paper>
 
-            {isAdmin && overview ? (
-              <>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 2,
-                    gridTemplateColumns: {
-                      xs: "1fr",
-                      md: "repeat(4, minmax(0, 1fr))",
-                    },
-                  }}
-                >
-                  {[
-                    { label: "Products", value: overview.productCount },
-                    { label: "Categories", value: overview.categoryCount },
-                    { label: "Brands", value: overview.brandCount },
-                    { label: "Users", value: overview.userCount },
-                    { label: "Collections", value: overview.collectionCount },
-                    { label: "Low stock", value: overview.lowStockCount },
-                    { label: "Out of stock", value: overview.outOfStockCount },
-                    { label: "Avg. rating", value: overview.averageRating },
-                  ].map((item) => (
-                    <Paper
-                      key={item.label}
-                      elevation={0}
-                      sx={{
-                        p: 2.5,
-                        borderRadius: 3,
-                        border: "1px solid",
-                        borderColor: "divider",
-                      }}
-                    >
-                      <Typography variant="body2" color="text.secondary">
-                        {item.label}
-                      </Typography>
-                      <Typography variant="h4" sx={{ fontWeight: 900, mt: 0.75 }}>
-                        {item.value}
-                      </Typography>
-                    </Paper>
-                  ))}
-                </Box>
-
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: { xs: 3, md: 4 },
-                    borderRadius: 4,
-                    border: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Stack spacing={2}>
-                    <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                      Recently created products
-                    </Typography>
-                    <Stack spacing={1.5}>
-                      {overview.recentProducts.map((product) => (
-                        <Paper
-                          key={product.id}
-                          elevation={0}
-                          sx={{
-                            p: 2,
-                            borderRadius: 3,
-                            border: "1px solid",
-                            borderColor: "divider",
-                          }}
-                        >
-                          <Stack
-                            direction={{ xs: "column", md: "row" }}
-                            justifyContent="space-between"
-                            spacing={1}
-                          >
-                            <Box>
-                              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
-                                {product.name}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {product.slug}
-                              </Typography>
-                            </Box>
-                            <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap">
-                              <Chip label={`Stock ${product.stock}`} size="small" />
-                              <Chip label={`$${product.price}`} size="small" variant="outlined" />
-                            </Stack>
-                          </Stack>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  </Stack>
-                </Paper>
-              </>
-            ) : (
+            <Stack spacing={3}>
               <Paper
                 elevation={0}
                 sx={{
@@ -209,41 +252,79 @@ export default async function Dashboard() {
                   borderColor: "divider",
                 }}
               >
-                <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
-                  Ready to add something new?
-                </Typography>
-                <Typography variant="body1" color="text.secondary">
-                  Your shop is set up. Start adding items whenever you&apos;re ready.
-                </Typography>
+                <Stack spacing={2}>
+                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                    Focus today
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    A Shopify-like admin works best when your next actions are obvious.
+                  </Typography>
+                  <Stack spacing={1.25}>
+                    <Typography variant="body2">
+                      1. Review your newest products and make sure the copy, pricing, and imagery feel consistent.
+                    </Typography>
+                    <Typography variant="body2">
+                      2. Keep inventory healthy so out-of-stock and low-stock items do not break the storefront story.
+                    </Typography>
+                    <Typography variant="body2">
+                      3. Use tags like `featured` and `new` to control what deserves attention first.
+                    </Typography>
+                  </Stack>
+                </Stack>
               </Paper>
-            )}
-          </>
-        ) : (
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 3, md: 4 },
-              borderRadius: 4,
-              border: "1px solid",
-              borderColor: "divider",
-            }}
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 3, md: 4 },
+                  borderRadius: 4,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Stack spacing={1.5}>
+                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                    Account snapshot
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Name: {userName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Email: {userEmail}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Role: {session.user.role}
+                  </Typography>
+                </Stack>
+              </Paper>
+            </Stack>
+          </Box>
+        </>
+      ) : (
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 3, md: 4 },
+            borderRadius: 4,
+            border: "1px solid",
+            borderColor: "divider",
+          }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
+            Account dashboard
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Keep your profile, shipping details, and payment preferences current so checkout stays smooth.
+          </Typography>
+          <Button
+            href="/profile"
+            variant="outlined"
+            sx={{ mt: 2, borderRadius: 999, textTransform: "none", fontWeight: 800 }}
           >
-            <Typography variant="h5" sx={{ fontWeight: 900, mb: 1 }}>
-              {isAdmin ? "Shop details are limited right now" : "Account dashboard"}
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Your account is ready. Visit your profile when you want to set up shop details and add products.
-            </Typography>
-            <Button
-              href="/profile"
-              variant="outlined"
-              sx={{ mt: 2, borderRadius: 999, textTransform: "none", fontWeight: 800 }}
-            >
-              Open profile
-            </Button>
-          </Paper>
-        )}
-      </Stack>
-    </ThemedPageShell>
+            Open profile
+          </Button>
+        </Paper>
+      )}
+    </Stack>
   );
 }

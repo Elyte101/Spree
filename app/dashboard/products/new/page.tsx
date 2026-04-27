@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { Stack } from "@mui/material";
 
 import { ProductCreateForm } from "@/components/admin/productCreateForm";
-import { ThemedPageShell } from "@/components/ui/themedPageShell";
 import { authOptions } from "@/lib/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import { getBrands, getCategories, getCollections } from "@/lib/serverApi";
@@ -33,14 +32,12 @@ export default async function AdminProductCreatePage() {
   ]);
 
   return (
-    <ThemedPageShell>
-      <Stack spacing={3}>
-        <ProductCreateForm
-          categories={categories}
-          brands={brands}
-          collections={collections}
-        />
-      </Stack>
-    </ThemedPageShell>
+    <Stack spacing={3}>
+      <ProductCreateForm
+        categories={categories}
+        brands={brands}
+        collections={collections}
+      />
+    </Stack>
   );
 }

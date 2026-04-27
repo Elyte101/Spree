@@ -9,6 +9,7 @@ import {
   AccountCircleOutlined,
   Brightness4Rounded,
   Brightness7Rounded,
+  DashboardRounded,
   FavoriteBorderOutlined,
   LoginRounded,
   LogoutRounded,
@@ -61,6 +62,8 @@ export function StoreAppBar() {
     pathname.startsWith("/checkout/");
   const isNotificationsRoute = pathname === "/notifications";
   const isFavoritesRoute = pathname === "/favorites";
+  const isDashboardRoute =
+    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const isProfileRoute = pathname === "/profile";
   const isSettingsRoute = pathname === "/settings";
   const profileMenuOpen = Boolean(profileAnchorEl);
@@ -92,6 +95,17 @@ export function StoreAppBar() {
   });
 
   const navItems = [
+    ...(isAuthenticated
+      ? [
+          {
+            label: "Dashboard",
+            href: "/dashboard",
+            active: isDashboardRoute,
+            icon: <DashboardRounded />,
+            ariaLabel: "dashboard",
+          },
+        ]
+      : []),
     {
       label: "Favorites",
       href: "/favorites",
@@ -282,6 +296,18 @@ export function StoreAppBar() {
       >
         {isAuthenticated ? (
           [
+            <MenuItem
+              key="open-dashboard"
+              component={Link}
+              href="/dashboard"
+              onClick={closeProfileMenu}
+            >
+              <ListItemIcon>
+                <DashboardRounded fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="Open dashboard" />
+            </MenuItem>,
+            <Divider key="dashboard-divider" />,
             <MenuItem
               key="open-profile"
               component={Link}
