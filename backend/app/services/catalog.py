@@ -8,13 +8,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.db.models import Brand, Category, Collection, Product, PromoBanner, User
+from app.db.models import Brand, Category, Collection, Product, PromoBanner, SellerReport, User
 from app.schemas.catalog import ProductCreateIn
 
 
 @dataclass(slots=True)
 class ProductListParams:
     ids: list[str] | None = None
+    seller: str | None = None
     category: str | None = None
     brand: str | None = None
     collection: str | None = None
@@ -66,6 +67,42 @@ def _extract_unique_values(variants: list[dict], key: str) -> list[str]:
     return values
 
 
+def _seller_badge_label(seller: User | None) -> str | None:
+    if seller is None:
+        return None
+
+    custom_badge = (seller.seller_badge or "").strip()
+    if custom_badge:
+        return custom_badge
+
+    completed_deliveries = seller.completed_deliveries or 0
+    average_delivery_days = (
+        float(seller.average_delivery_days) if seller.average_delivery_days is not None else None
+    )
+
+    if average_delivery_days is not None and average_delivery_days <= 2 and completed_deliveries >= 5:
+        return "Fast delivery"
+
+    if seller.seller_status == "active" and seller.government_id_verified:
+        return "Verified seller"
+
+    return None
+
+
+def _seller_location_label(seller: User | None) -> str | None:
+    if seller is None:
+        return None
+
+    location = seller.store_location or {}
+    parts = [
+        str(location.get("city", "")).strip(),
+        str(location.get("state", "")).strip(),
+        str(location.get("country", "")).strip(),
+    ]
+    label = ", ".join(part for part in parts if part)
+    return label or None
+
+
 def _product_to_dict(product: Product) -> dict:
     images = product.images or ["/product-placeholder.svg"]
     variants = product.variants or []
@@ -86,12 +123,20 @@ def _product_to_dict(product: Product) -> dict:
         "brand": product.brand.name,
         "brandId": product.brand.id,
         "brandSlug": product.brand.slug,
+        "sellerId": product.seller.id if product.seller else None,
+        "sellerName": product.seller.name if product.seller else None,
+        "storeName": product.seller.store_name if product.seller else None,
+        "storeSlug": product.seller.store_slug if product.seller else None,
+        "sellerType": product.seller.seller_type if product.seller else None,
+        "sellerBadge": _seller_badge_label(product.seller),
+        "sellerLocation": _seller_location_label(product.seller),
         "collection": product.collection.slug if product.collection else None,
         "collectionId": product.collection.id if product.collection else None,
         "stock": product.stock,
         "rating": float(product.rating),
         "reviewsCount": product.reviews_count,
         "reviewCount": product.reviews_count,
+        "purchaseCount": product.purchase_count,
         "variants": variants,
         "createdAt": product.created_at,
         "originalPrice": _build_original_price(Decimal(str(product.price)), discount),
@@ -134,16 +179,29 @@ def _collection_to_dict(collection: Collection, count: int) -> dict:
     }
 
 
-def _base_product_query():
-    return (
+def _base_product_query(include_inactive_sellers: bool = False):
+    statement = (
         select(Product)
         .join(Product.brand)
         .join(Product.category)
         .outerjoin(Product.collection)
+        .outerjoin(Product.seller)
         .options(
             selectinload(Product.brand),
             selectinload(Product.category),
             selectinload(Product.collection),
+            selectinload(Product.seller),
+        )
+    )
+
+    if include_inactive_sellers:
+        return statement
+
+    return statement.where(
+        or_(
+            Product.seller_id.is_(None),
+            User.role == "admin",
+            User.seller_status == "active",
         )
     )
 
@@ -151,6 +209,17 @@ def _base_product_query():
 def _apply_product_filters(statement, params: ProductListParams):
     if params.ids:
         statement = statement.where(Product.id.in_(params.ids))
+
+    if params.seller:
+        normalized_seller = params.seller.strip().lower()
+        statement = statement.where(
+            or_(
+                Product.seller_id == params.seller,
+                User.store_slug == params.seller,
+                func.lower(func.coalesce(User.store_name, "")) == normalized_seller,
+                func.lower(User.name) == normalized_seller,
+            )
+        )
 
     if params.category:
         normalized_category = params.category.strip().lower()
@@ -227,8 +296,16 @@ def _sort_product_query(statement, sort: str):
     )
 
 
-def _load_products(db: Session, params: ProductListParams) -> list[Product]:
-    statement = _sort_product_query(_apply_product_filters(_base_product_query(), params), params.sort)
+def _load_products(
+    db: Session,
+    params: ProductListParams,
+    *,
+    include_inactive_sellers: bool = False,
+) -> list[Product]:
+    statement = _sort_product_query(
+        _apply_product_filters(_base_product_query(include_inactive_sellers), params),
+        params.sort,
+    )
     products = list(db.scalars(statement).unique().all())
 
     if params.tag:
@@ -498,7 +575,20 @@ def get_product(db: Session, identifier: str) -> dict | None:
     return _product_to_dict(product) if product else None
 
 
-def create_product(db: Session, payload: ProductCreateIn) -> dict:
+def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | None) -> dict:
+    actor = db.get(User, actor_user_id) if actor_user_id else None
+    if actor is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A signed-in seller account is required to create products",
+        )
+
+    if actor.role != "admin" and actor.seller_status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your seller account is not active right now",
+        )
+
     images = [image.strip() for image in payload.images if image.strip()]
     if not images:
         raise HTTPException(
@@ -556,9 +646,11 @@ def create_product(db: Session, payload: ProductCreateIn) -> dict:
         category_id=category.id,
         brand_id=brand.id,
         collection_id=collection.id if collection else None,
+        seller_id=actor.id,
         stock=stock,
         rating=payload.rating,
         reviews_count=payload.reviewsCount,
+        purchase_count=payload.purchaseCount,
         variants=variants,
         badge=payload.badge,
         tags=normalized_tags,
@@ -677,6 +769,16 @@ def get_admin_overview(db: Session) -> dict:
         "brandCount": db.scalar(select(func.count(Brand.id))) or 0,
         "collectionCount": db.scalar(select(func.count(Collection.id))) or 0,
         "userCount": db.scalar(select(func.count(User.id))) or 0,
+        "sellerCount": db.scalar(select(func.count(User.id)).where(User.role.in_(["seller", "admin"]))) or 0,
+        "activeSellerCount": db.scalar(
+            select(func.count(User.id)).where(
+                User.role.in_(["seller", "admin"]),
+                User.seller_status == "active",
+            )
+        ) or 0,
+        "openSellerReportCount": db.scalar(
+            select(func.count(SellerReport.id)).where(SellerReport.status == "open")
+        ) or 0,
         "lowStockCount": db.scalar(select(func.count(Product.id)).where(Product.stock.between(1, 9))) or 0,
         "outOfStockCount": db.scalar(select(func.count(Product.id)).where(Product.stock <= 0)) or 0,
         "averageRating": round(float(average_rating), 2),

@@ -22,6 +22,15 @@ npm run dev
 
 Create `.env.local` from `.env.example`.
 
+For local full-stack work, start both servers together:
+
+```bash
+npm run dev:full
+```
+
+This runs the Next.js frontend and the FastAPI backend expected by
+`BACKEND_API_URL=http://127.0.0.1:8000/api/v1`.
+
 ## Backend
 
 ```bash
@@ -33,6 +42,13 @@ uvicorn app.main:app --reload
 ```
 
 Create `backend/.env` from `backend/.env.example`.
+
+The local seeded admin account is:
+
+```text
+Email: admin@spree.local
+Password: ChangeMe123!
+```
 
 ## Production Deploy
 
@@ -80,6 +96,12 @@ docker compose up -d
 ```
 
 ## Verification
+
+```bash
+npm run verify
+```
+
+Or run the checks individually:
 
 ```bash
 npm run lint

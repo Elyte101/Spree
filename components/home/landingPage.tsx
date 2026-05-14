@@ -84,7 +84,7 @@ export function LandingPage({
       icon: <ShoppingBagOutlined color="primary" />,
       label: "Cart",
       value: `${cartItemCount}`,
-      helper: "items saved for later",
+      helper: "item(s) saved for later",
     },
   ];
 
@@ -93,7 +93,7 @@ export function LandingPage({
       elevation={0}
       sx={{
         p: 4,
-        borderRadius: 4,
+        borderRadius: 2,
         border: "1px solid",
         borderColor: "divider",
         backgroundColor: "action.hover",
@@ -142,7 +142,7 @@ export function LandingPage({
           sx={(theme) => ({
             position: "relative",
             overflow: "hidden",
-            borderRadius: 5,
+            borderRadius: 3,
             p: { xs: 2.5, md: 4 },
             border: "1px solid",
             borderColor: "divider",
@@ -247,7 +247,7 @@ export function LandingPage({
                 elevation={0}
                 sx={(theme) => ({
                   p: 2,
-                  borderRadius: 4,
+                  borderRadius: 3,
                   border: "1px solid",
                   borderColor: "divider",
                   background: `linear-gradient(145deg, ${alpha(
@@ -264,7 +264,7 @@ export function LandingPage({
                     sx={{
                       position: "relative",
                       minHeight: { xs: 260, sm: 300, md: 340 },
-                      borderRadius: 4,
+                      borderRadius: 2,
                       overflow: "hidden",
                     }}
                   >
@@ -282,7 +282,7 @@ export function LandingPage({
                     spacing={1}
                     sx={{
                       minHeight: { xs: 260, sm: 300, md: 340 },
-                      borderRadius: 4,
+                      borderRadius: 2,
                       px: 3,
                       py: 4,
                       border: "1px dashed",
@@ -339,7 +339,7 @@ export function LandingPage({
                   elevation={0}
                   sx={{
                     p: 2.5,
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                   }}
@@ -368,7 +368,7 @@ export function LandingPage({
                   elevation={0}
                   sx={{
                     p: 2.5,
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                   }}
@@ -415,7 +415,7 @@ export function LandingPage({
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -622,7 +622,7 @@ export function LandingPage({
                     color: "text.primary",
                     textDecoration: "none",
                     p: 2,
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                     transition: "transform 0.2s ease, border-color 0.2s ease",
@@ -638,7 +638,7 @@ export function LandingPage({
                         position: "relative",
                         width: 92,
                         height: 92,
-                        borderRadius: 3,
+                        borderRadius: 2,
                         backgroundColor: "action.hover",
                         border: "1px solid",
                         borderColor: "divider",
@@ -708,7 +708,7 @@ export function LandingPage({
                     display: "block",
                     color: "text.primary",
                     textDecoration: "none",
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                     background: `linear-gradient(150deg, ${alpha(
@@ -786,7 +786,7 @@ export function LandingPage({
           elevation={0}
           sx={(theme) => ({
             p: { xs: 3, md: 4 },
-            borderRadius: 5,
+            borderRadius: 3,
             border: "1px solid",
             borderColor: "divider",
             background: `linear-gradient(135deg, ${alpha(

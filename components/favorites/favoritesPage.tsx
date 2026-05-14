@@ -48,7 +48,7 @@ export function FavoritesPage() {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -97,7 +97,7 @@ export function FavoritesPage() {
             elevation={0}
             sx={{
               p: { xs: 4, md: 6 },
-              borderRadius: 4,
+              borderRadius: 2,
               border: "1px solid",
               borderColor: "divider",
               textAlign: "center",

@@ -177,7 +177,7 @@ export function ProductListingPage({
           sx={(theme) => ({
             position: "relative",
             overflow: "hidden",
-            borderRadius: 4,
+            borderRadius: 2,
             p: { xs: 2.5, md: 4 },
             background: `linear-gradient(135deg, rgba(26, 26, 26, 0.96) 0%, ${alpha(
               theme.palette.primary.main,
@@ -245,6 +245,7 @@ export function ProductListingPage({
               sx={(theme) => ({
                 minWidth: { sm: 220 },
                 width: { xs: "100%", sm: "auto" },
+                height: "10%",
                 p: 2,
                 borderRadius: 2,
                 backgroundColor: alpha(theme.palette.common.white, 0.12),
@@ -547,7 +548,7 @@ export function ProductListingPage({
               </Stack>
             </Paper>
 
-            <Paper elevation={0} sx={{ borderRadius: 4, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+            <Paper elevation={0} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
               {isFetching ? <LinearProgress /> : null}
               <Box sx={{ p: { xs: 2, sm: 2.5 } }}>
                 {hasError ? (
@@ -577,7 +578,7 @@ export function ProductListingPage({
                     sx={{
                       p: 5,
                       textAlign: "center",
-                      borderRadius: 4,
+                      borderRadius: 2,
                       backgroundColor: "action.hover",
                     }}
                   >

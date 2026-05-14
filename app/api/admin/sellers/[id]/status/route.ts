@@ -1,0 +1,40 @@
+import { getServerSession } from "next-auth";
+import { NextResponse } from "next/server";
+
+import { authOptions } from "@/lib/auth";
+import { proxyBackend } from "@/lib/serverApi";
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getServerSession(authOptions);
+
+  if (!session) {
+    return NextResponse.json(
+      { detail: "You must be signed in to manage seller status" },
+      { status: 401 }
+    );
+  }
+
+  if (session.user.role !== "admin") {
+    return NextResponse.json(
+      { detail: "Only admins can manage seller status" },
+      { status: 403 }
+    );
+  }
+
+  const { id } = await params;
+
+  return proxyBackend(
+    `/admin/sellers/${id}/status`,
+    {
+      method: "PUT",
+      body: await request.text(),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+    { internal: true }
+  );
+}

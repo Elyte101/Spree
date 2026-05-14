@@ -33,6 +33,18 @@ function getLocalRedirectTarget(callbackUrl: string) {
   return callbackUrl;
 }
 
+async function isBackendAvailable() {
+  try {
+    const response = await fetch("/api/health/backend", {
+      cache: "no-store",
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function SignInForm({
   callbackUrl,
   reason,
@@ -81,6 +93,18 @@ export function SignInForm({
           : "We couldn’t create your account. Please try again."
       );
       return;
+    }
+
+    if (mode === "signin") {
+      const backendAvailable = await isBackendAvailable();
+
+      if (!backendAvailable) {
+        setSubmitting(false);
+        setError(
+          "The backend API is not running, so sign-in cannot verify your password. Start it with npm run dev:backend or npm run dev:full."
+        );
+        return;
+      }
     }
 
     const result = await signIn("credentials", {
@@ -132,7 +156,7 @@ export function SignInForm({
           width: "100%",
           maxWidth: 480,
           p: { xs: 3, md: 4 },
-          borderRadius: 4,
+          borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
         }}
@@ -150,8 +174,8 @@ export function SignInForm({
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
               {mode === "signin"
-                ? "Sign in to see your account, saved details, and store information."
-                : "Create an account to save your details and make shopping easier next time."}
+                ? "Sign in to see your buyer account, saved details, and store information."
+                : "Create an account to start as a buyer. You can later register a store with a government ID to become a seller."}
             </Typography>
           </Box>
 

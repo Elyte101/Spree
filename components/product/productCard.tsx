@@ -29,6 +29,11 @@ const formatPrice = (price: number) =>
     currency: "USD",
   }).format(price);
 
+const sellerTypeLabels: Record<NonNullable<Product["sellerType"]>, string> = {
+  retail: "Retail",
+  wholesale: "Wholesale",
+};
+
 export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -60,7 +65,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        borderRadius: isCompact ? 3 : 4,
+        borderRadius: isCompact ? 2 : 3,
         overflow: "hidden",
         border: "1px solid",
         borderColor: "divider",
@@ -264,6 +269,43 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             >
               {product.name}
             </Typography>
+            {product.storeName && product.storeSlug ? (
+              <Stack spacing={0.75} sx={{ mt: 0.5 }}>
+                <Typography
+                  component={Link}
+                  href={`/stores/${product.storeSlug}`}
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    display: "inline-block",
+                    width: "fit-content",
+                    textDecoration: "none",
+                    "&:hover": {
+                      color: "primary.main",
+                    },
+                  }}
+                >
+                  Sold by {product.storeName}
+                </Typography>
+                <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                  {product.sellerType ? (
+                    <Chip
+                      label={sellerTypeLabels[product.sellerType]}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ) : null}
+                  {product.sellerBadge ? (
+                    <Chip
+                      label={product.sellerBadge}
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                    />
+                  ) : null}
+                </Stack>
+              </Stack>
+            ) : null}
           </Box>
         </Stack>
 

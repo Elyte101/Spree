@@ -4,10 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:backend": "cd backend && ./.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:full": "bash scripts/dev-full.sh",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:backend": "cd backend && ./.venv/bin/pytest",
+    "verify": "npm run lint && npm run typecheck && npm run build && npm run test:backend"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

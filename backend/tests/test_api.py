@@ -25,6 +25,53 @@ def _create_product_payload() -> dict:
     }
 
 
+def _seller_profile_payload(email: str, *, store_name: str = "Jamie Select") -> dict:
+    return {
+        "name": "Jamie Merchant",
+        "email": email,
+        "phone": "555-0100",
+        "isSeller": True,
+        "storeName": store_name,
+        "sellerType": "wholesale",
+        "storeDescription": "Curated essentials for every season.",
+        "storeLocation": {
+            "addressLine1": "123 Market Street",
+            "city": "Accra",
+            "state": "Greater Accra",
+            "postalCode": "00233",
+            "country": "Ghana",
+        },
+        "sellerContact": {
+            "businessEmail": email,
+            "businessPhone": "555-0199",
+            "whatsapp": "555-0199",
+            "registrationNumber": "SPREE-GH-123",
+        },
+        "sellerIdentity": {
+            "governmentIdType": "ghana-card",
+            "governmentIdNumber": "GHA-1234-5678",
+            "storeTagline": "Modern essentials from Accra.",
+        },
+        "shippingAddress": {
+            "fullName": "Jamie Merchant",
+            "addressLine1": "123 Market Street",
+            "addressLine2": "Suite 4",
+            "city": "Accra",
+            "state": "Greater Accra",
+            "postalCode": "00233",
+            "country": "Ghana",
+        },
+        "paymentInfo": {
+            "method": "card",
+            "cardholderName": "Jamie Merchant",
+            "cardLast4": "4242",
+            "expiryMonth": "04",
+            "expiryYear": "2028",
+            "billingPostalCode": "00233",
+        },
+    }
+
+
 def test_healthcheck():
     with TestClient(app) as client:
         response = client.get("/healthz")
@@ -105,43 +152,94 @@ def test_profile_endpoint_updates_customer_to_seller():
 
         assert signup_response.status_code == 201
         created_user = signup_response.json()
+        store_name = f"Jamie Select {uuid4().hex[:6]}"
 
         profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
             headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
-            json={
-                "name": "Jamie Merchant",
-                "email": email,
-                "phone": "555-0100",
-                "isSeller": True,
-                "storeName": "Jamie Select",
-                "storeDescription": "Curated essentials for every season.",
-                "shippingAddress": {
-                    "fullName": "Jamie Merchant",
-                    "addressLine1": "123 Market Street",
-                    "addressLine2": "Suite 4",
-                    "city": "Accra",
-                    "state": "Greater Accra",
-                    "postalCode": "00233",
-                    "country": "Ghana",
-                },
-                "paymentInfo": {
-                    "method": "card",
-                    "cardholderName": "Jamie Merchant",
-                    "cardLast4": "4242",
-                    "expiryMonth": "04",
-                    "expiryYear": "2028",
-                    "billingPostalCode": "00233",
-                },
-            },
+            json=_seller_profile_payload(email, store_name=store_name),
         )
 
         assert profile_response.status_code == 200
         payload = profile_response.json()
         assert payload["role"] == "seller"
-        assert payload["storeName"] == "Jamie Select"
+        assert payload["sellerStatus"] == "pending"
+        assert payload["storeName"] == store_name
+        assert payload["sellerType"] == "wholesale"
+        assert payload["storeLocation"]["city"] == "Accra"
+        assert payload["sellerContact"]["businessPhone"] == "555-0199"
+        assert payload["sellerIdentity"]["governmentIdNumber"] == "GHA-1234-5678"
         assert payload["shippingAddress"]["city"] == "Accra"
         assert payload["paymentInfo"]["cardLast4"] == "4242"
+
+
+def test_suspended_seller_cannot_reactivate_through_profile_update():
+    with TestClient(app) as client:
+        email = f"paused-seller-{uuid4().hex[:8]}@example.com"
+        signup_response = client.post(
+            "/api/v1/auth/signup",
+            json={
+                "name": "Jamie Merchant",
+                "email": email,
+                "password": "Storefront123!",
+            },
+        )
+        assert signup_response.status_code == 201
+        created_user = signup_response.json()
+
+        profile_response = client.put(
+            f"/api/v1/auth/profile/{created_user['id']}",
+            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            json=_seller_profile_payload(email, store_name=f"Paused Select {uuid4().hex[:6]}"),
+        )
+        assert profile_response.status_code == 200
+        assert profile_response.json()["sellerStatus"] == "pending"
+
+        accept_response = client.put(
+            f"/api/v1/admin/sellers/{created_user['id']}/status",
+            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            json={
+                "status": "active",
+                "sellerNotice": "",
+                "adminNote": "Accepted for selling",
+                "sellerBadge": "Verified seller",
+                "completedDeliveries": 12,
+                "averageDeliveryDays": 1.8,
+                "governmentIdVerified": True,
+            },
+        )
+        assert accept_response.status_code == 200
+        assert accept_response.json()["sellerStatus"] == "active"
+        assert accept_response.json()["sellerBadge"] == "Verified seller"
+        assert accept_response.json()["completedDeliveries"] == 12
+
+        suspend_response = client.put(
+            f"/api/v1/admin/sellers/{created_user['id']}/status",
+            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            json={
+                "status": "suspended",
+                "sellerNotice": "Identity review needed",
+                "adminNote": "Regression guard",
+                "sellerBadge": "Verified seller",
+                "completedDeliveries": 12,
+                "averageDeliveryDays": 1.8,
+                "governmentIdVerified": True,
+            },
+        )
+        assert suspend_response.status_code == 200
+        assert suspend_response.json()["sellerStatus"] == "suspended"
+
+        updated_profile_response = client.put(
+            f"/api/v1/auth/profile/{created_user['id']}",
+            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            json=_seller_profile_payload(email, store_name=suspend_response.json()["storeName"]),
+        )
+
+        assert updated_profile_response.status_code == 200
+        updated_profile = updated_profile_response.json()
+        assert updated_profile["role"] == "seller"
+        assert updated_profile["sellerStatus"] == "suspended"
+        assert updated_profile["sellerNotice"] == "Identity review needed"
 
 
 def test_product_details_endpoint_returns_created_product():
@@ -149,7 +247,10 @@ def test_product_details_endpoint_returns_created_product():
         create_response = client.post(
             "/api/v1/products",
             json=_create_product_payload(),
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers={
+                "X-Internal-Api-Key": "spree-internal-dev-key",
+                "X-Actor-User-Id": "user-admin",
+            },
         )
         assert create_response.status_code == 201
         created = create_response.json()
@@ -173,7 +274,10 @@ def test_admin_product_creation_requires_internal_api_key():
         response = client.post(
             "/api/v1/products",
             json=payload,
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers={
+                "X-Internal-Api-Key": "spree-internal-dev-key",
+                "X-Actor-User-Id": "user-admin",
+            },
         )
 
         assert response.status_code == 201

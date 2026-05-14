@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       body: await request.text(),
       headers: {
         "Content-Type": "application/json",
+        "X-Actor-User-Id": session.user.id,
       },
     },
     { internal: true }

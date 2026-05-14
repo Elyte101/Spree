@@ -10,7 +10,7 @@ export default function ProductsLoading() {
           elevation={0}
           sx={{
             p: { xs: 2.5, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}

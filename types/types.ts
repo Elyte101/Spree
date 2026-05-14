@@ -7,6 +7,9 @@ export type CatalogSort =
 
 export type UserRole = "customer" | "seller" | "admin";
 export type PaymentMethod = "card" | "paypal" | "bank-transfer";
+export type SellerStatus = "buyer" | "pending" | "active" | "suspended" | "removed";
+export type SellerType = "retail" | "wholesale";
+export type GovernmentIdType = "ghana-card" | "passport" | "drivers-license";
 
 export interface ProductVariant {
   id: string;
@@ -38,12 +41,20 @@ export interface Product {
   brand: string;
   brandId: string;
   brandSlug: string;
+  sellerId?: string | null;
+  sellerName?: string | null;
+  storeName?: string | null;
+  storeSlug?: string | null;
+  sellerType?: SellerType | null;
+  sellerBadge?: string | null;
+  sellerLocation?: string | null;
   collection?: string | null;
   collectionId?: string | null;
   stock: number;
   rating: number;
   reviewsCount: number;
   reviewCount: number;
+  purchaseCount: number;
   variants: ProductVariant[];
   createdAt: string;
   originalPrice?: number | null;
@@ -162,6 +173,9 @@ export interface AdminOverview {
   brandCount: number;
   collectionCount: number;
   userCount: number;
+  sellerCount: number;
+  activeSellerCount: number;
+  openSellerReportCount: number;
   lowStockCount: number;
   outOfStockCount: number;
   averageRating: number;
@@ -197,6 +211,27 @@ export interface ShippingAddress {
   country: string;
 }
 
+export interface SellerIdentityInfo {
+  governmentIdType: GovernmentIdType;
+  governmentIdNumber: string;
+  storeTagline: string;
+}
+
+export interface StoreLocation {
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+export interface SellerContact {
+  businessEmail: string;
+  businessPhone: string;
+  whatsapp: string;
+  registrationNumber: string;
+}
+
 export interface PaymentInfo {
   method: PaymentMethod;
   cardholderName: string;
@@ -209,7 +244,81 @@ export interface PaymentInfo {
 export interface UserProfile extends AuthUser {
   phone: string;
   storeName: string;
+  storeSlug: string;
+  storeTagline: string;
   storeDescription: string;
+  storeLocation: StoreLocation;
+  sellerContact: SellerContact;
+  sellerType: SellerType;
+  sellerStatus: SellerStatus;
+  sellerBadge: string;
+  completedDeliveries: number;
+  averageDeliveryDays?: number | null;
+  sellerNotice: string;
+  adminNote: string;
+  governmentIdType: GovernmentIdType;
+  governmentIdNumber: string;
+  governmentIdVerified: boolean;
+  sellerStartedAt?: string | null;
+  sellerIdentity: SellerIdentityInfo;
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
+}
+
+export interface SellerSummary {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  phone: string;
+  storeName: string;
+  storeSlug: string;
+  storeTagline: string;
+  storeDescription: string;
+  storeLocation: StoreLocation;
+  sellerContact: SellerContact;
+  sellerType: SellerType;
+  sellerStatus: SellerStatus;
+  sellerBadge: string;
+  completedDeliveries: number;
+  averageDeliveryDays?: number | null;
+  sellerNotice: string;
+  adminNote: string;
+  governmentIdType: GovernmentIdType;
+  governmentIdVerified: boolean;
+  followerCount: number;
+  productCount: number;
+  purchaseCount: number;
+  reportCount: number;
+  startedAt?: string | null;
+  createdAt: string;
+}
+
+export interface SellerReport {
+  id: string;
+  reporterId: string;
+  reporterName: string;
+  reason: string;
+  details: string;
+  status: string;
+  createdAt: string;
+}
+
+export interface SellerDetail extends SellerSummary {
+  products: Product[];
+}
+
+export interface AdminSellerDetail extends SellerSummary {
+  governmentIdNumber: string;
+  shippingAddress: ShippingAddress;
+  paymentInfo: PaymentInfo;
+  reports: SellerReport[];
+}
+
+export interface TopProductsResponse {
+  items: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

@@ -9,6 +9,7 @@ import {
   LocalShippingOutlined,
   ReplayOutlined,
   StarRounded,
+  StorefrontRounded,
   WorkspacePremiumRounded,
 } from "@mui/icons-material";
 import {
@@ -44,6 +45,11 @@ const formatLabel = (value: string) =>
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+
+const sellerTypeLabels: Record<NonNullable<Product["sellerType"]>, string> = {
+  retail: "Retail seller",
+  wholesale: "Wholesale seller",
+};
 
 export function ProductDetailsPage({
   product,
@@ -96,8 +102,8 @@ export function ProductDetailsPage({
     },
     {
       icon: <WorkspacePremiumRounded fontSize="small" color="primary" />,
-      title: "Curated quality",
-      body: "Built to help you design premium product detail experiences.",
+      title: "Trusted sellers",
+      body: "Each product is tied to a store that buyers can review, follow, and report if needed.",
     },
   ];
 
@@ -156,7 +162,7 @@ export function ProductDetailsPage({
               elevation={0}
               sx={(theme) => ({
                 p: { xs: 1, md: 1.75 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
                 background: `linear-gradient(145deg, ${alpha(
@@ -256,6 +262,12 @@ export function ProductDetailsPage({
                 />
                 <Chip label={product.category} variant="outlined" />
                 <Chip label={product.brand} variant="outlined" />
+                {product.sellerType ? (
+                  <Chip label={sellerTypeLabels[product.sellerType]} variant="outlined" />
+                ) : null}
+                {product.sellerBadge ? (
+                  <Chip label={product.sellerBadge} color="success" variant="outlined" />
+                ) : null}
               </Stack>
 
               <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1, color: "text.primary" }}>
@@ -281,7 +293,7 @@ export function ProductDetailsPage({
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -406,7 +418,7 @@ export function ProductDetailsPage({
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -427,11 +439,21 @@ export function ProductDetailsPage({
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
-                    SKU
+                    Sold by
                   </Typography>
                   <Typography variant="body1" fontWeight={700}>
-                    {product.id.toUpperCase()}
+                    {product.storeName ?? product.sellerName ?? "Marketplace seller"}
                   </Typography>
+                  {product.sellerType ? (
+                    <Typography variant="body2" color="text.secondary">
+                      {sellerTypeLabels[product.sellerType]}
+                    </Typography>
+                  ) : null}
+                  {product.sellerLocation ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Ships from {product.sellerLocation}
+                    </Typography>
+                  ) : null}
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">
@@ -446,6 +468,55 @@ export function ProductDetailsPage({
               </Stack>
             </Paper>
 
+            {product.storeSlug ? (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 2, sm: 2.5 },
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  justifyContent="space-between"
+                  spacing={2}
+                >
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Store
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      {product.storeName ?? product.sellerName}
+                    </Typography>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ my: 1 }}>
+                      {product.sellerType ? (
+                        <Chip label={sellerTypeLabels[product.sellerType]} size="small" variant="outlined" />
+                      ) : null}
+                      {product.sellerBadge ? (
+                        <Chip label={product.sellerBadge} size="small" color="success" variant="outlined" />
+                      ) : null}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {product.sellerLocation
+                        ? `Located in ${product.sellerLocation}. Explore the seller's storefront, follow their shop, or report them if something feels off.`
+                        : "Explore the seller's storefront, follow their shop, or report them if something feels off."}
+                    </Typography>
+                  </Box>
+                  <Button
+                    component={NextLink}
+                    href={`/stores/${product.storeSlug}`}
+                    startIcon={<StorefrontRounded />}
+                    variant="outlined"
+                    sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800, alignSelf: "flex-start" }}
+                  >
+                    Visit store
+                  </Button>
+                </Stack>
+              </Paper>
+            ) : null}
+
             <Box
               sx={{
                 display: "grid",
@@ -459,7 +530,7 @@ export function ProductDetailsPage({
                   elevation={0}
                   sx={{
                     p: 2,
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                   }}
@@ -503,7 +574,7 @@ export function ProductDetailsPage({
                 sx={{
                   gridColumn: "1 / -1",
                   p: 3,
-                  borderRadius: 4,
+                  borderRadius: 2,
                   border: "1px solid",
                   borderColor: "divider",
                 }}

@@ -78,6 +78,20 @@ export function AdminWorkspaceShell({
           },
         ]
       : []),
+    ...(userRole === "admin"
+      ? [
+          {
+            label: "Sellers",
+            href: "/dashboard/sellers",
+            icon: <ManageAccountsRounded fontSize="small" />,
+          },
+          {
+            label: "Top products",
+            href: "/dashboard/products/top",
+            icon: <StorefrontRounded fontSize="small" />,
+          },
+        ]
+      : []),
     {
       label: "Storefront",
       href: "/products",
@@ -117,7 +131,7 @@ export function AdminWorkspaceShell({
           elevation={0}
           sx={(theme) => ({
             p: { xs: 2.5, md: 3.5 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
             background: `linear-gradient(135deg, ${alpha(
@@ -177,7 +191,7 @@ export function AdminWorkspaceShell({
                 variant="outlined"
                 sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
               >
-                View storefront
+                Shop products
               </Button>
             </Stack>
           </Stack>
@@ -196,7 +210,7 @@ export function AdminWorkspaceShell({
             elevation={0}
             sx={{
               p: 2,
-              borderRadius: 4,
+              borderRadius: 2,
               border: "1px solid",
               borderColor: "divider",
               position: { lg: "sticky" },

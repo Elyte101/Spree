@@ -25,7 +25,7 @@ function ProductDetailsUnavailableState() {
           width: "100%",
           maxWidth: 720,
           p: { xs: 3, md: 5 },
-          borderRadius: 4,
+          borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
           textAlign: "center",

@@ -58,7 +58,7 @@ export function CartPage({ recommendations }: CartPageProps) {
           elevation={0}
           sx={{
             p: { xs: 2.5, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -109,7 +109,7 @@ export function CartPage({ recommendations }: CartPageProps) {
             elevation={0}
             sx={{
               p: { xs: 4, md: 6 },
-              borderRadius: 4,
+              borderRadius: 2,
               border: "1px solid",
               borderColor: "divider",
               textAlign: "center",
@@ -147,7 +147,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                   elevation={0}
                   sx={{
                     p: { xs: 2, sm: 2.5 },
-                    borderRadius: 4,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                   }}
@@ -245,7 +245,7 @@ export function CartPage({ recommendations }: CartPageProps) {
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
                 position: { xl: "sticky" },
@@ -332,7 +332,7 @@ export function CartPage({ recommendations }: CartPageProps) {
               elevation={0}
               sx={{
                 p: 3,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
                 backgroundColor: "action.hover",
