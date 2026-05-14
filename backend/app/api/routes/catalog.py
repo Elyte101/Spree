@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 
 from app.api.deps import DBSession, InternalAPIKey
 from app.schemas.catalog import (
@@ -46,6 +46,7 @@ def home_feed(db: DBSession):
 def products(
     db: DBSession,
     ids: str | None = Query(default=None),
+    seller: str | None = Query(default=None),
     category: str | None = Query(default=None),
     brand: str | None = Query(default=None),
     collection: str | None = Query(default=None),
@@ -62,6 +63,7 @@ def products(
         db,
         ProductListParams(
             ids=_parse_csv(ids),
+            seller=seller,
             category=category,
             brand=brand,
             collection=collection,
@@ -78,8 +80,13 @@ def products(
 
 
 @router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
-def products_create(payload: ProductCreateIn, db: DBSession, _: InternalAPIKey):
-    return create_product(db, payload)
+def products_create(
+    payload: ProductCreateIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_user_id: str | None = Header(default=None, alias="X-Actor-User-Id"),
+):
+    return create_product(db, payload, actor_user_id)
 
 
 @router.get("/products/{identifier}", response_model=ProductOut)

@@ -6,9 +6,14 @@ import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   AccountCircleRounded,
+  AddBusinessRounded,
+  BadgeRounded,
+  ContactPhoneRounded,
+  Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
   PaymentRounded,
+  PlaceRounded,
   SaveRounded,
   StoreRounded,
   StorefrontRounded,
@@ -35,9 +40,15 @@ interface ProfilePageProps {
   initialProfile: UserProfile;
 }
 
+const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
+  retail: "Retail seller",
+  wholesale: "Wholesale seller",
+};
+
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const router = useRouter();
   const { update } = useSession();
+  const sellerSectionRef = React.useRef<HTMLDivElement | null>(null);
   const [profile, setProfile] = React.useState(initialProfile);
   const [sellerMode, setSellerMode] = React.useState(initialProfile.role === "seller");
   const [saving, setSaving] = React.useState(false);
@@ -46,13 +57,67 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
 
   const isAdmin = profile.role === "admin";
   const sellerSwitchChecked = isAdmin || sellerMode;
-  const savedSellerAccess = isAdmin || canCreateProductsRole(profile.role);
+  const savedSellerAccess =
+    isAdmin || (canCreateProductsRole(profile.role) && profile.sellerStatus === "active");
 
   const updateProfileField =
-    (field: "name" | "email" | "phone" | "storeName" | "storeDescription") =>
+    (
+      field:
+        | "name"
+        | "email"
+        | "phone"
+        | "storeName"
+        | "sellerType"
+        | "storeTagline"
+        | "storeDescription"
+    ) =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setProfile((current) => ({ ...current, [field]: value }));
+    };
+
+  const updateSellerIdentityField =
+    (field: keyof UserProfile["sellerIdentity"]) =>
+    (
+      event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    ) => {
+      const value = event.target.value;
+      setProfile((current) => ({
+        ...current,
+        ...(field === "storeTagline" ? { storeTagline: value } : null),
+        ...(field === "governmentIdType" ? { governmentIdType: value as UserProfile["governmentIdType"] } : null),
+        ...(field === "governmentIdNumber" ? { governmentIdNumber: value } : null),
+        sellerIdentity: {
+          ...current.sellerIdentity,
+          [field]: value,
+        },
+      }));
+    };
+
+  const updateStoreLocationField =
+    (field: keyof UserProfile["storeLocation"]) =>
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setProfile((current) => ({
+        ...current,
+        storeLocation: {
+          ...current.storeLocation,
+          [field]: value,
+        },
+      }));
+    };
+
+  const updateSellerContactField =
+    (field: keyof UserProfile["sellerContact"]) =>
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value;
+      setProfile((current) => ({
+        ...current,
+        sellerContact: {
+          ...current.sellerContact,
+          [field]: value,
+        },
+      }));
     };
 
   const updateShippingField =
@@ -92,15 +157,20 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
-        isSeller: sellerMode,
+        isSeller: sellerMode || isAdmin,
         storeName: profile.storeName,
+        sellerType: profile.sellerType,
+        storeTagline: profile.storeTagline,
         storeDescription: profile.storeDescription,
+        storeLocation: profile.storeLocation,
+        sellerContact: profile.sellerContact,
+        sellerIdentity: profile.sellerIdentity,
         shippingAddress: profile.shippingAddress,
         paymentInfo: profile.paymentInfo,
       });
 
       setProfile(updatedProfile);
-      setSellerMode(updatedProfile.role === "seller");
+      setSellerMode(updatedProfile.role === "seller" || updatedProfile.role === "admin");
       await update({
         id: updatedProfile.id,
         name: updatedProfile.name,
@@ -120,6 +190,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
+  const handleBecomeSeller = () => {
+    setSellerMode(true);
+    window.requestAnimationFrame(() => {
+      sellerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
   return (
     <Box
       sx={(theme) => ({
@@ -134,7 +211,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -163,9 +240,40 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
               <Chip label={`Account type: ${profile.role}`} color="secondary" />
               {savedSellerAccess ? (
-                <Chip label="Selling is on" color="success" />
+                <Chip label="Store is active" color="success" />
+              ) : profile.sellerStatus === "pending" ? (
+                <Chip label="Pending admin approval" color="warning" />
+              ) : profile.sellerStatus === "suspended" ? (
+                <Chip label="Store suspended" color="warning" />
+              ) : profile.sellerStatus === "removed" ? (
+                <Chip label="Store removed" color="error" />
               ) : (
-                <Chip label="Shopping only" variant="outlined" />
+                <Chip label="Default buyer" variant="outlined" />
+              )}
+              {sellerSwitchChecked ? (
+                <Chip label={sellerTypeLabels[profile.sellerType]} variant="outlined" />
+              ) : null}
+              {!sellerSwitchChecked && !isAdmin ? (
+                <Button
+                  type="button"
+                  variant="contained"
+                  startIcon={<AddBusinessRounded />}
+                  onClick={handleBecomeSeller}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                >
+                  Become a seller
+                </Button>
+              ) : (
+                <Button
+                  component={Link}
+                  href="/dashboard/products"
+                  variant="contained"
+                  startIcon={<Inventory2Rounded />}
+                  disabled={!savedSellerAccess}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                >
+                  Manage products
+                </Button>
               )}
             </Stack>
           </Stack>
@@ -187,7 +295,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -234,10 +342,11 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             </Paper>
 
             <Paper
+              ref={sellerSectionRef}
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -246,7 +355,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 <Stack direction="row" spacing={1} alignItems="center">
                   <StoreRounded color="primary" />
                   <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Shop details
+                    Seller onboarding
                   </Typography>
                 </Stack>
 
@@ -260,10 +369,14 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   }
                   label={
                     isAdmin
-                      ? "This account can already manage the shop"
-                      : "Turn this on to set up a shop and publish products"
+                      ? "This admin account can also run a store"
+                      : "Apply to become a seller"
                   }
                 />
+
+                <Alert severity="info">
+                  Seller applications go to admin review before product publishing is enabled. Seller accounts can still shop and check out as buyers.
+                </Alert>
 
                 <Box
                   sx={{
@@ -280,13 +393,35 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     required={sellerMode}
                   />
                   <TextField
+                    label="Store tagline"
+                    value={profile.storeTagline}
+                    onChange={updateProfileField("storeTagline")}
+                    disabled={!sellerSwitchChecked && !isAdmin}
+                  />
+                  <TextField
+                    select
+                    label="Sell as"
+                    value={profile.sellerType}
+                    onChange={updateProfileField("sellerType")}
+                    disabled={!sellerSwitchChecked && !isAdmin}
+                  >
+                    <MenuItem value="retail">Retail seller</MenuItem>
+                    <MenuItem value="wholesale">Wholesale seller</MenuItem>
+                  </TextField>
+                  <TextField
                     label="Store status"
                     value={
                       sellerSwitchChecked
-                        ? savedSellerAccess
-                          ? "Ready to sell"
-                          : "Save to start selling"
-                        : "Shopping only"
+                        ? profile.sellerStatus === "suspended"
+                          ? "Suspended by admin"
+                          : profile.sellerStatus === "removed"
+                            ? "Removed by admin"
+                            : profile.sellerStatus === "pending"
+                              ? "Pending admin approval"
+                            : savedSellerAccess
+                              ? "Ready to sell"
+                              : "Save to submit your seller application"
+                        : "Buyer only"
                     }
                     InputProps={{ readOnly: true }}
                   />
@@ -300,6 +435,144 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   minRows={3}
                   disabled={!sellerSwitchChecked && !isAdmin}
                 />
+
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <PlaceRounded color="primary" />
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      Store location
+                    </Typography>
+                  </Stack>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 2,
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    }}
+                  >
+                    <TextField
+                      label="Store address"
+                      value={profile.storeLocation.addressLine1}
+                      onChange={updateStoreLocationField("addressLine1")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      required={sellerMode}
+                    />
+                    <TextField
+                      label="City"
+                      value={profile.storeLocation.city}
+                      onChange={updateStoreLocationField("city")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      required={sellerMode}
+                    />
+                    <TextField
+                      label="State / Region"
+                      value={profile.storeLocation.state}
+                      onChange={updateStoreLocationField("state")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      required={sellerMode}
+                    />
+                    <TextField
+                      label="Country"
+                      value={profile.storeLocation.country}
+                      onChange={updateStoreLocationField("country")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      required={sellerMode}
+                    />
+                    <TextField
+                      label="Postal code"
+                      value={profile.storeLocation.postalCode}
+                      onChange={updateStoreLocationField("postalCode")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                    />
+                  </Box>
+                </Stack>
+
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ContactPhoneRounded color="primary" />
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      Seller business details
+                    </Typography>
+                  </Stack>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 2,
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    }}
+                  >
+                    <TextField
+                      label="Business email"
+                      type="email"
+                      value={profile.sellerContact.businessEmail}
+                      onChange={updateSellerContactField("businessEmail")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                    />
+                    <TextField
+                      label="Business phone"
+                      value={profile.sellerContact.businessPhone}
+                      onChange={updateSellerContactField("businessPhone")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      required={sellerMode && !profile.phone}
+                    />
+                    <TextField
+                      label="WhatsApp"
+                      value={profile.sellerContact.whatsapp}
+                      onChange={updateSellerContactField("whatsapp")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                    />
+                    <TextField
+                      label="Business registration number"
+                      value={profile.sellerContact.registrationNumber}
+                      onChange={updateSellerContactField("registrationNumber")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                    />
+                  </Box>
+                </Stack>
+
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <BadgeRounded color="primary" />
+                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      Seller verification
+                    </Typography>
+                  </Stack>
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 2,
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    }}
+                  >
+                    <TextField
+                      select
+                      label="Government ID"
+                      value={profile.sellerIdentity.governmentIdType}
+                      onChange={updateSellerIdentityField("governmentIdType")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                    >
+                      <MenuItem value="ghana-card">Ghana Card</MenuItem>
+                      <MenuItem value="passport">Passport</MenuItem>
+                      <MenuItem value="drivers-license">Driver&apos;s License</MenuItem>
+                    </TextField>
+                    <TextField
+                      label="ID number"
+                      value={profile.sellerIdentity.governmentIdNumber}
+                      onChange={updateSellerIdentityField("governmentIdNumber")}
+                      disabled={!sellerSwitchChecked && !isAdmin}
+                      helperText="This stays private to admins and seller review."
+                    />
+                  </Box>
+
+                  {profile.sellerNotice ? (
+                    <Alert severity="warning">{profile.sellerNotice}</Alert>
+                  ) : null}
+                  {profile.sellerBadge ? (
+                    <Alert severity="success">
+                      Store badge: {profile.sellerBadge}
+                    </Alert>
+                  ) : null}
+                </Stack>
               </Stack>
             </Paper>
 
@@ -307,7 +580,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -369,7 +642,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -460,7 +733,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -474,10 +747,16 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 </Stack>
                 <Typography variant="body2" color="text.secondary">
                   {savedSellerAccess
-                    ? "Your account can add products right away."
+                    ? "Your store can publish products right away."
+                    : profile.sellerStatus === "pending"
+                      ? "Your storefront application is waiting for admin approval before products can go live."
+                    : profile.sellerStatus === "suspended"
+                      ? "Your store is temporarily paused. Review the seller notice above before contacting admin."
+                      : profile.sellerStatus === "removed"
+                        ? "Your seller access was removed. Buyer features still work, but product publishing is disabled."
                     : sellerSwitchChecked
-                      ? "Save your profile to start adding products to your shop."
-                      : "Turn on selling, add your shop name, and save when you're ready to begin."}
+                      ? "Save your store, description, and Ghana Card details to activate seller access."
+                      : "Stay as a buyer, or turn on selling when you are ready to open a store."}
                 </Typography>
                 <Button
                   component={Link}
@@ -487,6 +766,24 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
                 >
                   Create a product
+                </Button>
+                <Button
+                  component={Link}
+                  href="/dashboard/products"
+                  variant="outlined"
+                  disabled={!savedSellerAccess}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                >
+                  Manage products
+                </Button>
+                <Button
+                  component={Link}
+                  href={profile.storeSlug ? `/stores/${profile.storeSlug}` : "/products"}
+                  variant="outlined"
+                  disabled={!savedSellerAccess}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                >
+                  View storefront
                 </Button>
                 <Button
                   component={Link}
@@ -503,17 +800,18 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
             >
               <Stack spacing={1.5}>
                 <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  How this helps
+                  Marketplace model
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  You can shop with a regular account, or turn on selling to add shop details and publish items.
+                  Buyers can browse immediately. Sellers must register a store with identity details, and admins can monitor seller health privately.
+                  Approved sellers keep buyer checkout access while managing their storefront and product catalog.
                 </Typography>
               </Stack>
             </Paper>

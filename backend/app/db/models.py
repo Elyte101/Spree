@@ -72,9 +72,15 @@ class Product(Base):
         nullable=True,
         index=True,
     )
+    seller_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
     stock: Mapped[int] = mapped_column(Integer, default=0, index=True)
     rating: Mapped[float] = mapped_column(default=0)
     reviews_count: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    purchase_count: Mapped[int] = mapped_column(Integer, default=0, index=True)
     variants: Mapped[list[dict]] = mapped_column(JSON, default=list)
     badge: Mapped[str | None] = mapped_column(String(120), nullable=True)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -94,6 +100,7 @@ class Product(Base):
     brand: Mapped[Brand] = relationship(back_populates="products")
     category: Mapped[Category] = relationship(back_populates="products")
     collection: Mapped[Collection | None] = relationship(back_populates="products")
+    seller: Mapped["User | None"] = relationship(back_populates="products")
 
 
 class Notification(Base):
@@ -118,7 +125,22 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default="customer")
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     store_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    store_slug: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    store_tagline: Mapped[str | None] = mapped_column(String(160), nullable=True)
     store_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    store_location: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    seller_contact: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    seller_type: Mapped[str] = mapped_column(String(32), default="retail", index=True)
+    seller_status: Mapped[str] = mapped_column(String(32), default="buyer", index=True)
+    seller_badge: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    completed_deliveries: Mapped[int] = mapped_column(Integer, default=0)
+    average_delivery_days: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    seller_notice: Mapped[str | None] = mapped_column(Text, nullable=True)
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    government_id_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    government_id_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    government_id_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    seller_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     shipping_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     payment_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -131,6 +153,38 @@ class User(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+    products: Mapped[list[Product]] = relationship(back_populates="seller")
+
+
+class SellerFollow(Base):
+    __tablename__ = "seller_follows"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    seller_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    follower_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+
+
+class SellerReport(Base):
+    __tablename__ = "seller_reports"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    seller_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reporter_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(120))
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Cart(Base):

@@ -16,6 +16,7 @@ import {
   BACKEND_UNAVAILABLE_MESSAGE,
   getAdminOverview,
   getProducts,
+  getUserProfile,
 } from "@/lib/serverApi";
 
 const formatPrice = (price: number) =>
@@ -42,9 +43,20 @@ export default async function Dashboard() {
   const canCreateProducts = canCreateProductsRole(session.user.role);
   const userName = session.user.name ?? "Spree user";
   const userEmail = session.user.email ?? "Not available";
+  const sellerProfile =
+    canCreateProducts && !isAdmin
+      ? await getUserProfile(session.user.id, {
+          name: session.user.name ?? undefined,
+          email: session.user.email ?? undefined,
+          role: session.user.role,
+        })
+      : null;
+  const canManageProducts = isAdmin || sellerProfile?.sellerStatus === "active";
   const [overview, catalog] = await Promise.all([
     isAdmin ? getAdminOverview() : Promise.resolve(null),
-    canCreateProducts ? getProducts({ limit: 6, sort: "newest" }) : Promise.resolve(null),
+    canManageProducts
+      ? getProducts({ limit: 6, sort: "newest", seller: sellerProfile?.id })
+      : Promise.resolve(null),
   ]);
   const firstName = userName.split(" ")[0] ?? userName;
   const recentProducts =
@@ -66,7 +78,7 @@ export default async function Dashboard() {
         elevation={0}
         sx={{
           p: { xs: 3, md: 4 },
-          borderRadius: 4,
+          borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
         }}
@@ -79,7 +91,7 @@ export default async function Dashboard() {
         >
           <Box sx={{ maxWidth: 720 }}>
             <Chip
-              label={canCreateProducts ? "Merchant overview" : "Account overview"}
+              label={canManageProducts ? "Merchant overview" : "Account overview"}
               color="primary"
               sx={{ mb: 1.5, borderRadius: 999 }}
             />
@@ -87,7 +99,7 @@ export default async function Dashboard() {
               Welcome back, {firstName}.
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-              {canCreateProducts
+              {canManageProducts
                 ? "Check the pulse of your catalog, keep merchandising sharp, and move quickly on the next product update."
                 : "Your account is ready. Keep your profile and shopping preferences up to date here."}
             </Typography>
@@ -95,11 +107,11 @@ export default async function Dashboard() {
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
             <Button
-              href={canCreateProducts ? "/dashboard/products/new" : "/profile"}
+              href={canManageProducts ? "/dashboard/products/new" : "/profile"}
               variant="contained"
               sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
             >
-              {canCreateProducts ? "Create product" : "Open profile"}
+              {canManageProducts ? "Create product" : "Open profile"}
             </Button>
             <Button
               href="/products"
@@ -118,7 +130,7 @@ export default async function Dashboard() {
         </Alert>
       ) : null}
 
-      {canCreateProducts ? (
+      {canManageProducts ? (
         <>
           <Box
             sx={{
@@ -133,16 +145,25 @@ export default async function Dashboard() {
           >
             {[
               { label: "Products", value: productCount },
-              { label: "Categories", value: overview?.categoryCount ?? "Live catalog" },
-              { label: "Collections", value: overview?.collectionCount ?? "Curated" },
-              { label: "Avg. rating", value: overview?.averageRating ?? "Growing" },
+              {
+                label: isAdmin ? "Sellers" : "Categories",
+                value: isAdmin ? overview?.sellerCount ?? 0 : overview?.categoryCount ?? "Live catalog",
+              },
+              {
+                label: isAdmin ? "Active sellers" : "Collections",
+                value: isAdmin ? overview?.activeSellerCount ?? 0 : overview?.collectionCount ?? "Curated",
+              },
+              {
+                label: isAdmin ? "Open reports" : "Avg. rating",
+                value: isAdmin ? overview?.openSellerReportCount ?? 0 : overview?.averageRating ?? "Growing",
+              },
             ].map((item) => (
               <Paper
                 key={item.label}
                 elevation={0}
                 sx={{
                   p: 2.5,
-                  borderRadius: 3,
+                  borderRadius: "16px",
                   border: "1px solid",
                   borderColor: "divider",
                 }}
@@ -168,7 +189,7 @@ export default async function Dashboard() {
               elevation={0}
               sx={{
                 p: { xs: 3, md: 4 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -204,7 +225,7 @@ export default async function Dashboard() {
                         elevation={0}
                         sx={{
                           p: 2,
-                          borderRadius: 3,
+                          borderRadius: "16px",
                           border: "1px solid",
                           borderColor: "divider",
                         }}
@@ -247,7 +268,7 @@ export default async function Dashboard() {
                 elevation={0}
                 sx={{
                   p: { xs: 3, md: 4 },
-                  borderRadius: 4,
+                  borderRadius: 2,
                   border: "1px solid",
                   borderColor: "divider",
                 }}
@@ -267,7 +288,7 @@ export default async function Dashboard() {
                       2. Keep inventory healthy so out-of-stock and low-stock items do not break the storefront story.
                     </Typography>
                     <Typography variant="body2">
-                      3. Use tags like `featured` and `new` to control what deserves attention first.
+                      3. Watch seller reports, follower growth, and top products so marketplace trust stays strong.
                     </Typography>
                   </Stack>
                 </Stack>
@@ -277,7 +298,7 @@ export default async function Dashboard() {
                 elevation={0}
                 sx={{
                   p: { xs: 3, md: 4 },
-                  borderRadius: 4,
+                  borderRadius: 2,
                   border: "1px solid",
                   borderColor: "divider",
                 }}
@@ -295,6 +316,34 @@ export default async function Dashboard() {
                   <Typography variant="body2" color="text.secondary">
                     Role: {session.user.role}
                   </Typography>
+                  {sellerProfile ? (
+                    <>
+                      <Typography variant="body2" color="text.secondary">
+                        Seller status: {sellerProfile.sellerStatus}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Seller badge: {sellerProfile.sellerBadge || "Not assigned"}
+                      </Typography>
+                    </>
+                  ) : null}
+                  {isAdmin ? (
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 1 }}>
+                      <Button
+                        href="/dashboard/sellers"
+                        variant="outlined"
+                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                      >
+                        Manage sellers
+                      </Button>
+                      <Button
+                        href="/dashboard/products/top"
+                        variant="contained"
+                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                      >
+                        Review top products
+                      </Button>
+                    </Stack>
+                  ) : null}
                 </Stack>
               </Paper>
             </Stack>
@@ -305,7 +354,7 @@ export default async function Dashboard() {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}

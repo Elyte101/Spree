@@ -1,10 +1,19 @@
-import { CatalogSort, PaymentInfo, ShippingAddress } from "@/types/types";
+import {
+  CatalogSort,
+  PaymentInfo,
+  SellerContact,
+  SellerStatus,
+  SellerType,
+  ShippingAddress,
+  StoreLocation,
+} from "@/types/types";
 
 export interface ProductQueryParams {
   ids?: string[];
   category?: string;
   brand?: string;
   collection?: string;
+  seller?: string;
   tag?: string;
   search?: string;
   sort?: CatalogSort;
@@ -39,6 +48,7 @@ export interface CreateProductPayload {
   stock: number;
   rating: number;
   reviewsCount: number;
+  purchaseCount?: number;
   variants: ProductVariantPayload[];
   colors: string[];
   sizes: string[];
@@ -59,7 +69,37 @@ export interface UpdateProfilePayload {
   phone: string;
   isSeller: boolean;
   storeName: string;
+  sellerType: SellerType;
+  storeTagline: string;
   storeDescription: string;
+  storeLocation: StoreLocation;
+  sellerContact: SellerContact;
+  sellerIdentity: {
+    governmentIdType: "ghana-card" | "passport" | "drivers-license";
+    governmentIdNumber: string;
+    storeTagline: string;
+  };
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
+}
+
+export interface ReportSellerPayload {
+  reason:
+    | "counterfeit"
+    | "fraud"
+    | "abuse"
+    | "delivery-issue"
+    | "misleading-listing"
+    | "other";
+  details: string;
+}
+
+export interface UpdateSellerStatusPayload {
+  status: Extract<SellerStatus, "pending" | "active" | "suspended" | "removed">;
+  sellerNotice: string;
+  adminNote: string;
+  sellerBadge: string;
+  completedDeliveries: number;
+  averageDeliveryDays: number | null;
+  governmentIdVerified: boolean;
 }

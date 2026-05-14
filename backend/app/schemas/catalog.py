@@ -35,6 +35,7 @@ class ProductCreateIn(BaseModel):
     stock: int = Field(default=0, ge=0)
     rating: float = Field(default=0, ge=0, le=5)
     reviewsCount: int = Field(default=0, ge=0)
+    purchaseCount: int = Field(default=0, ge=0)
     variants: list[ProductVariantIn] = Field(default_factory=list)
     colors: list[str] = Field(default_factory=list)
     sizes: list[str] = Field(default_factory=list)
@@ -68,12 +69,20 @@ class ProductOut(BaseModel):
     brand: str
     brandId: str
     brandSlug: str
+    sellerId: str | None = None
+    sellerName: str | None = None
+    storeName: str | None = None
+    storeSlug: str | None = None
+    sellerType: Literal["retail", "wholesale"] | None = None
+    sellerBadge: str | None = None
+    sellerLocation: str | None = None
     collection: str | None = None
     collectionId: str | None = None
     stock: int
     rating: float
     reviewsCount: int
     reviewCount: int
+    purchaseCount: int
     variants: list[ProductVariantOut]
     createdAt: datetime
     originalPrice: float | None = None
@@ -173,6 +182,9 @@ class AdminOverviewOut(BaseModel):
     brandCount: int
     collectionCount: int
     userCount: int
+    sellerCount: int
+    activeSellerCount: int
+    openSellerReportCount: int
     lowStockCount: int
     outOfStockCount: int
     averageRating: float

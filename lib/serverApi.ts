@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   AdminOverview,
+  AdminSellerDetail,
   Brand,
   CartSummary,
   CatalogResponse,
@@ -10,7 +11,10 @@ import {
   HomeFeed,
   NotificationItem,
   Product,
+  SellerDetail,
+  SellerSummary,
   SearchResponse,
+  TopProductsResponse,
   UserProfile,
 } from "@/types/types";
 import { buildQueryString } from "@/lib/api/queryString";
@@ -94,7 +98,38 @@ const createFallbackUserProfile = (
   role: fallback?.role ?? "customer",
   phone: "",
   storeName: "",
+  storeSlug: "",
+  storeTagline: "",
   storeDescription: "",
+  storeLocation: {
+    addressLine1: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "",
+  },
+  sellerContact: {
+    businessEmail: fallback?.email ?? "",
+    businessPhone: "",
+    whatsapp: "",
+    registrationNumber: "",
+  },
+  sellerType: "retail",
+  sellerStatus: fallback?.role === "seller" || fallback?.role === "admin" ? "active" : "buyer",
+  sellerBadge: "",
+  completedDeliveries: 0,
+  averageDeliveryDays: null,
+  sellerNotice: "",
+  adminNote: "",
+  governmentIdType: "ghana-card",
+  governmentIdNumber: "",
+  governmentIdVerified: false,
+  sellerStartedAt: null,
+  sellerIdentity: {
+    governmentIdType: "ghana-card",
+    governmentIdNumber: "",
+    storeTagline: "",
+  },
   shippingAddress: {
     fullName: fallback?.name ?? "",
     addressLine1: "",
@@ -312,6 +347,61 @@ export const getAdminOverview = () =>
     internal: true,
     fallback: () => null,
   });
+
+export const getSellers = () =>
+  getJson<SellerSummary[]>("/sellers", undefined, { fallback: () => [] });
+
+export const getSeller = async (identifier: string) => {
+  const response = await fetchBackend(`/sellers/${identifier}`);
+
+  if (response.status === 404) {
+    return undefined;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Backend request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<SellerDetail>;
+};
+
+export const getAdminSellers = () =>
+  getJson<SellerSummary[]>("/admin/sellers", undefined, {
+    internal: true,
+    fallback: () => [],
+  });
+
+export const getAdminSeller = async (identifier: string) => {
+  const response = await fetchBackend(`/admin/sellers/${identifier}`, undefined, {
+    internal: true,
+  });
+
+  if (response.status === 404) {
+    return undefined;
+  }
+
+  if (!response.ok) {
+    throw new Error(`Backend request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<AdminSellerDetail>;
+};
+
+export const getAdminTopProducts = (page = 1, limit = 100) =>
+  getJson<TopProductsResponse>(
+    `/admin/products/top${buildQueryString({ page, limit })}`,
+    undefined,
+    {
+      internal: true,
+      fallback: () => ({
+        items: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      }),
+    }
+  );
 
 export const searchStorefront = (query: string) =>
   getJson<SearchResponse>(`/search${buildQueryString({ query })}`, undefined, {

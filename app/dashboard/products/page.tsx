@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import {
@@ -23,6 +22,7 @@ import {
   BACKEND_UNAVAILABLE_MESSAGE,
   getAdminOverview,
   getProducts,
+  getUserProfile,
 } from "@/lib/serverApi";
 
 const formatPrice = (price: number) =>
@@ -50,9 +50,22 @@ export default async function DashboardProductsPage() {
     redirect("/dashboard");
   }
 
+  const isAdmin = session.user.role === "admin";
+  const sellerProfile = isAdmin
+    ? null
+    : await getUserProfile(session.user.id, {
+        name: session.user.name ?? undefined,
+        email: session.user.email ?? undefined,
+        role: session.user.role,
+      });
+
+  if (sellerProfile && sellerProfile.sellerStatus !== "active") {
+    redirect("/profile");
+  }
+
   const [catalog, overview] = await Promise.all([
-    getProducts({ limit: 24, sort: "newest" }),
-    session.user.role === "admin" ? getAdminOverview() : Promise.resolve(null),
+    getProducts({ limit: 24, sort: "newest", seller: sellerProfile?.id }),
+    isAdmin ? getAdminOverview() : Promise.resolve(null),
   ]);
 
   const featuredCount = catalog.items.filter((product) =>
@@ -72,7 +85,7 @@ export default async function DashboardProductsPage() {
         elevation={0}
         sx={{
           p: { xs: 3, md: 4 },
-          borderRadius: 4,
+          borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
         }}
@@ -90,16 +103,17 @@ export default async function DashboardProductsPage() {
               sx={{ mb: 1.5, borderRadius: 999 }}
             />
             <Typography variant="h4" sx={{ fontWeight: 900 }}>
-              Products
+              {isAdmin ? "Products" : "Your products"}
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-              Review your latest catalog entries, spot stock risks, and jump straight into product creation.
+              {isAdmin
+                ? "Review the latest catalog entries, spot stock risks, and jump straight into product creation."
+                : "Manage the products attached to your approved storefront."}
             </Typography>
           </Box>
 
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
             <Button
-              component={Link}
               href="/dashboard/products/new"
               variant="contained"
               sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
@@ -107,8 +121,7 @@ export default async function DashboardProductsPage() {
               Create product
             </Button>
             <Button
-              component={Link}
-              href="/products"
+              href={sellerProfile?.storeSlug ? `/stores/${sellerProfile.storeSlug}` : "/products"}
               variant="outlined"
               sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
             >
@@ -118,7 +131,7 @@ export default async function DashboardProductsPage() {
         </Stack>
       </Paper>
 
-      {session.user.role === "admin" && !overview ? (
+      {isAdmin && !overview ? (
         <Alert severity="warning" sx={{ borderRadius: 3 }}>
           {BACKEND_UNAVAILABLE_MESSAGE}
         </Alert>
@@ -144,16 +157,13 @@ export default async function DashboardProductsPage() {
           <Paper
             key={item.label}
             elevation={0}
-            sx={(theme) => ({
+            sx={{
               p: 2.5,
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
-              backgroundColor:
-                item.tone === "primary"
-                  ? theme.palette.action.hover
-                  : "background.paper",
-            })}
+              backgroundColor: item.tone === "primary" ? "action.hover" : "background.paper",
+            }}
           >
             <Typography variant="body2" color="text.secondary">
               {item.label}
@@ -169,7 +179,7 @@ export default async function DashboardProductsPage() {
         component={Paper}
         elevation={0}
         sx={{
-          borderRadius: 4,
+          borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
           overflow: "hidden",
@@ -192,7 +202,7 @@ export default async function DashboardProductsPage() {
                 <TableCell sx={{ minWidth: 260 }}>
                   <Stack spacing={0.75}>
                     <Typography
-                      component={Link}
+                      component="a"
                       href={`/products/${product.slug}`}
                       sx={{
                         color: "text.primary",
@@ -272,7 +282,6 @@ export default async function DashboardProductsPage() {
                       Add your first product to start shaping the catalog and merchandising your storefront.
                     </Typography>
                     <Button
-                      component={Link}
                       href="/dashboard/products/new"
                       variant="contained"
                       sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}

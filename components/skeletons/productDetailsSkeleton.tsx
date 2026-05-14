@@ -12,7 +12,7 @@ export function ProductDetailsSkeleton() {
       }}
     >
       <Stack spacing={2}>
-        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 4, border: "1px solid", borderColor: "divider" }}>
+        <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
           <Skeleton variant="rounded" height={560} />
         </Paper>
         <Box
@@ -28,7 +28,7 @@ export function ProductDetailsSkeleton() {
         </Box>
       </Stack>
 
-      <Paper elevation={0} sx={{ p: 3, borderRadius: 4, border: "1px solid", borderColor: "divider" }}>
+      <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
         <Stack spacing={2}>
           <Skeleton variant="rounded" width={120} height={32} />
           <Skeleton variant="text" width="75%" height={56} />

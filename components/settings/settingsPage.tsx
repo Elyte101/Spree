@@ -36,6 +36,7 @@ export function SettingsPage() {
     <Box
       sx={(theme) => ({
         minHeight: "100%",
+        height: "1500px",
         px: { xs: 2, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
         background: `radial-gradient(circle at top left, ${alpha(
@@ -51,7 +52,7 @@ export function SettingsPage() {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -78,7 +79,7 @@ export function SettingsPage() {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -134,7 +135,7 @@ export function SettingsPage() {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -182,7 +183,7 @@ export function SettingsPage() {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -229,7 +230,7 @@ export function SettingsPage() {
               elevation={0}
               sx={{
                 p: 2.5,
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}

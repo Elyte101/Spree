@@ -85,7 +85,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -130,7 +130,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
                     elevation={0}
                     sx={{
                       p: 2.5,
-                      borderRadius: 4,
+                      borderRadius: 2,
                       border: "1px solid",
                       borderColor: item.isRead ? "divider" : "primary.main",
                       backgroundColor: item.isRead ? "background.paper" : "action.hover",
@@ -199,7 +199,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
           elevation={0}
           sx={{
             p: 2.5,
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}

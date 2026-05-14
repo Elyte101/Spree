@@ -1,6 +1,10 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+SellerType = Literal["retail", "wholesale"]
+SellerStatus = Literal["buyer", "pending", "active", "suspended", "removed"]
 
 
 class LoginRequest(BaseModel):
@@ -40,13 +44,38 @@ class PaymentInfo(BaseModel):
     billingPostalCode: str = Field(default="", max_length=40)
 
 
+class SellerIdentityInfo(BaseModel):
+    governmentIdType: Literal["ghana-card", "passport", "drivers-license"] = "ghana-card"
+    governmentIdNumber: str = Field(default="", max_length=64)
+    storeTagline: str = Field(default="", max_length=160)
+
+
+class StoreLocation(BaseModel):
+    addressLine1: str = Field(default="", max_length=160)
+    city: str = Field(default="", max_length=120)
+    state: str = Field(default="", max_length=120)
+    postalCode: str = Field(default="", max_length=40)
+    country: str = Field(default="", max_length=120)
+
+
+class SellerContact(BaseModel):
+    businessEmail: str = Field(default="", max_length=255)
+    businessPhone: str = Field(default="", max_length=32)
+    whatsapp: str = Field(default="", max_length=32)
+    registrationNumber: str = Field(default="", max_length=80)
+
+
 class ProfileUpdateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=255)
     phone: str = Field(default="", max_length=32)
     isSeller: bool = False
     storeName: str = Field(default="", max_length=120)
+    sellerType: SellerType = "retail"
     storeDescription: str = Field(default="", max_length=500)
+    storeLocation: StoreLocation = Field(default_factory=StoreLocation)
+    sellerContact: SellerContact = Field(default_factory=SellerContact)
+    sellerIdentity: SellerIdentityInfo = Field(default_factory=SellerIdentityInfo)
     shippingAddress: ShippingAddress = Field(default_factory=ShippingAddress)
     paymentInfo: PaymentInfo = Field(default_factory=PaymentInfo)
 
@@ -58,6 +87,22 @@ class UserProfileOut(BaseModel):
     role: str
     phone: str = ""
     storeName: str = ""
+    storeSlug: str = ""
+    storeTagline: str = ""
     storeDescription: str = ""
+    storeLocation: StoreLocation
+    sellerContact: SellerContact
+    sellerType: SellerType = "retail"
+    sellerStatus: SellerStatus = "buyer"
+    sellerBadge: str = ""
+    completedDeliveries: int = 0
+    averageDeliveryDays: float | None = None
+    sellerNotice: str = ""
+    adminNote: str = ""
+    governmentIdType: str = "ghana-card"
+    governmentIdNumber: str = ""
+    governmentIdVerified: bool = False
+    sellerStartedAt: datetime | None = None
+    sellerIdentity: SellerIdentityInfo
     shippingAddress: ShippingAddress
     paymentInfo: PaymentInfo

@@ -60,7 +60,7 @@ export function CheckoutPage() {
           elevation={0}
           sx={{
             p: { xs: 2.5, md: 4 },
-            borderRadius: 4,
+            borderRadius: 2,
             border: "1px solid",
             borderColor: "divider",
           }}
@@ -92,7 +92,7 @@ export function CheckoutPage() {
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -133,7 +133,7 @@ export function CheckoutPage() {
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -199,7 +199,7 @@ export function CheckoutPage() {
               elevation={0}
               sx={{
                 p: { xs: 2, sm: 2.5 },
-                borderRadius: 4,
+                borderRadius: 2,
                 border: "1px solid",
                 borderColor: "divider",
               }}
@@ -243,7 +243,7 @@ export function CheckoutPage() {
             elevation={0}
             sx={{
               p: { xs: 2, sm: 2.5 },
-              borderRadius: 4,
+              borderRadius: 2,
               border: "1px solid",
               borderColor: "divider",
               position: { xl: "sticky" },
