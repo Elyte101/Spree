@@ -1,10 +1,11 @@
+import json
 import os
 import tempfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AnyHttpUrl, Field, computed_field, field_validator, model_validator
+from pydantic import Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -25,10 +26,12 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
     database_url: str = Field(default_factory=default_database_url)
-    cors_origins: list[AnyHttpUrl | str] = [
+    enable_api_docs: bool | None = None
+    cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
+    trusted_hosts: list[str] = ["*"]
     default_shipping_rate: float = 12.0
     free_shipping_threshold: float = 200.0
     seed_admin_name: str = "Spree Admin"
@@ -45,9 +48,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: list[str] | str):
+    def parse_list_setting(cls, value: list[str] | str):
         if isinstance(value, str):
             stripped_value = value.strip()
 
@@ -55,9 +58,20 @@ class Settings(BaseSettings):
                 return []
 
             if stripped_value.startswith("["):
-                return value
+                return json.loads(stripped_value)
 
             return [origin.strip() for origin in stripped_value.split(",") if origin.strip()]
+
+        return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
 
         return value
 
@@ -65,6 +79,14 @@ class Settings(BaseSettings):
     @property
     def is_deployed(self) -> bool:
         return os.getenv("VERCEL") == "1" or self.environment == "production"
+
+    @computed_field
+    @property
+    def api_docs_enabled(self) -> bool:
+        if self.enable_api_docs is not None:
+            return self.enable_api_docs
+
+        return not self.is_deployed
 
     @computed_field
     @property
@@ -77,8 +99,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_deployed_settings(self) -> "Settings":
+        if self.is_deployed and not os.getenv("DATABASE_URL"):
+            raise ValueError("DATABASE_URL must be set for deployed environments.")
+
         if self.is_deployed and self.internal_api_key == "spree-internal-dev-key":
             raise ValueError("INTERNAL_API_KEY must be set for deployed environments.")
+
+        if self.is_deployed and len(self.internal_api_key) < 24:
+            raise ValueError("INTERNAL_API_KEY must be at least 24 characters in deployed environments.")
+
+        if self.is_deployed and self.should_seed_admin:
+            if self.seed_admin_password == "ChangeMe123!" or len(self.seed_admin_password) < 12:
+                raise ValueError(
+                    "SEED_ADMIN_PASSWORD must be changed and at least 12 characters in deployed environments."
+                )
 
         return self
 

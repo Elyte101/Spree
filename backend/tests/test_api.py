@@ -77,7 +77,15 @@ def test_healthcheck():
         response = client.get("/healthz")
 
         assert response.status_code == 200
-        assert response.json() == {"status": "ok"}
+        assert response.json()["status"] == "ok"
+
+
+def test_readiness_endpoint_checks_database():
+    with TestClient(app) as client:
+        response = client.get("/readyz")
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ready"}
 
 
 def test_products_endpoint_returns_valid_catalog_shape():

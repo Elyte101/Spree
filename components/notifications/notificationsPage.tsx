@@ -158,7 +158,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
                         </Box>
                         <Box>
                           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 0.5 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
                               {item.title}
                             </Typography>
                             {!item.isRead ? (
@@ -181,7 +181,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
                             href={item.href}
                             variant="outlined"
                             size="small"
-                            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                           >
                             Open
                           </Button>
@@ -218,7 +218,7 @@ export function NotificationsPage({ notifications }: NotificationsPageProps) {
               href="/settings"
               startIcon={<MarkEmailReadRounded />}
               variant="contained"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Manage preferences
             </Button>

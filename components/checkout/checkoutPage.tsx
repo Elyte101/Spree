@@ -25,6 +25,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useCart } from "@/components/providers/cartProvider";
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("en-US", {
@@ -44,7 +45,7 @@ export function CheckoutPage() {
   return (
     <Box
       sx={(theme) => ({
-        minHeight: "1500px",
+        minHeight: "100vh",
         px: { xs: 1.5, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
         background: `radial-gradient(circle at top left, ${alpha(
@@ -151,7 +152,7 @@ export function CheckoutPage() {
                     sx={{
                       p: 1.5,
                       mb: 1,
-                      borderRadius: 3,
+                      borderRadius: 2,
                       border: "1px solid",
                       borderColor: shippingMethod === "standard" ? "primary.main" : "divider",
                     }}
@@ -173,7 +174,7 @@ export function CheckoutPage() {
                     elevation={0}
                     sx={{
                       p: 1.5,
-                      borderRadius: 3,
+                      borderRadius: 2,
                       border: "1px solid",
                       borderColor: shippingMethod === "express" ? "primary.main" : "divider",
                     }}
@@ -239,25 +240,18 @@ export function CheckoutPage() {
             </Paper>
           </Stack>
 
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 2, sm: 2.5 },
-              borderRadius: 2,
-              border: "1px solid",
-              borderColor: "divider",
+          <ResponsiveDisclosurePanel
+            title="Order summary"
+            titleVariant="h5"
+            icon={<LocalShippingRounded />}
+            action={<Chip label={formatPrice(total)} size="small" color="primary" sx={{ borderRadius: 999 }} />}
+            collapseBelow="xl"
+            paperSx={{
               position: { xl: "sticky" },
               top: { xl: 96 },
             }}
           >
             <Stack spacing={2}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <LocalShippingRounded color="primary" />
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  Order summary
-                </Typography>
-              </Stack>
-
               {cart.items.length ? (
                 cart.items.map((item) => (
                   <Stack
@@ -318,7 +312,7 @@ export function CheckoutPage() {
                 variant="contained"
                 endIcon={<CreditCardRounded />}
                 disabled={cart.items.length === 0}
-                sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 900 }}
               >
                 Place order
               </Button>
@@ -326,12 +320,12 @@ export function CheckoutPage() {
                 component={Link}
                 href="/cart"
                 variant="outlined"
-                sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 900 }}
               >
                 Back to cart
               </Button>
             </Stack>
-          </Paper>
+          </ResponsiveDisclosurePanel>
         </Box>
       </Stack>
     </Box>

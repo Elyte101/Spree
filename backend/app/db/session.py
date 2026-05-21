@@ -11,6 +11,7 @@ engine = create_engine(
     settings.database_url,
     future=True,
     pool_pre_ping=True,
+    pool_recycle=300,
     connect_args=connect_args,
 )
 SessionLocal = sessionmaker(
@@ -27,4 +28,3 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-

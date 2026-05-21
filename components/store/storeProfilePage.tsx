@@ -183,7 +183,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                 startIcon={<GroupRounded />}
                 disabled={status !== "authenticated" || following}
                 onClick={handleFollow}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 {following ? "Following..." : "Follow seller"}
               </Button>
@@ -191,7 +191,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                 component={Link}
                 href="/products"
                 variant="outlined"
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 Keep shopping
               </Button>
@@ -304,7 +304,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                   startIcon={<ReportRounded />}
                   onClick={handleReport}
                   disabled={status !== "authenticated" || reporting}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   {reporting ? "Sending report..." : "Report seller"}
                 </Button>

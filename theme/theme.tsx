@@ -39,7 +39,7 @@ export const getAppTheme = (mode: PaletteMode) =>
       },
       typography: {
         fontFamily:
-          '"Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif',
+          '"UI Sans", "Lato", "HelveticaNeue", Helvetica Neue, Helvetica, Arial, sans-serif',
         h2: {
           fontWeight: 900,
           fontSize: "3.5rem",
@@ -56,12 +56,12 @@ export const getAppTheme = (mode: PaletteMode) =>
           lineHeight: 1.08,
         },
         h5: {
-          fontWeight: 800,
+          fontWeight: 900,
           fontSize: "1.4rem",
           lineHeight: 1.14,
         },
         h6: {
-          fontWeight: 800,
+          fontWeight: 900,
           fontSize: "1.1rem",
           lineHeight: 1.2,
         },

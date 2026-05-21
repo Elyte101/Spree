@@ -29,7 +29,7 @@ export default function ProductsError({
           <Button
             onClick={reset}
             variant="contained"
-            sx={{ alignSelf: "flex-start", borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+            sx={{ alignSelf: "flex-start", borderRadius: 999, textTransform: "none", fontWeight: 900 }}
           >
             Try again
           </Button>

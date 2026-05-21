@@ -31,9 +31,12 @@ When deployed on Vercel:
 
 - `DATABASE_URL` should point to managed Postgres for persistent data
 - `CORS_ORIGINS` can be a JSON array or comma-separated list
+- `TRUSTED_HOSTS` should include the backend Vercel domain and any custom domain
+- API docs are disabled by default in deployed environments; set `ENABLE_API_DOCS=true` only when you intentionally want them exposed
 - `INTERNAL_API_KEY` must be set explicitly
 - `SEED_ADMIN_*` must all be set if you want the admin user auto-created
-- if `DATABASE_URL` is omitted, the app falls back to SQLite in `/tmp`, which is ephemeral and should only be used for previews
+- `DATABASE_URL` is required in deployed environments so production never silently runs on ephemeral state
+- `/healthz` confirms the app is alive; `/readyz` confirms the database is reachable
 
 ## Verify
 

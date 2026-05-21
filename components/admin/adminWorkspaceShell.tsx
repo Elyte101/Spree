@@ -1,12 +1,15 @@
 'use client';
 
+import * as React from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AddBoxRounded,
+  CloseRounded,
   Inventory2Rounded,
   ManageAccountsRounded,
+  MenuRounded,
   SettingsRounded,
   SpaceDashboardRounded,
   StorefrontRounded,
@@ -17,6 +20,8 @@ import {
   Button,
   Chip,
   Divider,
+  Drawer,
+  IconButton,
   Paper,
   Stack,
   Typography,
@@ -58,6 +63,7 @@ export function AdminWorkspaceShell({
   canManageCatalog,
 }: AdminWorkspaceShellProps) {
   const pathname = usePathname();
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false);
   const navItems: NavItem[] = [
     {
       label: "Overview",
@@ -108,6 +114,92 @@ export function AdminWorkspaceShell({
       icon: <SettingsRounded fontSize="small" />,
     },
   ];
+  const activeNavItem = navItems.find((item) => isActivePath(pathname, item.href));
+
+  const renderWorkspaceNavigation = (closeOnNavigate = false) => (
+    <Stack spacing={2}>
+      <Box>
+        <Typography variant="overline" color="text.secondary">
+          Navigate
+        </Typography>
+        <Typography variant="h6" sx={{ fontWeight: 900 }}>
+          Workspace
+        </Typography>
+      </Box>
+
+      <Stack spacing={1}>
+        {navItems.map((item) => {
+          const active = isActivePath(pathname, item.href);
+
+          return (
+            <Button
+              key={item.href}
+              component={Link}
+              href={item.href}
+              fullWidth
+              startIcon={item.icon}
+              onClick={closeOnNavigate ? () => setWorkspaceMenuOpen(false) : undefined}
+              sx={(theme) => ({
+                justifyContent: "flex-start",
+                px: 1.5,
+                py: 1.1,
+                borderRadius: 2,
+                textTransform: "none",
+                fontWeight: active ? 900 : 700,
+                color: active
+                  ? theme.palette.primary.main
+                  : theme.palette.text.primary,
+                backgroundColor: active
+                  ? alpha(
+                      theme.palette.primary.main,
+                      theme.palette.mode === "dark" ? 0.18 : 0.12
+                    )
+                  : "transparent",
+                "&:hover": {
+                  backgroundColor: active
+                    ? alpha(
+                        theme.palette.primary.main,
+                        theme.palette.mode === "dark" ? 0.24 : 0.16
+                      )
+                    : alpha(
+                        theme.palette.text.primary,
+                        theme.palette.mode === "dark" ? 0.08 : 0.05
+                      ),
+                },
+              })}
+            >
+              {item.label}
+            </Button>
+          );
+        })}
+      </Stack>
+
+      <Divider />
+
+      <Paper
+        elevation={0}
+        sx={(theme) => ({
+          p: 2,
+          borderRadius: 1.3,
+          backgroundColor: alpha(
+            theme.palette.info.main,
+            theme.palette.mode === "dark" ? 0.12 : 0.08
+          ),
+        })}
+      >
+        <Stack spacing={1}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
+            Focus today
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {canManageCatalog
+              ? "Refresh your newest products, keep stock healthy, and make sure featured items tell the right story."
+              : "Review your account details and keep your storefront preferences current."}
+          </Typography>
+        </Stack>
+      </Paper>
+    </Stack>
+  );
 
   return (
     <Box
@@ -150,7 +242,7 @@ export function AdminWorkspaceShell({
               <Chip
                 label={canManageCatalog ? "Merchant workspace" : "Account center"}
                 color="primary"
-                sx={{ width: "fit-content", borderRadius: 999, fontWeight: 700 }}
+                sx={{ width: "fit-content", borderRadius: 999, fontWeight: 900 }}
               />
               <Typography variant="h4" sx={{ fontWeight: 900 }}>
                 {canManageCatalog
@@ -181,7 +273,7 @@ export function AdminWorkspaceShell({
                 component={Link}
                 href={canManageCatalog ? "/dashboard/products/new" : "/profile"}
                 variant="contained"
-                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
               >
                 {canManageCatalog ? "Add product" : "Update profile"}
               </Button>
@@ -189,7 +281,7 @@ export function AdminWorkspaceShell({
                 component={Link}
                 href="/products"
                 variant="outlined"
-                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
               >
                 Shop products
               </Button>
@@ -206,98 +298,113 @@ export function AdminWorkspaceShell({
           }}
         >
           <Paper
+            elevation={0}
+            sx={(theme) => ({
+              display: { xs: "block", lg: "none" },
+              p: 1.5,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: alpha(theme.palette.common.white, theme.palette.mode === "dark" ? 0.12 : 0.5),
+              backgroundColor: alpha(
+                theme.palette.background.paper,
+                theme.palette.mode === "dark" ? 0.58 : 0.7
+              ),
+              backdropFilter: "blur(10px) saturate(145%)",
+              boxShadow:
+                theme.palette.mode === "dark"
+                  ? "0 20px 60px rgba(0, 0, 0, 0.24)"
+                  : "0 20px 60px rgba(15, 23, 42, 0.1)",
+            })}
+          >
+            <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1 }}>
+                  Navigate
+                </Typography>
+                <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                  Workspace
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {activeNavItem?.label ?? "Current section"}
+                </Typography>
+              </Box>
+              <Button
+                startIcon={<MenuRounded />}
+                variant="outlined"
+                onClick={() => setWorkspaceMenuOpen(true)}
+                sx={{
+                  borderRadius: 999,
+                  textTransform: "none",
+                  fontWeight: 900,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Menu
+              </Button>
+            </Stack>
+          </Paper>
+
+          <Drawer
+            anchor="left"
+            open={workspaceMenuOpen}
+            onClose={() => setWorkspaceMenuOpen(false)}
+            ModalProps={{ keepMounted: true }}
+            sx={(theme) => ({
+              display: { xs: "block", lg: "none" },
+              "& .MuiDrawer-paper": {
+                width: "min(86vw, 320px)",
+                p: 2,
+                boxSizing: "border-box",
+                borderRight: "1px solid",
+                borderColor: alpha(theme.palette.common.white, theme.palette.mode === "dark" ? 0.12 : 0.52),
+                backgroundColor: alpha(
+                  theme.palette.background.paper,
+                  theme.palette.mode === "dark" ? 0.72 : 0.78
+                ),
+                backdropFilter: "blur(22px) saturate(150%)",
+              },
+            })}
+          >
+            <Stack spacing={2}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                  Workspace menu
+                </Typography>
+                <IconButton
+                  aria-label="Close workspace menu"
+                  onClick={() => setWorkspaceMenuOpen(false)}
+                  size="small"
+                >
+                  <CloseRounded fontSize="small" />
+                </IconButton>
+              </Stack>
+              {renderWorkspaceNavigation(true)}
+            </Stack>
+          </Drawer>
+
+          <Paper
             component="aside"
             elevation={0}
-            sx={{
+            sx={(theme) => ({
+              display: { xs: "none", lg: "block" },
               p: 2,
               borderRadius: 2,
               border: "1px solid",
-              borderColor: "divider",
+              borderColor: alpha(theme.palette.common.white, theme.palette.mode === "dark" ? 0.12 : 0.52),
+              backgroundColor: alpha(
+                theme.palette.background.paper,
+                theme.palette.mode === "dark" ? 0.6 : 0.72
+              ),
+              backdropFilter: "blur(18px) saturate(145%)",
+              boxShadow:
+                theme.palette.mode === "dark"
+                  ? "0 24px 70px rgba(0, 0, 0, 0.22)"
+                  : "0 24px 70px rgba(15, 23, 42, 0.1)",
               position: { lg: "sticky" },
               top: { lg: 96 },
-            }}
+            })}
           >
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="overline" color="text.secondary">
-                  Navigate
-                </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  Workspace
-                </Typography>
-              </Box>
-
-              <Stack spacing={1}>
-                {navItems.map((item) => {
-                  const active = isActivePath(pathname, item.href);
-
-                  return (
-                    <Button
-                      key={item.href}
-                      component={Link}
-                      href={item.href}
-                      fullWidth
-                      startIcon={item.icon}
-                      sx={(theme) => ({
-                        justifyContent: "flex-start",
-                        px: 1.5,
-                        py: 1.1,
-                        borderRadius: 3,
-                        textTransform: "none",
-                        fontWeight: active ? 800 : 700,
-                        color: active
-                          ? theme.palette.primary.main
-                          : theme.palette.text.primary,
-                        backgroundColor: active
-                          ? alpha(
-                              theme.palette.primary.main,
-                              theme.palette.mode === "dark" ? 0.18 : 0.12
-                            )
-                          : "transparent",
-                        "&:hover": {
-                          backgroundColor: active
-                            ? alpha(
-                                theme.palette.primary.main,
-                                theme.palette.mode === "dark" ? 0.24 : 0.16
-                              )
-                            : alpha(
-                                theme.palette.text.primary,
-                                theme.palette.mode === "dark" ? 0.08 : 0.05
-                              ),
-                        },
-                      })}
-                    >
-                      {item.label}
-                    </Button>
-                  );
-                })}
-              </Stack>
-
-              <Divider />
-
-              <Paper
-                elevation={0}
-                sx={(theme) => ({
-                  p: 2,
-                  borderRadius: 3,
-                  backgroundColor: alpha(
-                    theme.palette.info.main,
-                    theme.palette.mode === "dark" ? 0.12 : 0.08
-                  ),
-                })}
-              >
-                <Stack spacing={1}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                    Focus today
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {canManageCatalog
-                      ? "Refresh your newest products, keep stock healthy, and make sure featured items tell the right story."
-                      : "Review your account details and keep your storefront preferences current."}
-                  </Typography>
-                </Stack>
-              </Paper>
-            </Stack>
+            {renderWorkspaceNavigation()}
           </Paper>
 
           <Stack component="section" spacing={3}>

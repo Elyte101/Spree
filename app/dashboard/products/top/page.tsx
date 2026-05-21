@@ -69,10 +69,11 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
           borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
-          overflow: "hidden",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        <Table>
+        <Table sx={{ minWidth: 900 }}>
           <TableHead>
             <TableRow>
               <TableCell>Rank</TableCell>
@@ -96,7 +97,7 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
                       sx={{
                         color: "text.primary",
                         textDecoration: "none",
-                        fontWeight: 800,
+                        fontWeight: 900,
                         "&:hover": {
                           color: "primary.main",
                         },
@@ -138,12 +139,12 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
         </Table>
       </TableContainer>
 
-      <Stack direction="row" spacing={1.5}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
         <Button
           href={`/dashboard/products/top?page=${Math.max(1, currentPage - 1)}`}
           variant="outlined"
           disabled={currentPage <= 1}
-          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
         >
           Previous 100
         </Button>
@@ -151,7 +152,7 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
           href={`/dashboard/products/top?page=${Math.min(ranked.totalPages, currentPage + 1)}`}
           variant="contained"
           disabled={currentPage >= ranked.totalPages}
-          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
         >
           Next 100
         </Button>

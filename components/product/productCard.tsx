@@ -382,7 +382,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 borderRadius: 999,
                 px: isCompact ? 1.5 : 2,
                 textTransform: "none",
-                fontWeight: 700,
+                fontWeight: 900,
                 whiteSpace: "nowrap",
               }}
             >
@@ -404,7 +404,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 borderRadius: 999,
                 px: isCompact ? 1.75 : 2.5,
                 textTransform: "none",
-                fontWeight: 700,
+                fontWeight: 900,
                 whiteSpace: "nowrap",
               }}
             >

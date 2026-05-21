@@ -74,6 +74,8 @@ Backend Vercel environment variables:
 ENVIRONMENT=production
 DATABASE_URL=<managed-postgres-url>
 CORS_ORIGINS=["https://your-frontend-domain"]
+TRUSTED_HOSTS=["your-backend-domain.vercel.app","your-custom-backend-domain.com"]
+ENABLE_API_DOCS=false
 SEED_ADMIN_NAME=<admin-name>
 SEED_ADMIN_EMAIL=<admin-email>
 SEED_ADMIN_PASSWORD=<admin-password>
@@ -85,9 +87,11 @@ LOG_LEVEL=INFO
 Notes:
 
 - `backend/server.py` is the Vercel entrypoint for the FastAPI app.
-- If `DATABASE_URL` is omitted on Vercel, the backend falls back to an ephemeral SQLite database in `/tmp`. That is useful for previews, not persistent production data.
+- `DATABASE_URL` is required in deployed environments so production never silently runs on ephemeral state.
+- Common `postgres://` and `postgresql://` URLs are normalized for the `psycopg` SQLAlchemy driver.
 - On deployed environments, admin auto-seeding only runs when all `SEED_ADMIN_*` values are explicitly configured.
 - `CORS_ORIGINS` accepts either a JSON array or a comma-separated list.
+- `/healthz` is a lightweight uptime probe; `/readyz` verifies database connectivity.
 
 ## Local Infrastructure
 

@@ -23,6 +23,7 @@ import {
   Typography,
 } from "@mui/material";
 import { ThemeToggle } from "@/components/ui/themeToggle";
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { useThemeContext } from "@/theme/themeContext";
 
 export function SettingsPage() {
@@ -35,8 +36,7 @@ export function SettingsPage() {
   return (
     <Box
       sx={(theme) => ({
-        minHeight: "100%",
-        height: "1500px",
+        minHeight: "100vh",
         px: { xs: 2, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
         background: `radial-gradient(circle at top left, ${alpha(
@@ -75,22 +75,13 @@ export function SettingsPage() {
           }}
         >
           <Stack spacing={2.5}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
+            <ResponsiveDisclosurePanel
+              title="Shopping preferences"
+              titleVariant="h5"
+              icon={<PublicRounded />}
+              collapseBelow="md"
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <PublicRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Shopping preferences
-                  </Typography>
-                </Stack>
                 <Box
                   sx={{
                     display: "grid",
@@ -129,24 +120,15 @@ export function SettingsPage() {
                   label="Use compact product cards"
                 />
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
+            <ResponsiveDisclosurePanel
+              title="Notifications"
+              titleVariant="h5"
+              icon={<NotificationsRounded />}
+              collapseBelow="md"
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <NotificationsRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Notifications
-                  </Typography>
-                </Stack>
                 <FormControlLabel
                   control={
                     <Switch
@@ -175,31 +157,21 @@ export function SettingsPage() {
                   label="Back-in-stock alerts"
                 />
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
           </Stack>
 
           <Stack spacing={2.5}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
+            <ResponsiveDisclosurePanel
+              title="Appearance"
+              icon={<PaletteRounded />}
+              collapseBelow="xl"
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <PaletteRounded color="primary" />
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Appearance
-                  </Typography>
-                </Stack>
                 <Paper
                   elevation={0}
                   sx={(theme) => ({
                     p: 2,
-                    borderRadius: 3,
+                    borderRadius: 2,
                     border: "1px solid",
                     borderColor: "divider",
                     backgroundColor: theme.palette.action.hover,
@@ -207,7 +179,7 @@ export function SettingsPage() {
                 >
                   <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
                     <Box>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                         {mode === "dark" ? "Dark appearance is on" : "Light appearance is on"}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -224,27 +196,19 @@ export function SettingsPage() {
                   </Stack>
                 </Paper>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
+            <ResponsiveDisclosurePanel
+              title="Quick actions"
+              collapseBelow="xl"
             >
               <Stack spacing={1.5}>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  Quick actions
-                </Typography>
                 <Button
                   component={Link}
                   href="/profile"
                   startIcon={<TuneRounded />}
                   variant="outlined"
-                  sx={{ borderRadius: 999, justifyContent: "flex-start", textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, justifyContent: "flex-start", textTransform: "none", fontWeight: 900 }}
                 >
                   Open profile
                 </Button>
@@ -253,19 +217,19 @@ export function SettingsPage() {
                   href="/notifications"
                   startIcon={<NotificationsRounded />}
                   variant="outlined"
-                  sx={{ borderRadius: 999, justifyContent: "flex-start", textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, justifyContent: "flex-start", textTransform: "none", fontWeight: 900 }}
                 >
                   Check notifications
                 </Button>
                 <Button
                   startIcon={<SaveRounded />}
                   variant="contained"
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Save preferences
                 </Button>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
           </Stack>
         </Box>
       </Stack>

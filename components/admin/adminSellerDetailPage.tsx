@@ -154,7 +154,7 @@ export function AdminSellerDetailPage({
               component={Link}
               href={`/stores/${seller.storeSlug}`}
               variant="outlined"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Open public store
             </Button>
@@ -162,7 +162,7 @@ export function AdminSellerDetailPage({
               component={Link}
               href="/dashboard/sellers"
               variant="text"
-              sx={{ textTransform: "none", fontWeight: 800 }}
+              sx={{ textTransform: "none", fontWeight: 900 }}
             >
               Back to sellers
             </Button>
@@ -397,7 +397,7 @@ export function AdminSellerDetailPage({
                 variant="contained"
                 onClick={handleSave}
                 disabled={saving}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 {saving ? "Saving..." : "Save status"}
               </Button>

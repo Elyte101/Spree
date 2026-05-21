@@ -25,7 +25,13 @@ export const CustomThemeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const savedMode = window.localStorage.getItem(STORAGE_KEY);
 
     if (savedMode === "light" || savedMode === "dark") {
-      setMode(savedMode);
+      const timeoutId = window.setTimeout(() => {
+        setMode(savedMode);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
     }
   }, []);
 
