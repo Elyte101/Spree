@@ -42,14 +42,14 @@ function ProductDetailsUnavailableState() {
             <Button
               href="/products"
               variant="contained"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Back to products
             </Button>
             <Button
               href="/"
               variant="outlined"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Go home
             </Button>

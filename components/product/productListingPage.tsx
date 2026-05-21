@@ -28,6 +28,7 @@ import {
 import { alpha } from "@mui/material/styles";
 
 import { ProductCard } from "@/components/product/productCard";
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { useCatalogQuery } from "@/lib/hooks/useStorefrontQueries";
 import { useCatalogFiltersStore } from "@/lib/stores/catalogFiltersStore";
 import { ProductGridSkeleton } from "@/components/skeletons/productGridSkeleton";
@@ -89,7 +90,13 @@ export function ProductListingPage({
   const deferredSearch = React.useDeferredValue(searchInput.trim());
 
   React.useEffect(() => {
-    setSearchInput(search);
+    const timeoutId = window.setTimeout(() => {
+      setSearchInput(search);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [search]);
 
   React.useEffect(() => {
@@ -212,7 +219,7 @@ export function ProductListingPage({
                   borderRadius: 999,
                 })}
               />
-              <Typography variant="h3" sx={{ fontWeight: 800, lineHeight: 1 }}>
+              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
                 {heroTitle}
               </Typography>
               <Typography
@@ -261,7 +268,7 @@ export function ProductListingPage({
               >
                 Available now
               </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 800 }}>
+              <Typography variant="h4" sx={{ fontWeight: 900 }}>
                 {catalog.total}
               </Typography>
               <Typography variant="body2">
@@ -280,19 +287,14 @@ export function ProductListingPage({
           }}
         >
           <Stack spacing={2.5}>
-            <Paper
-              elevation={0}
-              sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3, border: "1px solid", borderColor: "divider" }}
+            <ResponsiveDisclosurePanel
+              title="Filters"
+              icon={<TuneRounded fontSize="small" />}
+              action={<Chip label={`${catalog.total} items`} size="small" sx={{ borderRadius: 999 }} />}
+              collapseBelow="lg"
+              paperSx={{ borderRadius: 2 }}
             >
               <Stack spacing={2}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <TuneRounded fontSize="small" color="primary" />
-                    <Typography variant="h6">Filters</Typography>
-                  </Stack>
-                  <Chip label={`${catalog.total} items`} size="small" sx={{ borderRadius: 999 }} />
-                </Stack>
-
                 <TextField
                   value={searchInput}
                   onChange={(event) => {
@@ -438,15 +440,13 @@ export function ProductListingPage({
                   sx={{ width: "fit-content", borderRadius: 999 }}
                 />
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
 
-            <Paper
-              elevation={0}
-              sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3, border: "1px solid", borderColor: "divider" }}
+            <ResponsiveDisclosurePanel
+              title="Shop by category"
+              collapseBelow="lg"
+              paperSx={{ borderRadius: 2 }}
             >
-              <Typography variant="h6" sx={{ mb: 1 }}>
-                Shop by category
-              </Typography>
               {homeFeed.categories.length ? (
                 <Stack spacing={1.5}>
                   {homeFeed.categories.map((category) => (
@@ -479,7 +479,7 @@ export function ProductListingPage({
                   Categories will appear here as more items arrive.
                 </Typography>
               )}
-            </Paper>
+            </ResponsiveDisclosurePanel>
           </Stack>
 
           <Stack spacing={2.5}>
@@ -495,7 +495,7 @@ export function ProductListingPage({
                   spacing={1.5}
                 >
                   <Box>
-                    <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                    <Typography variant="h5" sx={{ fontWeight: 900 }}>
                       Shop All Products
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -508,7 +508,13 @@ export function ProductListingPage({
                 </Stack>
 
                 {homeFeed.categories.length ? (
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <Stack
+                    direction="row"
+                    spacing={1}
+                    useFlexGap
+                    flexWrap="wrap"
+                    sx={{ display: { xs: "none", sm: "flex" } }}
+                  >
                     <Chip
                       label="All"
                       clickable

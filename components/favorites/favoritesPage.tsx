@@ -79,7 +79,7 @@ export function FavoritesPage() {
                 <Button
                   variant="outlined"
                   onClick={clearFavorites}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Clear all
                 </Button>
@@ -116,7 +116,7 @@ export function FavoritesPage() {
                 href="/products"
                 variant="contained"
                 startIcon={<ShoppingBagOutlined />}
-                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
               >
                 Browse products
               </Button>

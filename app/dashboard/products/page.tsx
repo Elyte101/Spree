@@ -116,14 +116,14 @@ export default async function DashboardProductsPage() {
             <Button
               href="/dashboard/products/new"
               variant="contained"
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+            sx={{ borderRadius: 999, px: 2, textTransform: "none", fontWeight: 900, whiteSpace: "nowrap" }}
             >
               Create product
             </Button>
             <Button
               href={sellerProfile?.storeSlug ? `/stores/${sellerProfile.storeSlug}` : "/products"}
               variant="outlined"
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, px: 2, textTransform: "none", fontWeight: 900, whiteSpace: "nowrap" }}
             >
               Open storefront
             </Button>
@@ -159,7 +159,7 @@ export default async function DashboardProductsPage() {
             elevation={0}
             sx={{
               p: 2.5,
-              borderRadius: 3,
+              borderRadius: 2,
               border: "1px solid",
               borderColor: "divider",
               backgroundColor: item.tone === "primary" ? "action.hover" : "background.paper",
@@ -182,10 +182,11 @@ export default async function DashboardProductsPage() {
           borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
-          overflow: "hidden",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        <Table>
+        <Table sx={{ minWidth: 940 }}>
           <TableHead>
             <TableRow>
               <TableCell>Product</TableCell>
@@ -207,7 +208,7 @@ export default async function DashboardProductsPage() {
                       sx={{
                         color: "text.primary",
                         textDecoration: "none",
-                        fontWeight: 800,
+                        fontWeight: 900,
                         "&:hover": {
                           color: "primary.main",
                         },
@@ -284,7 +285,7 @@ export default async function DashboardProductsPage() {
                     <Button
                       href="/dashboard/products/new"
                       variant="contained"
-                      sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                      sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                     >
                       Create your first product
                     </Button>

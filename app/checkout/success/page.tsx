@@ -47,7 +47,7 @@ export default function CheckoutSuccessPage() {
               href="/products"
               variant="contained"
               endIcon={<EastRounded />}
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Continue shopping
             </Button>
@@ -55,7 +55,7 @@ export default function CheckoutSuccessPage() {
               component={Link}
               href="/notifications"
               variant="outlined"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               View updates
             </Button>

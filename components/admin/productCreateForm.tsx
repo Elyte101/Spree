@@ -17,6 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
 import { Brand, Category, Collection } from "@/types/types";
 
@@ -446,16 +447,23 @@ export function ProductCreateForm({
           </Stack>
 
           <Stack spacing={3}>
-            <Paper elevation={0} sx={cardSx}>
+            <ResponsiveDisclosurePanel
+              title="Product summary"
+              collapseBelow="xl"
+              paperSx={cardSx}
+              action={
+                <Chip
+                  label={hasRequiredFields ? "Ready" : "Needs details"}
+                  color={hasRequiredFields ? "success" : "warning"}
+                  size="small"
+                  sx={{ borderRadius: 999 }}
+                />
+              }
+            >
               <Stack spacing={2}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Product summary
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    A quick read on how the item is shaping up before you save it.
-                  </Typography>
-                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  A quick read on how the item is shaping up before you save it.
+                </Typography>
 
                 <Stack spacing={1.5}>
                   <Box>
@@ -473,7 +481,7 @@ export function ProductCreateForm({
                     <Typography variant="body2" color="text.secondary">
                       Handle
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {previewSlug}
                     </Typography>
                   </Box>
@@ -482,7 +490,7 @@ export function ProductCreateForm({
                     <Typography variant="body2" color="text.secondary">
                       Price
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {previewPrice > 0 ? `$${previewPrice.toFixed(2)}` : "Not set yet"}
                     </Typography>
                     {compareAtPrice ? (
@@ -496,7 +504,7 @@ export function ProductCreateForm({
                     <Typography variant="body2" color="text.secondary">
                       Inventory
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {stock.trim() !== "" ? `${stock} units` : "Not set yet"}
                     </Typography>
                   </Box>
@@ -505,31 +513,30 @@ export function ProductCreateForm({
                     <Typography variant="body2" color="text.secondary">
                       Media
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {mediaEntries.length} asset{mediaEntries.length === 1 ? "" : "s"}
                     </Typography>
                   </Box>
                 </Stack>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
 
-            <Paper elevation={0} sx={cardSx}>
+            <ResponsiveDisclosurePanel
+              title="Merchandising signals"
+              collapseBelow="xl"
+              paperSx={cardSx}
+            >
               <Stack spacing={2}>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Merchandising signals
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    These option values and tags influence how the product is grouped and surfaced.
-                  </Typography>
-                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  These option values and tags influence how the product is grouped and surfaced.
+                </Typography>
 
                 <Stack spacing={1.5}>
                   <Box>
                     <Typography variant="body2" color="text.secondary">
                       Estimated variants
                     </Typography>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {estimatedVariantCount}
                     </Typography>
                   </Box>
@@ -578,13 +585,14 @@ export function ProductCreateForm({
                   </Box>
                 </Stack>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
 
-            <Paper elevation={0} sx={cardSx}>
+            <ResponsiveDisclosurePanel
+              title="Publishing tips"
+              collapseBelow="xl"
+              paperSx={cardSx}
+            >
               <Stack spacing={1.5}>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  Publishing tips
-                </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Strong product pages usually have a clear title, multiple images, a clean category assignment, and a small tag set that means something.
                 </Typography>
@@ -592,7 +600,7 @@ export function ProductCreateForm({
                   Use `featured` for hero placement and `new` for fresh arrivals. Both switches above add those tags automatically.
                 </Typography>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
           </Stack>
         </Box>
 
@@ -601,7 +609,7 @@ export function ProductCreateForm({
             type="submit"
             variant="contained"
             disabled={createProductMutation.isLoading}
-            sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+            sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
           >
             {createProductMutation.isLoading ? "Saving product..." : "Save product"}
           </Button>
@@ -609,7 +617,7 @@ export function ProductCreateForm({
             type="button"
             variant="outlined"
             onClick={() => router.push("/dashboard/products")}
-            sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+            sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
           >
             Back to products
           </Button>

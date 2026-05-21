@@ -78,10 +78,11 @@ export default async function DashboardSellersPage() {
           borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",
-          overflow: "hidden",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        <Table>
+        <Table sx={{ minWidth: 1120 }}>
           <TableHead>
             <TableRow>
               <TableCell>Seller</TableCell>
@@ -107,7 +108,7 @@ export default async function DashboardSellersPage() {
                       sx={{
                         color: "text.primary",
                         textDecoration: "none",
-                        fontWeight: 800,
+                        fontWeight: 900,
                         "&:hover": {
                           color: "primary.main",
                         },

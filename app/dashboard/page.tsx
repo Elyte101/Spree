@@ -11,6 +11,7 @@ import {
 } from "@mui/material";
 
 import { authOptions } from "@/lib/auth";
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { canCreateProductsRole } from "@/lib/roles";
 import {
   BACKEND_UNAVAILABLE_MESSAGE,
@@ -105,18 +106,18 @@ export default async function Dashboard() {
             </Typography>
           </Box>
 
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+          <Stack direction="row" spacing={1.5}>
             <Button
               href={canManageProducts ? "/dashboard/products/new" : "/profile"}
               variant="contained"
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, px: 2, textTransform: "none", fontWeight: 900, whiteSpace: "nowrap" }}
             >
               {canManageProducts ? "Create product" : "Open profile"}
             </Button>
             <Button
               href="/products"
               variant="outlined"
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, px: 2, textTransform: "none", fontWeight: 900, whiteSpace: "nowrap" }}
             >
               View storefront
             </Button>
@@ -163,7 +164,7 @@ export default async function Dashboard() {
                 elevation={0}
                 sx={{
                   p: 2.5,
-                  borderRadius: "16px",
+                  borderRadius: 2,
                   border: "1px solid",
                   borderColor: "divider",
                 }}
@@ -211,7 +212,7 @@ export default async function Dashboard() {
                   <Button
                     href="/dashboard/products"
                     variant="text"
-                    sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 800 }}
+                    sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 900 }}
                   >
                     Open product workspace
                   </Button>
@@ -225,7 +226,7 @@ export default async function Dashboard() {
                         elevation={0}
                         sx={{
                           p: 2,
-                          borderRadius: "16px",
+                          borderRadius: 2,
                           border: "1px solid",
                           borderColor: "divider",
                         }}
@@ -236,7 +237,7 @@ export default async function Dashboard() {
                           spacing={1.5}
                         >
                           <Box>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                               {product.name}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
@@ -264,21 +265,15 @@ export default async function Dashboard() {
             </Paper>
 
             <Stack spacing={3}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: { xs: 3, md: 4 },
-                  borderRadius: 2,
-                  border: "1px solid",
-                  borderColor: "divider",
-                }}
+              <ResponsiveDisclosurePanel
+                title="Focus today"
+                titleVariant="h5"
+                collapseBelow="xl"
+                paperSx={{ p: { xs: 2, sm: 2.5, md: 4 } }}
               >
                 <Stack spacing={2}>
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Focus today
-                  </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    A Shopify-like admin works best when your next actions are obvious.
+                    A Spree admin works best when your next actions are obvious.
                   </Typography>
                   <Stack spacing={1.25}>
                     <Typography variant="body2">
@@ -292,21 +287,15 @@ export default async function Dashboard() {
                     </Typography>
                   </Stack>
                 </Stack>
-              </Paper>
+              </ResponsiveDisclosurePanel>
 
-              <Paper
-                elevation={0}
-                sx={{
-                  p: { xs: 3, md: 4 },
-                  borderRadius: 2,
-                  border: "1px solid",
-                  borderColor: "divider",
-                }}
+              <ResponsiveDisclosurePanel
+                title="Account snapshot"
+                titleVariant="h5"
+                collapseBelow="xl"
+                paperSx={{ p: { xs: 2, sm: 2.5, md: 4 } }}
               >
                 <Stack spacing={1.5}>
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Account snapshot
-                  </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Name: {userName}
                   </Typography>
@@ -331,21 +320,21 @@ export default async function Dashboard() {
                       <Button
                         href="/dashboard/sellers"
                         variant="outlined"
-                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                       >
                         Manage sellers
                       </Button>
                       <Button
                         href="/dashboard/products/top"
                         variant="contained"
-                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                       >
                         Review top products
                       </Button>
                     </Stack>
                   ) : null}
                 </Stack>
-              </Paper>
+              </ResponsiveDisclosurePanel>
             </Stack>
           </Box>
         </>
@@ -368,7 +357,7 @@ export default async function Dashboard() {
           <Button
             href="/profile"
             variant="outlined"
-            sx={{ mt: 2, borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+            sx={{ mt: 2, borderRadius: 999, textTransform: "none", fontWeight: 900 }}
           >
             Open profile
           </Button>

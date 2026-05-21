@@ -69,10 +69,16 @@ export function ProductDetailsPage({
   const recentlyAdded = lastAddedAt > 0;
 
   React.useEffect(() => {
-    setSelectedImage(product.images[0] ?? product.image);
-    setSelectedColor(product.colors[0] ?? null);
-    setSelectedSize(product.sizes?.[0] ?? null);
-    setLastAddedAt(0);
+    const timeoutId = window.setTimeout(() => {
+      setSelectedImage(product.images[0] ?? product.image);
+      setSelectedColor(product.colors[0] ?? null);
+      setSelectedSize(product.sizes?.[0] ?? null);
+      setLastAddedAt(0);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [product]);
 
   React.useEffect(() => {
@@ -132,7 +138,7 @@ export function ProductDetailsPage({
               width: "fit-content",
               px: 0,
               textTransform: "none",
-              fontWeight: 700,
+              fontWeight: 900,
             }}
           >
             Back to products
@@ -372,7 +378,7 @@ export function ProductDetailsPage({
                       borderRadius: 999,
                       py: 1.4,
                       textTransform: "none",
-                      fontWeight: 800,
+                      fontWeight: 900,
                     }}
                   >
                     {recentlyAdded
@@ -391,7 +397,7 @@ export function ProductDetailsPage({
                       borderRadius: 999,
                       py: 1.4,
                       textTransform: "none",
-                      fontWeight: 800,
+                      fontWeight: 900,
                     }}
                   >
                     Save for Later
@@ -509,7 +515,7 @@ export function ProductDetailsPage({
                     href={`/stores/${product.storeSlug}`}
                     startIcon={<StorefrontRounded />}
                     variant="outlined"
-                    sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800, alignSelf: "flex-start" }}
+                    sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, alignSelf: "flex-start" }}
                   >
                     Visit store
                   </Button>

@@ -164,7 +164,7 @@ export function StoreAppBar() {
             display: "inline-flex",
             alignItems: "center",
           }}
-        >
+         >
           <Stack direction="row" spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
             <Box
               sx={{
@@ -175,18 +175,11 @@ export function StoreAppBar() {
                 overflow: "hidden",
                 border: "1px solid",
                 borderColor: "divider",
-                background: (theme) =>
-                  `linear-gradient(145deg, ${alpha(
-                    theme.palette.primary.main,
-                    theme.palette.mode === "dark" ? 0.28 : 0.16
-                  )}, ${alpha(
-                    theme.palette.background.paper,
-                    theme.palette.mode === "dark" ? 0.94 : 0.98
-                  )})`,
+                background: "#fff4f9",
               }}
             >
               <Image
-                src="/spreelogo.svg"
+                src="/spreelogo.png"
                 alt="Spree logo"
                 fill
                 sizes="(max-width: 600px) 40px, 46px"

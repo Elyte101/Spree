@@ -23,6 +23,7 @@ import {
 } from "@mui/material";
 import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
+import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { Product } from "@/types/types";
 
 interface CartPageProps {
@@ -42,7 +43,7 @@ export function CartPage({ recommendations }: CartPageProps) {
   return (
     <Box
       sx={(theme) => ({
-        minHeight: "1500px",
+        minHeight: "100vh",
         px: { xs: 1.5, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
         background: `radial-gradient(circle at top left, ${alpha(
@@ -89,7 +90,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                 p: 2,
                 minWidth: { md: 220 },
                 width: { xs: "100%", md: "auto" },
-                borderRadius: 3,
+                borderRadius: 2,
                 backgroundColor: "action.hover",
               }}
             >
@@ -126,7 +127,7 @@ export function CartPage({ recommendations }: CartPageProps) {
               href="/products"
               variant="contained"
               endIcon={<ArrowForwardRounded />}
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
             >
               Browse products
             </Button>
@@ -158,7 +159,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                         position: "relative",
                         width: { xs: "100%", sm: 140 },
                         height: { xs: 180, sm: 140 },
-                        borderRadius: 3,
+                        borderRadius: 2,
                         border: "1px solid",
                         borderColor: "divider",
                         backgroundColor: "action.hover",
@@ -184,7 +185,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                         spacing={1}
                       >
                         <Box>
-                          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                          <Typography variant="h6" sx={{ fontWeight: 900 }}>
                             {item.name}
                           </Typography>
                           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.75 }}>
@@ -230,7 +231,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                           onClick={() => removeItem(item.id)}
                           startIcon={<DeleteOutlineRounded />}
                           color="inherit"
-                          sx={{ textTransform: "none", fontWeight: 700 }}
+                          sx={{ textTransform: "none", fontWeight: 900 }}
                         >
                           Remove
                         </Button>
@@ -241,22 +242,17 @@ export function CartPage({ recommendations }: CartPageProps) {
               ))}
             </Stack>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2, sm: 2.5 },
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
+            <ResponsiveDisclosurePanel
+              title="Order summary"
+              titleVariant="h5"
+              action={<Chip label={formatPrice(total)} size="small" color="primary" sx={{ borderRadius: 999 }} />}
+              collapseBelow="xl"
+              paperSx={{
                 position: { xl: "sticky" },
                 top: { xl: 96 },
               }}
             >
               <Stack spacing={2}>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  Order summary
-                </Typography>
-
                 <Stack spacing={1.25}>
                   <Stack direction="row" justifyContent="space-between">
                     <Typography color="text.secondary">Subtotal</Typography>
@@ -294,7 +290,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                   href="/checkout"
                   variant="contained"
                   endIcon={<ArrowForwardRounded />}
-                  sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 900 }}
                 >
                   Proceed to checkout
                 </Button>
@@ -302,12 +298,12 @@ export function CartPage({ recommendations }: CartPageProps) {
                   component={Link}
                   href="/products"
                   variant="outlined"
-                  sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 900 }}
                 >
                   Continue shopping
                 </Button>
               </Stack>
-            </Paper>
+            </ResponsiveDisclosurePanel>
           </Box>
         )}
 

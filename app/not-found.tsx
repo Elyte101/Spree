@@ -46,7 +46,7 @@ export default function NotFound() {
               component={Link}
               href="/"
               variant="contained"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Go home
             </Button>
@@ -54,7 +54,7 @@ export default function NotFound() {
               component={Link}
               href="/products"
               variant="outlined"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Browse products
             </Button>

@@ -35,7 +35,7 @@ const buildBackendUrl = (path: string) =>
 const createFallbackHomeFeed = (): HomeFeed => ({
   hero: {
     id: "backend-unavailable",
-    title: "The shop is taking a short pause.",
+    title: "Store will be available in a few minutes.",
     subtitle:
       "Some items are not loading right now, but you can still look around and come back in a moment.",
     ctaLabel: "Keep browsing",

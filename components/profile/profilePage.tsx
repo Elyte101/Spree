@@ -259,7 +259,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   variant="contained"
                   startIcon={<AddBusinessRounded />}
                   onClick={handleBecomeSeller}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Become a seller
                 </Button>
@@ -270,7 +270,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   variant="contained"
                   startIcon={<Inventory2Rounded />}
                   disabled={!savedSellerAccess}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Manage products
                 </Button>
@@ -439,7 +439,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <PlaceRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       Store location
                     </Typography>
                   </Stack>
@@ -490,7 +490,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <ContactPhoneRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       Seller business details
                     </Typography>
                   </Stack>
@@ -533,7 +533,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 <Stack spacing={2}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <BadgeRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       Seller verification
                     </Typography>
                   </Stack>
@@ -712,7 +712,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 variant="contained"
                 startIcon={<SaveRounded />}
                 disabled={saving}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 {saving ? "Saving..." : "Save profile"}
               </Button>
@@ -721,7 +721,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 variant="outlined"
                 startIcon={<LogoutRounded />}
                 onClick={() => void signOut({ callbackUrl: "/" })}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 Sign out
               </Button>
@@ -763,7 +763,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   href="/dashboard/products/new"
                   variant="contained"
                   disabled={!savedSellerAccess}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Create a product
                 </Button>
@@ -772,7 +772,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   href="/dashboard/products"
                   variant="outlined"
                   disabled={!savedSellerAccess}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Manage products
                 </Button>
@@ -781,7 +781,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   href={profile.storeSlug ? `/stores/${profile.storeSlug}` : "/products"}
                   variant="outlined"
                   disabled={!savedSellerAccess}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   View storefront
                 </Button>
@@ -789,7 +789,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   component={Link}
                   href="/settings"
                   variant="outlined"
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Open settings
                 </Button>

@@ -110,7 +110,7 @@ export function LandingPage({
           component={Link}
           href="/products"
           variant="contained"
-          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
         >
           Browse products
         </Button>
@@ -208,7 +208,7 @@ export function LandingPage({
                     px: 3,
                     py: 1.3,
                     textTransform: "none",
-                    fontWeight: 800,
+                    fontWeight: 900,
                   }}
                 >
                   {primaryCta.label}
@@ -222,7 +222,7 @@ export function LandingPage({
                     px: 3,
                     py: 1.3,
                     textTransform: "none",
-                    fontWeight: 800,
+                    fontWeight: 900,
                   }}
                 >
                   {hasProducts ? "View all products" : "See what's available"}
@@ -269,10 +269,11 @@ export function LandingPage({
                     }}
                   >
                     <Image
-                      src={hero.image}
+                      src={"/spreelogo.png"}
                       alt={heroTitle}
                       fill
-                      style={{ objectFit: "contain", padding: 18 }}
+                      sizes="(max-width: 600px) 100vw, 520px"
+                      style={{ objectFit: "contain", padding: 10 }}
                       priority
                     />
                   </Box>
@@ -456,7 +457,7 @@ export function LandingPage({
               href="/products"
               variant="text"
               endIcon={<ArrowOutward />}
-              sx={{ textTransform: "none", fontWeight: 800 }}
+              sx={{ textTransform: "none", fontWeight: 900 }}
             >
               View full catalog
             </Button>
@@ -570,7 +571,7 @@ export function LandingPage({
               href="/products"
               variant="text"
               endIcon={<ArrowOutward />}
-              sx={{ textTransform: "none", fontWeight: 800 }}
+              sx={{ textTransform: "none", fontWeight: 900 }}
             >
               Browse all products
             </Button>
@@ -660,13 +661,13 @@ export function LandingPage({
                       <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1 }}>
                         {product.brand.toUpperCase()}
                       </Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
                         {product.name}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         {product.description}
                       </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 800, pt: 0.5 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 900, pt: 0.5 }}>
                         {formatPrice(product.price)}
                       </Typography>
                     </Stack>
@@ -766,7 +767,7 @@ export function LandingPage({
                       >
                         {collection.productCount} products
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 900 }}>
                         Browse collection
                       </Typography>
                     </Stack>
@@ -830,7 +831,7 @@ export function LandingPage({
                 href="/products"
                 variant="contained"
                 endIcon={<ArrowOutward />}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 {hasProducts ? "Start shopping" : "Browse the shop"}
               </Button>
@@ -838,7 +839,7 @@ export function LandingPage({
                 component={Link}
                 href="/cart"
                 variant="outlined"
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800 }}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
                 View cart
               </Button>

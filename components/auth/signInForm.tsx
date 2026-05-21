@@ -183,14 +183,14 @@ export function SignInForm({
             <Button
               variant={mode === "signin" ? "contained" : "outlined"}
               onClick={() => setMode("signin")}
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Sign in
             </Button>
             <Button
               variant={mode === "signup" ? "contained" : "outlined"}
               onClick={() => setMode("signup")}
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Sign up
             </Button>
@@ -246,7 +246,7 @@ export function SignInForm({
               type="submit"
               variant="contained"
               disabled={submitting}
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 800, py: 1.2 }}
+              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, py: 1.2 }}
             >
               {submitting
                 ? mode === "signin"
@@ -262,7 +262,7 @@ export function SignInForm({
             component={Link}
             href="/"
             variant="text"
-            sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 700 }}
+            sx={{ alignSelf: "flex-start", textTransform: "none", fontWeight: 900 }}
           >
             Back to storefront
           </Button>
@@ -273,7 +273,7 @@ export function SignInForm({
               variant="outlined"
               disabled={submitting}
               onClick={handleAccountSwitch}
-              sx={{ alignSelf: "flex-start", borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+              sx={{ alignSelf: "flex-start", borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
               Sign out and switch account
             </Button>
