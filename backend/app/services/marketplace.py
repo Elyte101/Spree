@@ -45,29 +45,49 @@ def _resolve_seller(db: Session, identifier: str, *, include_inactive: bool = Fa
     return seller
 
 
-def _seller_metrics(db: Session, seller_id: str) -> dict:
-    follower_count = (
-        db.scalar(select(func.count(SellerFollow.id)).where(SellerFollow.seller_id == seller_id)) or 0
-    )
-    report_count = (
-        db.scalar(select(func.count(SellerReport.id)).where(SellerReport.seller_id == seller_id)) or 0
-    )
-    product_count = (
-        db.scalar(select(func.count(Product.id)).where(Product.seller_id == seller_id)) or 0
-    )
-    purchase_count = (
-        db.scalar(
-            select(func.coalesce(func.sum(Product.purchase_count), 0)).where(Product.seller_id == seller_id)
-        )
-        or 0
-    )
+def _batch_seller_metrics(db: Session, seller_ids: list[str]) -> dict[str, dict]:
+    """Fetch all metrics for a list of seller IDs in 4 batch queries instead of 4N."""
+    if not seller_ids:
+        return {}
 
-    return {
-        "followerCount": int(follower_count),
-        "reportCount": int(report_count),
-        "productCount": int(product_count),
-        "purchaseCount": int(purchase_count),
+    follower_rows = db.execute(
+        select(SellerFollow.seller_id, func.count(SellerFollow.id))
+        .where(SellerFollow.seller_id.in_(seller_ids))
+        .group_by(SellerFollow.seller_id)
+    ).all()
+
+    report_rows = db.execute(
+        select(SellerReport.seller_id, func.count(SellerReport.id))
+        .where(SellerReport.seller_id.in_(seller_ids))
+        .group_by(SellerReport.seller_id)
+    ).all()
+
+    product_rows = db.execute(
+        select(Product.seller_id, func.count(Product.id))
+        .where(Product.seller_id.in_(seller_ids))
+        .group_by(Product.seller_id)
+    ).all()
+
+    purchase_rows = db.execute(
+        select(Product.seller_id, func.coalesce(func.sum(Product.purchase_count), 0))
+        .where(Product.seller_id.in_(seller_ids))
+        .group_by(Product.seller_id)
+    ).all()
+
+    metrics: dict[str, dict] = {
+        sid: {"followerCount": 0, "reportCount": 0, "productCount": 0, "purchaseCount": 0}
+        for sid in seller_ids
     }
+    for sid, count in follower_rows:
+        metrics[sid]["followerCount"] = int(count)
+    for sid, count in report_rows:
+        metrics[sid]["reportCount"] = int(count)
+    for sid, count in product_rows:
+        metrics[sid]["productCount"] = int(count)
+    for sid, count in purchase_rows:
+        metrics[sid]["purchaseCount"] = int(count)
+
+    return metrics
 
 
 def _seller_badge_label(seller: User, purchase_count: int) -> str:
@@ -92,8 +112,7 @@ def _seller_badge_label(seller: User, purchase_count: int) -> str:
     return ""
 
 
-def _serialize_seller_summary(db: Session, seller: User) -> dict:
-    metrics = _seller_metrics(db, seller.id)
+def _serialize_seller_summary(seller: User, metrics: dict) -> dict:
     seller_type = seller.seller_type if seller.seller_type in {"retail", "wholesale"} else "retail"
     average_delivery_days = (
         float(seller.average_delivery_days) if seller.average_delivery_days is not None else None
@@ -123,7 +142,6 @@ def _serialize_seller_summary(db: Session, seller: User) -> dict:
         "completedDeliveries": seller.completed_deliveries or 0,
         "averageDeliveryDays": average_delivery_days,
         "sellerNotice": seller.seller_notice or "",
-        "adminNote": seller.admin_note or "",
         "governmentIdType": seller.government_id_type or "ghana-card",
         "governmentIdVerified": bool(seller.government_id_verified),
         "followerCount": metrics["followerCount"],
@@ -135,14 +153,27 @@ def _serialize_seller_summary(db: Session, seller: User) -> dict:
     }
 
 
+def _serialize_admin_seller_summary(seller: User, metrics: dict) -> dict:
+    """Like _serialize_seller_summary but includes admin-only fields."""
+    return {
+        **_serialize_seller_summary(seller, metrics),
+        "adminNote": seller.admin_note or "",
+    }
+
+
 def list_public_sellers(db: Session) -> list[dict]:
-    sellers = db.scalars(_seller_query().order_by(User.seller_started_at.desc(), User.created_at.desc())).all()
-    return [_serialize_seller_summary(db, seller) for seller in sellers]
+    sellers = db.scalars(
+        _seller_query().order_by(User.seller_started_at.desc(), User.created_at.desc())
+    ).all()
+    seller_ids = [s.id for s in sellers]
+    metrics = _batch_seller_metrics(db, seller_ids)
+    return [_serialize_seller_summary(seller, metrics[seller.id]) for seller in sellers]
 
 
 def get_seller_detail(db: Session, identifier: str) -> dict:
     seller = _resolve_seller(db, identifier)
-    summary = _serialize_seller_summary(db, seller)
+    metrics = _batch_seller_metrics(db, [seller.id])
+    summary = _serialize_seller_summary(seller, metrics[seller.id])
     products = _load_products(
         db,
         ProductListParams(seller=seller.id, limit=24, sort="featured"),
@@ -150,7 +181,7 @@ def get_seller_detail(db: Session, identifier: str) -> dict:
 
     return {
         **summary,
-        "products": [_product_to_dict(product) for product in products[:24]],
+        "products": [_product_to_dict(product) for product in products],
     }
 
 
@@ -183,7 +214,29 @@ def follow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
         )
         db.commit()
 
-    return _serialize_seller_summary(db, seller)
+    metrics = _batch_seller_metrics(db, [seller.id])
+    return _serialize_seller_summary(seller, metrics[seller.id])
+
+
+def unfollow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
+    seller = _resolve_seller(db, seller_id)
+    follower = db.get(User, follower_id)
+
+    if follower is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
+
+    existing_follow = db.scalar(
+        select(SellerFollow).where(
+            SellerFollow.seller_id == seller.id,
+            SellerFollow.follower_id == follower.id,
+        )
+    )
+    if existing_follow is not None:
+        db.delete(existing_follow)
+        db.commit()
+
+    metrics = _batch_seller_metrics(db, [seller.id])
+    return _serialize_seller_summary(seller, metrics[seller.id])
 
 
 def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, details: str) -> dict:
@@ -199,6 +252,20 @@ def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, de
             detail="You cannot report your own store",
         )
 
+    # One open report per reporter per seller
+    existing_report = db.scalar(
+        select(SellerReport).where(
+            SellerReport.seller_id == seller.id,
+            SellerReport.reporter_id == reporter.id,
+            SellerReport.status == "open",
+        )
+    )
+    if existing_report is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already have an open report against this seller",
+        )
+
     db.add(
         SellerReport(
             id=f"report-{uuid4().hex[:12]}",
@@ -210,26 +277,43 @@ def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, de
     )
     db.commit()
 
-    return _serialize_seller_summary(db, seller)
+    metrics = _batch_seller_metrics(db, [seller.id])
+    return _serialize_seller_summary(seller, metrics[seller.id])
 
 
 def list_admin_sellers(db: Session) -> list[dict]:
     sellers = db.scalars(
         _seller_query(include_inactive=True).order_by(User.seller_started_at.desc(), User.created_at.desc())
     ).all()
-    return [_serialize_seller_summary(db, seller) for seller in sellers]
+    seller_ids = [s.id for s in sellers]
+    metrics = _batch_seller_metrics(db, seller_ids)
+    return [_serialize_admin_seller_summary(seller, metrics[seller.id]) for seller in sellers]
 
 
 def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
     seller = _resolve_seller(db, seller_id, include_inactive=True)
-    summary = _serialize_seller_summary(db, seller)
+    metrics = _batch_seller_metrics(db, [seller.id])
+    summary = _serialize_admin_seller_summary(seller, metrics[seller.id])
+
     reports = db.scalars(
-        select(SellerReport).where(SellerReport.seller_id == seller.id).order_by(SellerReport.created_at.desc())
+        select(SellerReport)
+        .where(SellerReport.seller_id == seller.id)
+        .order_by(SellerReport.created_at.desc())
     ).all()
+
+    # Batch-load all reporter users in one query
+    reporter_ids = list({r.reporter_id for r in reports if r.reporter_id})
+    reporter_map: dict[str, str] = {}
+    if reporter_ids:
+        reporter_users = db.scalars(select(User).where(User.id.in_(reporter_ids))).all()
+        reporter_map = {u.id: u.name for u in reporter_users}
 
     return {
         **summary,
         "governmentIdNumber": seller.government_id_number or "",
+        "idFrontUrl": seller.id_front_url or "",
+        "idBackUrl": seller.id_back_url or "",
+        "selfieUrl": seller.selfie_url or "",
         "shippingAddress": {
             **_default_shipping_address(seller.name),
             **(seller.shipping_info or {}),
@@ -242,7 +326,7 @@ def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
             {
                 "id": report.id,
                 "reporterId": report.reporter_id,
-                "reporterName": db.get(User, report.reporter_id).name if db.get(User, report.reporter_id) else "Buyer",
+                "reporterName": reporter_map.get(report.reporter_id, "Buyer"),
                 "reason": report.reason,
                 "details": report.details or "",
                 "status": report.status,
@@ -278,7 +362,9 @@ def update_admin_seller_status(
     seller.seller_badge = seller_badge.strip() or None
     seller.completed_deliveries = max(completed_deliveries, 0)
     seller.average_delivery_days = average_delivery_days
-    seller.government_id_verified = government_id_verified or status_value == "active"
+    # government_id_verified must be explicitly set by the admin; setting status to
+    # "active" does NOT automatically mark the ID as verified.
+    seller.government_id_verified = government_id_verified
     db.add(seller)
     db.commit()
     db.refresh(seller)
@@ -289,28 +375,24 @@ def update_admin_seller_status(
 def list_top_products(db: Session, page: int = 1, limit: int = 100) -> dict:
     limit = min(max(limit, 1), 100)
     page = max(page, 1)
-    ranked_products = _load_products(
-        db,
-        ProductListParams(sort="featured", limit=500),
-        include_inactive_sellers=True,
+    offset = (page - 1) * limit
+
+    # Rank by purchase_count + reviews_count + rating at DB level
+    ranked_q = (
+        select(Product)
+        .order_by(
+            Product.purchase_count.desc(),
+            Product.reviews_count.desc(),
+            Product.rating.desc(),
+            Product.created_at.desc(),
+        )
     )
-    ranked_products = sorted(
-        ranked_products,
-        key=lambda product: (
-            product.purchase_count,
-            product.reviews_count,
-            product.rating,
-            product.created_at,
-        ),
-        reverse=True,
-    )[:500]
-    total = len(ranked_products)
+    total = db.scalar(select(func.count(Product.id))) or 0
     total_pages = max(1, ceil(total / limit)) if total else 1
-    start = (page - 1) * limit
-    end = start + limit
+    products = db.scalars(ranked_q.offset(offset).limit(limit)).all()
 
     return {
-        "items": [_product_to_dict(product) for product in ranked_products[start:end]],
+        "items": [_product_to_dict(product) for product in products],
         "total": total,
         "page": page,
         "limit": limit,

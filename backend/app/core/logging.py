@@ -8,6 +8,16 @@ from app.core.config import settings
 
 logger = logging.getLogger("spree.api")
 
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: https:; "
+    "font-src 'self' https:; "
+    "connect-src 'self' https:; "
+    "frame-ancestors 'none';"
+)
+
 
 def configure_logging() -> None:
     logging.basicConfig(
@@ -52,6 +62,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Content-Security-Policy", _CSP)
     response.headers.setdefault(
         "Permissions-Policy",
         "camera=(), microphone=(), geolocation=(), payment=()",

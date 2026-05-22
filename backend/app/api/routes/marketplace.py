@@ -4,11 +4,13 @@ from app.api.deps import DBSession, InternalAPIKey
 from app.schemas.marketplace import (
     AdminSellerDetailOut,
     AdminSellerStatusUpdateRequest,
+    AdminSellerSummaryOut,
     FollowSellerRequest,
     ReportSellerRequest,
     SellerDetailOut,
     SellerSummaryOut,
     TopProductsResponseOut,
+    UnfollowSellerRequest,
 )
 from app.services.marketplace import (
     follow_seller,
@@ -18,6 +20,7 @@ from app.services.marketplace import (
     list_public_sellers,
     list_top_products,
     report_seller,
+    unfollow_seller,
     update_admin_seller_status,
 )
 
@@ -39,12 +42,17 @@ def seller_follow(seller_id: str, payload: FollowSellerRequest, db: DBSession, _
     return follow_seller(db, seller_id, payload.followerId)
 
 
+@router.delete("/sellers/{seller_id}/follow", response_model=SellerSummaryOut)
+def seller_unfollow(seller_id: str, payload: UnfollowSellerRequest, db: DBSession, _: InternalAPIKey):
+    return unfollow_seller(db, seller_id, payload.followerId)
+
+
 @router.post("/sellers/{seller_id}/report", response_model=SellerSummaryOut)
 def seller_report(seller_id: str, payload: ReportSellerRequest, db: DBSession, _: InternalAPIKey):
     return report_seller(db, seller_id, payload.reporterId, payload.reason, payload.details)
 
 
-@router.get("/admin/sellers", response_model=list[SellerSummaryOut])
+@router.get("/admin/sellers", response_model=list[AdminSellerSummaryOut])
 def admin_sellers(db: DBSession, _: InternalAPIKey):
     return list_admin_sellers(db)
 

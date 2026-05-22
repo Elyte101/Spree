@@ -46,15 +46,11 @@ export interface CreateProductPayload {
   collectionId?: string | null;
   collectionName?: string;
   stock: number;
-  rating: number;
-  reviewsCount: number;
-  purchaseCount?: number;
   variants: ProductVariantPayload[];
   colors: string[];
   sizes: string[];
   badge?: string;
   tags: string[];
-  createdAt?: string;
 }
 
 export interface SignUpPayload {

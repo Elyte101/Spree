@@ -43,7 +43,7 @@ export default async function RootLayout({
                 <CartProvider initialCart={initialCart}>
                   <StoreAppBar />
 
-                  <main style={{ flex: 1 }}>
+                  <main style={{ flex: 1, paddingTop: "60px" }}>
                     {children}
                   </main>
                 </CartProvider>

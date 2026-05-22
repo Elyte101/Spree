@@ -147,6 +147,10 @@ const createFallbackUserProfile = (
     expiryYear: "",
     billingPostalCode: "",
   },
+  payoutInfo: {},
+  idFrontUrl: "",
+  idBackUrl: "",
+  selfieUrl: "",
 });
 
 const isConnectionError = (error: unknown) => {
@@ -416,3 +420,30 @@ export const getUserProfile = (
     internal: true,
     fallback: () => createFallbackUserProfile(userId, fallback),
   });
+
+export const getOrders = (userId: string, role: string) =>
+  getJson<import("@/types/types").OrderListItem[]>(
+    "/orders",
+    { headers: { "X-Actor-User-Id": userId, "X-Actor-Role": role } },
+    { internal: true, fallback: () => [] }
+  );
+
+export const getOrder = async (
+  orderId: string,
+  userId: string,
+  role: string
+): Promise<import("@/types/types").OrderDetail | undefined> => {
+  const response = await fetchBackend(`/orders/${orderId}`, {
+    headers: { "X-Actor-User-Id": userId, "X-Actor-Role": role },
+  }, { internal: true });
+  if (response.status === 404 || response.status === 403) return undefined;
+  if (!response.ok) throw new Error(`Backend request failed with status ${response.status}`);
+  return response.json() as Promise<import("@/types/types").OrderDetail>;
+};
+
+export const getSellerOrders = (sellerId: string) =>
+  getJson<import("@/types/types").OrderListItem[]>(
+    "/seller/orders",
+    { headers: { "X-Actor-User-Id": sellerId } },
+    { internal: true, fallback: () => [] }
+  );

@@ -56,8 +56,6 @@ export function ProductCreateForm({
   const [price, setPrice] = React.useState("");
   const [discount, setDiscount] = React.useState("0");
   const [stock, setStock] = React.useState("");
-  const [rating, setRating] = React.useState("0");
-  const [reviewsCount, setReviewsCount] = React.useState("0");
   const [categoryName, setCategoryName] = React.useState("");
   const [brandName, setBrandName] = React.useState("");
   const [collectionName, setCollectionName] = React.useState("");
@@ -127,8 +125,6 @@ export function ProductCreateForm({
       brandName: brandName.trim(),
       collectionName: collectionName.trim() || undefined,
       stock: Number(stock),
-      rating: Number(rating),
-      reviewsCount: Number(reviewsCount),
       variants: [],
       colors: colorOptions,
       sizes: sizeOptions,
@@ -271,28 +267,6 @@ export function ProductCreateForm({
                     onChange={(event) => setStock(event.target.value)}
                     inputProps={{ min: 0, step: 1 }}
                     required
-                  />
-                </Box>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                  }}
-                >
-                  <TextField
-                    label="Rating"
-                    type="number"
-                    value={rating}
-                    onChange={(event) => setRating(event.target.value)}
-                    inputProps={{ min: 0, max: 5, step: 0.1 }}
-                  />
-                  <TextField
-                    label="Number of reviews"
-                    type="number"
-                    value={reviewsCount}
-                    onChange={(event) => setReviewsCount(event.target.value)}
-                    inputProps={{ min: 0, step: 1 }}
                   />
                 </Box>
               </Stack>

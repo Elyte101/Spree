@@ -2,45 +2,204 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import {
   CreditCardRounded,
   LockOutlined,
   LocalShippingRounded,
+  PhoneAndroidRounded,
+  AccountBalanceWalletRounded,
 } from "@mui/icons-material";
 import {
   Alert,
   alpha,
   Box,
   Button,
-  Checkbox,
   Chip,
+  CircularProgress,
   Divider,
-  FormControlLabel,
-  MenuItem,
   Paper,
   Radio,
-  RadioGroup,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+
 import { useCart } from "@/components/providers/cartProvider";
-import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
+import { UserProfile } from "@/types/types";
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 
-export function CheckoutPage() {
+const ease = [0.22, 1, 0.36, 1] as const;
+
+const sectionVariants = {
+  hidden: { opacity: 0, y: 32 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, delay: i * 0.08, ease },
+  }),
+};
+
+interface CheckoutFormState {
+  fullName: string;
+  email: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+}
+
+function StepBadge({ n }: { n: number }) {
+  return (
+    <Box
+      sx={{
+        width: 30,
+        height: 30,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "primary.main",
+        color: "primary.contrastText",
+        fontWeight: 900,
+        fontSize: 13,
+        flexShrink: 0,
+      }}
+    >
+      {n}
+    </Box>
+  );
+}
+
+const shippingOptions = [
+  {
+    value: "standard",
+    label: "Standard",
+    detail: "3–5 business days",
+    priceKey: "standard" as const,
+  },
+  {
+    value: "express",
+    label: "Express",
+    detail: "1–2 business days",
+    price: 18,
+  },
+];
+
+const paymentOptions = [
+  { value: "card", label: "Credit or debit card", icon: <CreditCardRounded fontSize="small" /> },
+  { value: "paypal", label: "PayPal", icon: <AccountBalanceWalletRounded fontSize="small" /> },
+  { value: "wallet", label: "Mobile wallet", icon: <PhoneAndroidRounded fontSize="small" /> },
+];
+
+export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
   const { cart } = useCart();
   const [shippingMethod, setShippingMethod] = React.useState("standard");
   const [paymentMethod, setPaymentMethod] = React.useState("card");
-  const standardShipping = cart.standardShipping ?? cart.shipping;
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<string | null>(null);
 
-  const shipping = cart.items.length === 0 ? 0 : shippingMethod === "express" ? 18 : cart.shipping;
+  const [form, setForm] = React.useState<CheckoutFormState>(() => {
+    const addr = initialProfile?.shippingAddress;
+    return {
+      fullName: addr?.fullName || initialProfile?.name || "",
+      email: initialProfile?.email || "",
+      phone: initialProfile?.phone || "",
+      addressLine1: addr?.addressLine1 || "",
+      addressLine2: addr?.addressLine2 || "",
+      city: addr?.city || "",
+      state: addr?.state || "",
+      postalCode: addr?.postalCode || "",
+      country: addr?.country || "",
+    };
+  });
+
+  const setField =
+    (field: keyof CheckoutFormState) =>
+    (event: React.ChangeEvent<HTMLInputElement>) =>
+      setForm((prev) => ({ ...prev, [field]: event.target.value }));
+
+  const standardShipping = cart.standardShipping ?? cart.shipping;
+  const shipping =
+    cart.items.length === 0 ? 0 : shippingMethod === "express" ? 18 : cart.shipping;
   const total = Number((cart.subtotal + shipping + cart.tax).toFixed(2));
+
+  const formIsValid =
+    form.fullName.trim().length >= 2 &&
+    form.email.trim().length >= 5 &&
+    form.addressLine1.trim().length >= 2 &&
+    form.city.trim().length >= 1 &&
+    form.state.trim().length >= 1 &&
+    form.postalCode.trim().length >= 1 &&
+    form.country.trim().length >= 1;
+
+  const canSubmit = cart.items.length > 0 && !submitting && formIsValid;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSubmitError(null);
+    setSubmitting(true);
+
+    try {
+      const response = await fetch("/api/orders/initialize-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim() || null,
+          addressLine1: form.addressLine1.trim(),
+          addressLine2: form.addressLine2.trim() || null,
+          city: form.city.trim(),
+          state: form.state.trim(),
+          postalCode: form.postalCode.trim(),
+          country: form.country.trim(),
+          shippingMethod,
+          paymentMethod,
+          subtotal: cart.subtotal,
+          shippingCost: shipping,
+          tax: cart.tax,
+          total,
+          currency: cart.currency,
+          items: cart.items.map((item) => ({
+            productId: item.productId,
+            name: item.name,
+            image: item.image,
+            price: item.price,
+            quantity: item.quantity,
+            color: item.color ?? null,
+            size: item.size ?? null,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(
+          (data as { detail?: string }).detail ?? "Order could not be placed. Please try again."
+        );
+      }
+
+      const result = (await response.json()) as { orderId: string; authorizationUrl: string };
+      // Cart is cleared by the verify page after payment is confirmed
+      window.location.href = result.authorizationUrl;
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
+      setSubmitting(false);
+    }
+  };
+
+  const cardSx = {
+    p: { xs: 2, sm: 3 },
+    borderRadius: 3,
+    border: "1px solid",
+    borderColor: "divider",
+  } as const;
 
   return (
     <Box
@@ -48,284 +207,586 @@ export function CheckoutPage() {
         minHeight: "100vh",
         px: { xs: 1.5, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
-        background: `radial-gradient(circle at top left, ${alpha(
-          theme.palette.primary.main,
-          theme.palette.mode === "dark" ? 0.16 : 0.08
-        )}, transparent 24%), linear-gradient(180deg, ${
-          theme.palette.background.default
-        } 0%, ${theme.palette.background.paper} 100%)`,
+        background: `
+          radial-gradient(ellipse 60% 40% at 0% 0%,
+            ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1)},
+            transparent
+          ),
+          radial-gradient(ellipse 50% 35% at 100% 100%,
+            ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.12 : 0.06)},
+            transparent
+          ),
+          ${theme.palette.background.default}
+        `,
       })}
     >
       <Stack spacing={4}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2.5, md: 4 },
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
-          }}
+        {/* ── Header ── */}
+        <motion.div
+          custom={0}
+          variants={sectionVariants}
+          initial="hidden"
+          animate="visible"
         >
-          <Chip
-            icon={<LockOutlined />}
-            label="Secure Checkout"
-            color="primary"
-            sx={{ mb: 1.5, borderRadius: 999 }}
-          />
-          <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-            Finish your purchase.
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-            Review your delivery details, confirm shipping, and move through the purchase flow with a live order summary.
-          </Typography>
-        </Paper>
+          <Paper
+            elevation={0}
+            sx={(theme) => ({
+              ...cardSx,
+              background: `linear-gradient(135deg,
+                ${alpha(theme.palette.primary.main, 0.07)} 0%,
+                transparent 60%
+              )`,
+            })}
+          >
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              justifyContent="space-between"
+              alignItems={{ sm: "flex-end" }}
+              spacing={2}
+            >
+              <Box>
+                <Chip
+                  icon={<LockOutlined />}
+                  label="Secure Checkout"
+                  color="primary"
+                  sx={{ mb: 1.5, borderRadius: 999 }}
+                />
+                <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
+                  Finish your purchase.
+                </Typography>
+                <Typography variant="body1" color="text.secondary" sx={{ mt: 1, maxWidth: 480 }}>
+                  Fill in your details, pick a delivery option, and place your order.
+                </Typography>
+              </Box>
+              {cart.items.length > 0 && (
+                <Chip
+                  label={`${cart.items.length} item${cart.items.length === 1 ? "" : "s"} · ${formatPrice(total)}`}
+                  color="primary"
+                  variant="outlined"
+                  sx={{ borderRadius: 999, fontWeight: 700, display: { xs: "none", sm: "flex" } }}
+                />
+              )}
+            </Stack>
+          </Paper>
+        </motion.div>
+
+        {/* ── Error alert ── */}
+        <AnimatePresence>
+          {submitError ? (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ duration: 0.25, ease }}
+            >
+              <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ borderRadius: 2 }}>
+                {submitError}
+              </Alert>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <Box
           sx={{
             display: "grid",
             gap: 3,
-            gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1fr) 360px" },
+            gridTemplateColumns: { xs: "1fr", xl: "minmax(0, 1fr) 380px" },
             alignItems: "start",
           }}
         >
+          {/* ── Left column – form ── */}
           <Stack spacing={2.5}>
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2, sm: 2.5 },
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Stack spacing={2}>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  Contact details
-                </Typography>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                  }}
-                >
-                  <TextField label="First name" defaultValue="Lyte" />
-                  <TextField label="Last name" defaultValue="Storefront" />
-                  <TextField label="Email" defaultValue="lyte@example.com" />
-                  <TextField label="Phone" defaultValue="+1 555 202 1199" />
-                  <TextField label="Address" defaultValue="1424 Market Street" sx={{ gridColumn: { md: "1 / -1" } }} />
-                  <TextField label="City" defaultValue="San Francisco" />
-                  <TextField label="Postal code" defaultValue="94103" />
-                  <TextField select label="Country" defaultValue="US">
-                    <MenuItem value="US">United States</MenuItem>
-                    <MenuItem value="CA">Canada</MenuItem>
-                    <MenuItem value="GB">United Kingdom</MenuItem>
-                  </TextField>
-                  <TextField select label="State" defaultValue="CA">
-                    <MenuItem value="CA">California</MenuItem>
-                    <MenuItem value="NY">New York</MenuItem>
-                    <MenuItem value="TX">Texas</MenuItem>
-                  </TextField>
-                </Box>
-              </Stack>
-            </Paper>
+            {/* Contact */}
+            <motion.div custom={1} variants={sectionVariants} initial="hidden" animate="visible">
+              <Paper elevation={0} sx={cardSx}>
+                <Stack spacing={2.5}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <StepBadge n={1} />
+                    <Box>
+                      <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                        Contact details
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Your confirmation will be sent here
+                      </Typography>
+                    </Box>
+                  </Stack>
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2, sm: 2.5 },
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Stack spacing={2}>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  Delivery method
-                </Typography>
-                <RadioGroup
-                  value={shippingMethod}
-                  onChange={(event) => setShippingMethod(event.target.value)}
-                >
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 1.5,
-                      mb: 1,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: shippingMethod === "standard" ? "primary.main" : "divider",
-                    }}
-                  >
-                    <FormControlLabel
-                      value="standard"
-                      control={<Radio />}
-                      label={
-                        <Stack>
-                          <Typography fontWeight={700}>Standard shipping</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Arrives in 3-5 business days · {formatPrice(standardShipping)}
-                          </Typography>
-                        </Stack>
-                      }
-                    />
-                  </Paper>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: shippingMethod === "express" ? "primary.main" : "divider",
-                    }}
-                  >
-                    <FormControlLabel
-                      value="express"
-                      control={<Radio />}
-                      label={
-                        <Stack>
-                          <Typography fontWeight={700}>Express shipping</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Arrives in 1-2 business days · {formatPrice(18)}
-                          </Typography>
-                        </Stack>
-                      }
-                    />
-                  </Paper>
-                </RadioGroup>
-              </Stack>
-            </Paper>
+                  <Divider />
 
-            <Paper
-              elevation={0}
-              sx={{
-                p: { xs: 2, sm: 2.5 },
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Stack spacing={2}>
-                <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                  Payment method
-                </Typography>
-                <RadioGroup
-                  value={paymentMethod}
-                  onChange={(event) => setPaymentMethod(event.target.value)}
-                >
-                  <FormControlLabel value="card" control={<Radio />} label="Credit or debit card" />
-                  <FormControlLabel value="paypal" control={<Radio />} label="PayPal" />
-                  <FormControlLabel value="wallet" control={<Radio />} label="Mobile wallet" />
-                </RadioGroup>
-                {paymentMethod === "card" ? (
                   <Box
                     sx={{
                       display: "grid",
                       gap: 2,
-                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                      gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
                     }}
                   >
-                    <TextField label="Card number" defaultValue="4242 4242 4242 4242" sx={{ gridColumn: { md: "1 / -1" } }} />
-                    <TextField label="Expiry" defaultValue="08/29" />
-                    <TextField label="CVC" defaultValue="424" />
-                    <TextField label="Name on card" defaultValue="Lyte Storefront" sx={{ gridColumn: { md: "1 / -1" } }} />
+                    <TextField
+                      label="Full name"
+                      value={form.fullName}
+                      onChange={setField("fullName")}
+                      autoComplete="name"
+                      required
+                      sx={{ gridColumn: { sm: "1 / -1" } }}
+                    />
+                    <TextField
+                      label="Email"
+                      type="email"
+                      value={form.email}
+                      onChange={setField("email")}
+                      autoComplete="email"
+                      required
+                    />
+                    <TextField
+                      label="Phone"
+                      type="tel"
+                      value={form.phone}
+                      onChange={setField("phone")}
+                      autoComplete="tel"
+                    />
+                    <TextField
+                      label="Address"
+                      value={form.addressLine1}
+                      onChange={setField("addressLine1")}
+                      autoComplete="address-line1"
+                      required
+                      sx={{ gridColumn: { sm: "1 / -1" } }}
+                    />
+                    <TextField
+                      label="Apt, floor, etc."
+                      value={form.addressLine2}
+                      onChange={setField("addressLine2")}
+                      autoComplete="address-line2"
+                      sx={{ gridColumn: { sm: "1 / -1" } }}
+                    />
+                    <TextField
+                      label="City"
+                      value={form.city}
+                      onChange={setField("city")}
+                      autoComplete="address-level2"
+                      required
+                    />
+                    <TextField
+                      label="State / Province"
+                      value={form.state}
+                      onChange={setField("state")}
+                      autoComplete="address-level1"
+                      required
+                    />
+                    <TextField
+                      label="Postal code"
+                      value={form.postalCode}
+                      onChange={setField("postalCode")}
+                      autoComplete="postal-code"
+                      required
+                    />
+                    <TextField
+                      label="Country"
+                      value={form.country}
+                      onChange={setField("country")}
+                      autoComplete="country-name"
+                      required
+                    />
                   </Box>
-                ) : (
-                  <Alert severity="info">
-                    Payment processing is not connected yet, but the checkout structure is ready for a production payment integration.
-                  </Alert>
-                )}
-                <FormControlLabel control={<Checkbox defaultChecked />} label="Save details for next time" />
-              </Stack>
-            </Paper>
-          </Stack>
+                </Stack>
+              </Paper>
+            </motion.div>
 
-          <ResponsiveDisclosurePanel
-            title="Order summary"
-            titleVariant="h5"
-            icon={<LocalShippingRounded />}
-            action={<Chip label={formatPrice(total)} size="small" color="primary" sx={{ borderRadius: 999 }} />}
-            collapseBelow="xl"
-            paperSx={{
-              position: { xl: "sticky" },
-              top: { xl: 96 },
-            }}
-          >
-            <Stack spacing={2}>
-              {cart.items.length ? (
-                cart.items.map((item) => (
-                  <Stack
-                    key={item.id}
-                    direction={{ xs: "column", sm: "row" }}
-                    justifyContent="space-between"
-                    alignItems={{ xs: "flex-start", sm: "center" }}
-                    spacing={0.5}
-                  >
+            {/* Delivery */}
+            <motion.div custom={2} variants={sectionVariants} initial="hidden" animate="visible">
+              <Paper elevation={0} sx={cardSx}>
+                <Stack spacing={2.5}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <StepBadge n={2} />
                     <Box>
-                      <Typography fontWeight={700}>{item.name}</Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                        Delivery method
+                      </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Qty {item.quantity}
+                        Choose how fast you want it
                       </Typography>
                     </Box>
-                    <Typography fontWeight={700}>
-                      {formatPrice(item.price * item.quantity)}
+                  </Stack>
+
+                  <Divider />
+
+                  <Stack spacing={1.5}>
+                    {shippingOptions.map((option) => {
+                      const isSelected = shippingMethod === option.value;
+                      const price =
+                        option.value === "express" ? 18 : standardShipping;
+
+                      return (
+                        <motion.div
+                          key={option.value}
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ duration: 0.12 }}
+                        >
+                          <Box
+                            onClick={() => setShippingMethod(option.value)}
+                            sx={(theme) => ({
+                              p: 2,
+                              borderRadius: 2,
+                              border: "1.5px solid",
+                              borderColor: isSelected ? "primary.main" : "divider",
+                              bgcolor: isSelected
+                                ? alpha(theme.palette.primary.main, 0.05)
+                                : "transparent",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              transition: "border-color 0.18s, background-color 0.18s",
+                              "&:hover": {
+                                borderColor: isSelected ? "primary.main" : "text.disabled",
+                              },
+                            })}
+                          >
+                            <Stack direction="row" spacing={1.5} alignItems="center">
+                              <Radio
+                                checked={isSelected}
+                                onChange={() => setShippingMethod(option.value)}
+                                size="small"
+                                sx={{ p: 0 }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <Box>
+                                <Typography fontWeight={700}>{option.label}</Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {option.detail}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                            <Typography
+                              fontWeight={800}
+                              color={isSelected ? "primary.main" : "text.primary"}
+                              sx={{ transition: "color 0.18s" }}
+                            >
+                              {formatPrice(price)}
+                            </Typography>
+                          </Box>
+                        </motion.div>
+                      );
+                    })}
+                  </Stack>
+                </Stack>
+              </Paper>
+            </motion.div>
+
+            {/* Payment */}
+            <motion.div custom={3} variants={sectionVariants} initial="hidden" animate="visible">
+              <Paper elevation={0} sx={cardSx}>
+                <Stack spacing={2.5}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <StepBadge n={3} />
+                    <Box>
+                      <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                        Payment method
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        How would you like to pay?
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Divider />
+
+                  <Stack spacing={1.5}>
+                    {paymentOptions.map((method) => {
+                      const isSelected = paymentMethod === method.value;
+                      return (
+                        <motion.div
+                          key={method.value}
+                          whileTap={{ scale: 0.985 }}
+                          transition={{ duration: 0.12 }}
+                        >
+                          <Box
+                            onClick={() => setPaymentMethod(method.value)}
+                            sx={(theme) => ({
+                              p: 2,
+                              borderRadius: 2,
+                              border: "1.5px solid",
+                              borderColor: isSelected ? "primary.main" : "divider",
+                              bgcolor: isSelected
+                                ? alpha(theme.palette.primary.main, 0.05)
+                                : "transparent",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.5,
+                              transition: "border-color 0.18s, background-color 0.18s",
+                              "&:hover": {
+                                borderColor: isSelected ? "primary.main" : "text.disabled",
+                              },
+                            })}
+                          >
+                            <Radio
+                              checked={isSelected}
+                              onChange={() => setPaymentMethod(method.value)}
+                              size="small"
+                              sx={{ p: 0 }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <Box
+                              sx={{
+                                color: isSelected ? "primary.main" : "text.secondary",
+                                display: "flex",
+                                transition: "color 0.18s",
+                              }}
+                            >
+                              {method.icon}
+                            </Box>
+                            <Typography fontWeight={isSelected ? 700 : 400}>
+                              {method.label}
+                            </Typography>
+                          </Box>
+                        </motion.div>
+                      );
+                    })}
+                  </Stack>
+
+                  {/* Payment detail panel */}
+                  <AnimatePresence mode="wait" initial={false}>
+                    {paymentMethod === "card" ? (
+                      <motion.div
+                        key="card"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.32, ease }}
+                        style={{ overflow: "hidden" }}
+                      >
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gap: 2,
+                            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
+                          }}
+                        >
+                          <TextField
+                            label="Card number"
+                            placeholder="1234 5678 9012 3456"
+                            slotProps={{ htmlInput: { maxLength: 19 } }}
+                            sx={{ gridColumn: { sm: "1 / -1" } }}
+                          />
+                          <TextField label="Expiry" placeholder="MM / YY" />
+                          <TextField label="CVC" placeholder="···" />
+                          <TextField
+                            label="Name on card"
+                            sx={{ gridColumn: { sm: "1 / -1" } }}
+                          />
+                        </Box>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="alt"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <Alert severity="info" sx={{ borderRadius: 2 }}>
+                          This payment method will be activated once a provider is configured.
+                        </Alert>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Stack>
+              </Paper>
+            </motion.div>
+          </Stack>
+
+          {/* ── Right column – order summary ── */}
+          <motion.div custom={4} variants={sectionVariants} initial="hidden" animate="visible">
+            <Paper
+              elevation={0}
+              sx={(theme) => ({
+                position: { xl: "sticky" },
+                top: { xl: 96 },
+                borderRadius: 3,
+                border: "1px solid",
+                borderColor: "divider",
+                overflow: "hidden",
+                backdropFilter: "blur(12px)",
+                background:
+                  theme.palette.mode === "dark"
+                    ? alpha(theme.palette.background.paper, 0.82)
+                    : alpha(theme.palette.background.paper, 0.9),
+              })}
+            >
+              {/* Summary header strip */}
+              <Box
+                sx={(theme) => ({
+                  px: { xs: 2, sm: 2.5 },
+                  py: 2,
+                  background: `linear-gradient(135deg,
+                    ${alpha(theme.palette.primary.main, 0.1)} 0%,
+                    ${alpha(theme.palette.primary.main, 0.03)} 100%
+                  )`,
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                })}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <LocalShippingRounded color="primary" fontSize="small" />
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      Order summary
                     </Typography>
                   </Stack>
-                ))
-              ) : (
-                <Alert severity="info">
-                  Your cart is empty. Add a product before completing checkout.
-                </Alert>
-              )}
-
-              <Divider />
-
-              <Stack spacing={1}>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography color="text.secondary">Subtotal</Typography>
-                  <Typography fontWeight={700}>{formatPrice(cart.subtotal)}</Typography>
+                  <Chip
+                    label={formatPrice(total)}
+                    size="small"
+                    color="primary"
+                    sx={{ borderRadius: 999, fontWeight: 700 }}
+                  />
                 </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography color="text.secondary">Shipping</Typography>
-                  <Typography fontWeight={700}>{formatPrice(shipping)}</Typography>
+              </Box>
+
+              <Stack sx={{ p: { xs: 2, sm: 2.5 } }} spacing={2.5}>
+                {/* Items */}
+                <AnimatePresence initial={false}>
+                  {cart.items.length > 0 ? (
+                    <Stack spacing={1.5}>
+                      {cart.items.map((item, i) => (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: 16 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -16 }}
+                          transition={{ delay: i * 0.04, duration: 0.3, ease }}
+                        >
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            alignItems="flex-start"
+                            spacing={1.5}
+                          >
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography fontWeight={700} noWrap>
+                                {item.name}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Qty {item.quantity}
+                                {item.color ? ` · ${item.color}` : ""}
+                                {item.size ? ` · ${item.size}` : ""}
+                              </Typography>
+                            </Box>
+                            <Typography fontWeight={700} sx={{ flexShrink: 0 }}>
+                              {formatPrice(item.price * item.quantity)}
+                            </Typography>
+                          </Stack>
+                        </motion.div>
+                      ))}
+                    </Stack>
+                  ) : (
+                    <motion.div
+                      key="empty"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <Alert severity="info" sx={{ borderRadius: 2 }}>
+                        Your cart is empty. Add a product before completing checkout.
+                      </Alert>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <Divider />
+
+                {/* Price breakdown */}
+                <Stack spacing={1}>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography color="text.secondary">Subtotal</Typography>
+                    <Typography fontWeight={600}>{formatPrice(cart.subtotal)}</Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography color="text.secondary">
+                      Delivery fee ({shippingMethod})
+                    </Typography>
+                    <Typography fontWeight={600}>
+                      {shipping === 0 ? "Free" : formatPrice(shipping)}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" justifyContent="space-between">
+                    <Typography color="text.secondary">Tax (8%)</Typography>
+                    <Typography fontWeight={600}>{formatPrice(cart.tax)}</Typography>
+                  </Stack>
                 </Stack>
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography color="text.secondary">Tax</Typography>
-                  <Typography fontWeight={700}>{formatPrice(cart.tax)}</Typography>
+
+                <Divider />
+
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                    Total
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                    {formatPrice(total)}
+                  </Typography>
+                </Stack>
+
+                {/* Place order */}
+                <motion.div whileTap={canSubmit ? { scale: 0.97 } : undefined}>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    size="large"
+                    endIcon={
+                      submitting ? (
+                        <CircularProgress size={18} color="inherit" />
+                      ) : (
+                        <CreditCardRounded />
+                      )
+                    }
+                    disabled={!canSubmit}
+                    onClick={handleSubmit}
+                    sx={{
+                      borderRadius: 999,
+                      py: 1.5,
+                      textTransform: "none",
+                      fontWeight: 900,
+                      fontSize: "1rem",
+                      boxShadow: "none",
+                      "&:hover": { boxShadow: "none" },
+                    }}
+                  >
+                    {submitting ? "Placing order…" : "Place order"}
+                  </Button>
+                </motion.div>
+
+                <Button
+                  component={Link}
+                  href="/cart"
+                  variant="text"
+                  fullWidth
+                  sx={{
+                    borderRadius: 999,
+                    textTransform: "none",
+                    fontWeight: 700,
+                    color: "text.secondary",
+                    mt: -1,
+                  }}
+                >
+                  Back to cart
+                </Button>
+
+                {/* Trust signal */}
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <LockOutlined sx={{ fontSize: 13, color: "text.disabled" }} />
+                  <Typography variant="caption" color="text.disabled">
+                    256-bit SSL · Secure checkout
+                  </Typography>
                 </Stack>
               </Stack>
-
-              <Divider />
-
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  Total
-                </Typography>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                  {formatPrice(total)}
-                </Typography>
-              </Stack>
-
-              <Button
-                component={Link}
-                href="/checkout/success"
-                variant="contained"
-                endIcon={<CreditCardRounded />}
-                disabled={cart.items.length === 0}
-                sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 900 }}
-              >
-                Place order
-              </Button>
-              <Button
-                component={Link}
-                href="/cart"
-                variant="outlined"
-                sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 900 }}
-              >
-                Back to cart
-              </Button>
-            </Stack>
-          </ResponsiveDisclosurePanel>
+            </Paper>
+          </motion.div>
         </Box>
       </Stack>
     </Box>

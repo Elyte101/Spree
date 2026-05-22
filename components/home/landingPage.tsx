@@ -2,30 +2,32 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { motion } from "motion/react";
 import {
-  ArrowOutward,
-  AutoAwesomeRounded,
-  GridViewRounded,
-  Inventory2Rounded,
+  ArrowForwardRounded,
+  CheckCircleOutlined,
   LocalShippingRounded,
-  ShoppingBagOutlined,
+  PhoneAndroidRounded,
+  SecurityRounded,
   StorefrontOutlined,
-  WorkspacePremiumRounded,
+  VerifiedRounded,
 } from "@mui/icons-material";
 import {
   alpha,
   Box,
   Button,
   Chip,
+  Container,
   Divider,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
 
-import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
 import { HomeFeed, Product } from "@/types/types";
+
+const ease = [0.22, 1, 0.36, 1] as const;
 
 interface LandingPageProps {
   homeFeed: HomeFeed;
@@ -36,10 +38,55 @@ interface LandingPageProps {
 }
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
+
+const trustPillars = [
+  {
+    icon: <SecurityRounded />,
+    title: "Escrow Protection",
+    desc: "Your payment is held safely until you confirm delivery. No risk, no stress.",
+    color: "primary" as const,
+  },
+  {
+    icon: <VerifiedRounded />,
+    title: "Verified Sellers",
+    desc: "Every seller submits a Ghana Card and selfie before they can list a product.",
+    color: "success" as const,
+  },
+  {
+    icon: <PhoneAndroidRounded />,
+    title: "Mobile Money",
+    desc: "Pay and receive via MTN MoMo, Vodafone Cash, AirtelTigo, or card.",
+    color: "info" as const,
+  },
+  {
+    icon: <LocalShippingRounded />,
+    title: "Live Tracking",
+    desc: "Track every order from dispatch to your door with real-time updates.",
+    color: "warning" as const,
+  },
+];
+
+const escrowSteps = [
+  {
+    step: "01",
+    title: "You pay into escrow",
+    body: "Place your order and pay via MoMo, card, or Vodafone Cash. Your money is held safely — the seller receives nothing yet.",
+    color: "primary" as const,
+  },
+  {
+    step: "02",
+    title: "Seller dispatches",
+    body: "The verified seller packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
+    color: "info" as const,
+  },
+  {
+    step: "03",
+    title: "You confirm — seller gets paid",
+    body: "Once you confirm delivery, Spree releases the seller's payment instantly to their MoMo or bank. No delivery = no payment.",
+    color: "success" as const,
+  },
+];
 
 export function LandingPage({
   homeFeed,
@@ -48,805 +95,1041 @@ export function LandingPage({
   totalProducts,
   averageRating,
 }: LandingPageProps) {
-  const { itemCount: cartItemCount } = useCart();
   const hasProducts = totalProducts > 0;
   const hero = homeFeed.hero;
-  const heroTitle = hero?.title ?? (hasProducts ? "Find something you'll love." : "A fresh collection is on the way.");
-  const heroSubtitle =
-    hero?.subtitle ??
-    (hasProducts
-      ? "Browse popular picks, explore new arrivals, and discover what fits your style."
-      : "We're getting the shop ready. Please check back soon for the first arrivals.");
-  const primaryCta = {
-    href: hero?.ctaHref ?? "/products",
-    label: hero?.ctaLabel ?? (hasProducts ? "Shop now" : "Browse the shop"),
-  };
-  const statCards = [
-    {
-      icon: <StorefrontOutlined color="primary" />,
-      label: "Products",
-      value: `${totalProducts}`,
-      helper: "ready to browse",
-    },
-    {
-      icon: <GridViewRounded color="primary" />,
-      label: "Categories",
-      value: `${homeFeed.categories.length}`,
-      helper: "ways to shop",
-    },
-    {
-      icon: <WorkspacePremiumRounded color="primary" />,
-      label: "Brands",
-      value: `${homeFeed.brands.length}`,
-      helper: "favorite names",
-    },
-    {
-      icon: <ShoppingBagOutlined color="primary" />,
-      label: "Cart",
-      value: `${cartItemCount}`,
-      helper: "item(s) saved for later",
-    },
-  ];
-
-  const renderEmptyPanel = (title: string, description: string) => (
-    <Paper
-      elevation={0}
-      sx={{
-        p: 4,
-        borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        backgroundColor: "action.hover",
-      }}
-    >
-      <Stack spacing={1.5} alignItems="flex-start">
-        <Typography variant="h5" sx={{ fontWeight: 900 }}>
-          {title}
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {description}
-        </Typography>
-        <Button
-          component={Link}
-          href="/products"
-          variant="contained"
-          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
-        >
-          Browse products
-        </Button>
-      </Stack>
-    </Paper>
-  );
 
   return (
-    <Box
-      component="main"
-      sx={(theme) => ({
-        minHeight: "100vh",
-        px: { xs: 1.5, sm: 3, md: 5 },
-        py: { xs: 3, md: 5 },
-        background: `radial-gradient(circle at top left, ${alpha(
-          theme.palette.primary.main,
-          theme.palette.mode === "dark" ? 0.2 : 0.12
-        )}, transparent 28%), radial-gradient(circle at 85% 10%, ${alpha(
-          theme.palette.secondary.main,
-          theme.palette.mode === "dark" ? 0.16 : 0.12
-        )}, transparent 22%), linear-gradient(180deg, ${
-          theme.palette.background.default
-        } 0%, ${theme.palette.background.paper} 100%)`,
-      })}
-    >
-      <Stack spacing={{ xs: 4, md: 5 }}>
-        <Paper
-          elevation={0}
-          sx={(theme) => ({
-            position: "relative",
-            overflow: "hidden",
-            borderRadius: 3,
-            p: { xs: 2.5, md: 4 },
-            border: "1px solid",
-            borderColor: "divider",
-            background: `linear-gradient(135deg, ${alpha(
-              theme.palette.background.paper,
-              theme.palette.mode === "dark" ? 0.94 : 0.96
-            )} 0%, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1)} 100%)`,
-          })}
-        >
-          <Box
-            sx={(theme) => ({
-              position: "absolute",
-              inset: 0,
-              background: `radial-gradient(circle at 20% 25%, ${alpha(
-                theme.palette.common.white,
-                theme.palette.mode === "dark" ? 0.08 : 0.45
-              )} 0%, transparent 20%), radial-gradient(circle at 90% 15%, ${alpha(
-                theme.palette.primary.main,
-                theme.palette.mode === "dark" ? 0.12 : 0.16
-              )} 0%, transparent 22%)`,
-            })}
-          />
-
+    <Box component="main" sx={{ minHeight: "100vh", overflowX: "hidden" }}>
+      {/* ── HERO ─────────────────────────────────────────────────── */}
+      <Box
+        sx={(theme) => ({
+          position: "relative",
+          pt: { xs: 10, md: 12 },
+          pb: { xs: 7, md: 9 },
+          background: `
+            radial-gradient(ellipse 70% 55% at 50% -10%,
+              ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.16)} 0%,
+              transparent 65%),
+            radial-gradient(ellipse 40% 40% at 90% 40%,
+              ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.2 : 0.1)} 0%,
+              transparent 60%),
+            ${theme.palette.background.default}
+          `,
+        })}
+      >
+        <Container maxWidth="lg">
           <Box
             sx={{
-              position: "relative",
               display: "grid",
-              gap: { xs: 2.5, md: 3 },
+              gridTemplateColumns: { xs: "1fr", lg: "1fr 400px" },
+              gap: { xs: 5, lg: 7 },
               alignItems: "center",
-              gridTemplateColumns: {
-                xs: "1fr",
-                lg: "minmax(0, 1.1fr) minmax(320px, 0.9fr)",
-              },
             }}
           >
-            <Stack spacing={2.5} sx={{ maxWidth: 760 }}>
-              <Chip
-                icon={<AutoAwesomeRounded />}
-                label={hasProducts ? "Featured picks" : "Spree Storefront"}
-                color="primary"
-                sx={{ width: "fit-content", borderRadius: 999 }}
-              />
-              <Typography variant="h2" sx={{ fontWeight: 900, lineHeight: 0.95 }}>
-                {heroTitle}
-              </Typography>
-              <Typography
-                variant="h6"
-                sx={(theme) => ({
-                  maxWidth: 640,
-                  color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                })}
+            {/* Left — copy */}
+            <Stack gap={3.5}>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease }}
               >
-                {heroSubtitle}
-              </Typography>
-              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-                <Button
-                  component={Link}
-                  href={primaryCta.href}
-                  variant="contained"
-                  endIcon={<ArrowOutward />}
-                  sx={{
-                    borderRadius: 999,
-                    px: 3,
-                    py: 1.3,
-                    textTransform: "none",
+                <Chip
+                  icon={<VerifiedRounded />}
+                  label="Ghana's trusted marketplace"
+                  color="primary"
+                  sx={{ width: "fit-content", borderRadius: 999, fontWeight: 700 }}
+                />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 28 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.06, ease }}
+              >
+                <Typography
+                  variant="h1"
+                  sx={(theme) => ({
                     fontWeight: 900,
-                  }}
+                    lineHeight: 0.92,
+                    fontSize: { xs: "2.75rem", sm: "3.8rem", md: "4.8rem" },
+                    letterSpacing: "-0.025em",
+                    color: theme.palette.text.primary,
+                  })}
                 >
-                  {primaryCta.label}
-                </Button>
-                <Button
-                  component={Link}
-                  href="/products"
-                  variant="outlined"
-                  sx={{
-                    borderRadius: 999,
-                    px: 3,
-                    py: 1.3,
-                    textTransform: "none",
-                    fontWeight: 900,
-                  }}
+                  {hero?.title ?? (
+                    <>
+                      Shop safe.
+                      <br />
+                      <Box component="span" sx={{ color: "primary.main" }}>
+                        Pay smart.
+                      </Box>
+                      <br />
+                      Delivered.
+                    </>
+                  )}
+                </Typography>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.12, ease }}
+              >
+                <Typography
+                  variant="h6"
+                  sx={(theme) => ({
+                    maxWidth: 560,
+                    fontWeight: 400,
+                    lineHeight: 1.65,
+                    color: alpha(theme.palette.text.primary, 0.72),
+                  })}
                 >
-                  {hasProducts ? "View all products" : "See what's available"}
-                </Button>
-              </Stack>
-              {homeFeed.brands.length ? (
-                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  {homeFeed.brands.map((brand) => (
+                  {hero?.subtitle ??
+                    "Buy from verified Ghanaian sellers with full escrow protection. Pay with Mobile Money or card — your money stays safe until your order arrives."}
+                </Typography>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.17, ease }}
+              >
+                <Stack direction={{ xs: "column", sm: "row" }} gap={1.5}>
+                  <Button
+                    component={Link}
+                    href={hero?.ctaHref ?? "/products"}
+                    variant="contained"
+                    size="large"
+                    endIcon={<ArrowForwardRounded />}
+                    sx={{
+                      borderRadius: 999,
+                      px: 3.5,
+                      py: 1.5,
+                      textTransform: "none",
+                      fontWeight: 800,
+                      fontSize: "1rem",
+                    }}
+                  >
+                    {hero?.ctaLabel ?? (hasProducts ? "Shop now" : "Browse the shop")}
+                  </Button>
+                  <Button
+                    component={Link}
+                    href="/profile"
+                    variant="outlined"
+                    size="large"
+                    startIcon={<StorefrontOutlined />}
+                    sx={{
+                      borderRadius: 999,
+                      px: 3.5,
+                      py: 1.5,
+                      textTransform: "none",
+                      fontWeight: 800,
+                      fontSize: "1rem",
+                    }}
+                  >
+                    Sell on Spree
+                  </Button>
+                </Stack>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, delay: 0.25, ease }}
+              >
+                <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Pay with:
+                  </Typography>
+                  {["MTN MoMo", "Vodafone Cash", "AirtelTigo", "Card"].map((m) => (
                     <Chip
-                      key={brand.id}
-                      label={brand.name}
+                      key={m}
+                      label={m}
+                      size="small"
                       variant="outlined"
-                      sx={{ borderRadius: 999 }}
+                      sx={{ borderRadius: 999, fontWeight: 600 }}
                     />
                   ))}
                 </Stack>
-              ) : null}
+              </motion.div>
             </Stack>
 
-            <Stack spacing={2}>
+            {/* Right — stats card */}
+            <motion.div
+              initial={{ opacity: 0, x: 32, scale: 0.97 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              transition={{ duration: 0.55, delay: 0.1, ease }}
+            >
               <Paper
                 elevation={0}
                 sx={(theme) => ({
-                  p: 2,
-                  borderRadius: 3,
                   border: "1px solid",
                   borderColor: "divider",
-                  background: `linear-gradient(145deg, ${alpha(
-                    theme.palette.primary.main,
-                    theme.palette.mode === "dark" ? 0.18 : 0.12
-                  )}, ${alpha(
-                    theme.palette.background.paper,
-                    theme.palette.mode === "dark" ? 0.88 : 0.96
-                  )})`,
+                  borderRadius: 4,
+                  overflow: "hidden",
+                  background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.15 : 0.07)}, ${theme.palette.background.paper})`,
                 })}
               >
-                {hero?.image ? (
-                  <Box
-                    sx={{
-                      position: "relative",
-                      minHeight: { xs: 260, sm: 300, md: 340 },
-                      borderRadius: 2,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <Image
-                      src={"/spreelogo.png"}
-                      alt={heroTitle}
-                      fill
-                      sizes="(max-width: 600px) 100vw, 520px"
-                      style={{ objectFit: "contain", padding: 10 }}
-                      priority
-                    />
-                  </Box>
-                ) : (
-                  <Stack
-                    justifyContent="center"
-                    spacing={1}
-                    sx={{
-                      minHeight: { xs: 260, sm: 300, md: 340 },
-                      borderRadius: 2,
-                      px: 3,
-                      py: 4,
-                      border: "1px dashed",
-                      borderColor: "divider",
-                      backgroundColor: "action.hover",
-                    }}
-                  >
-                    <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                      {hasProducts ? "Popular picks" : "We're getting ready"}
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                      {hasProducts
-                        ? "Take a look at what's available right now."
-                        : "New items will appear here as soon as the shop is ready."}
-                    </Typography>
-                  </Stack>
-                )}
-                <Stack
-                  direction={{ xs: "column", sm: "row" }}
-                  justifyContent="space-between"
-                  spacing={2}
-                  alignItems={{ xs: "flex-start", sm: "center" }}
-                  sx={{ pt: 1.5 }}
+                <Box
+                  sx={(theme) => ({
+                    position: "relative",
+                    p: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: 200,
+                    background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.13)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
+                  })}
                 >
-                  <Box>
-                    <Typography
-                      variant="body2"
-                      sx={(theme) => ({
-                        color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                      })}
-                    >
-                      Customer rating
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                      {hasProducts ? `${averageRating.toFixed(1)} average rating` : "No ratings yet"}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    icon={<LocalShippingRounded />}
-                    label={hasProducts ? "Ready to shop" : "More items coming soon"}
-                    sx={{ alignSelf: "center", borderRadius: 999 }}
+                  <Image
+                    src="/spreelogo.png"
+                    alt="Spree"
+                    width={165}
+                    height={165}
+                    style={{ objectFit: "contain", borderRadius: 9, marginBottom: "10px" }}
+                    priority
+                    
                   />
-                </Stack>
+                  <Chip
+                    icon={<CheckCircleOutlined />}
+                    label="Escrow protected"
+                    color="success"
+                    size="small"
+                    sx={{
+                      position: "absolute",
+                      bottom: 12,
+                      borderRadius: 999,
+                      fontWeight: 700,
+                    }}
+                  />
+                </Box>
+
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+                  {[
+                    { label: "Products", value: totalProducts.toLocaleString() },
+                    { label: "Categories", value: homeFeed.categories.length.toString() },
+                    { label: "Collections", value: homeFeed.collections.length.toString() },
+                    {
+                      label: "Avg. rating",
+                      value: hasProducts ? `${averageRating.toFixed(1)} ★` : "—",
+                    },
+                  ].map((stat, i) => (
+                    <Box
+                      key={stat.label}
+                      sx={{
+                        p: 2.5,
+                        borderTop: "1px solid",
+                        borderRight: i % 2 === 0 ? "1px solid" : "none",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Typography variant="h4" fontWeight={900} lineHeight={1}>
+                        {stat.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        {stat.label}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
               </Paper>
-
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 2,
-                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                }}
-              >
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={(theme) => ({
-                      color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                    })}
-                  >
-                    New arrivals
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 900, mt: 0.5 }}>
-                    {newArrivals.length}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={(theme) => ({
-                      color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                    })}
-                  >
-                    styles added recently
-                  </Typography>
-                </Paper>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                  }}
-                >
-                  <Typography
-                    variant="body2"
-                    sx={(theme) => ({
-                      color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                    })}
-                  >
-                    Collections
-                  </Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 900, mt: 0.5 }}>
-                    {homeFeed.collections.length}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={(theme) => ({
-                      color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                    })}
-                  >
-                    curated collections
-                  </Typography>
-                </Paper>
-              </Box>
-            </Stack>
+            </motion.div>
           </Box>
-        </Paper>
+        </Container>
+      </Box>
 
-        <Box
-          sx={{
-            display: "grid",
-            gap: 2,
-            gridTemplateColumns: {
-              xs: "1fr",
-              sm: "repeat(2, minmax(0, 1fr))",
-              xl: "repeat(4, minmax(0, 1fr))",
-            },
-          }}
-        >
-          {statCards.map((item) => (
-            <Paper
-              key={item.label}
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Stack spacing={1.5}>
-                {item.icon}
-                <Typography variant="body2" color="text.secondary">
-                  {item.label}
-                </Typography>
-                <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                  {item.value}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {item.helper}
-                </Typography>
-              </Stack>
-            </Paper>
-          ))}
-        </Box>
-
-        <Stack spacing={2}>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            justifyContent="space-between"
-            spacing={1.5}
-            alignItems={{ xs: "flex-start", md: "flex-end" }}
+      {/* ── TRUST PILLARS ─────────────────────────────────────────── */}
+      <Box
+        sx={{
+          py: { xs: 5, md: 7 },
+          borderTop: "1px solid",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        <Container maxWidth="lg">
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "1fr",
+                sm: "repeat(2, 1fr)",
+                md: "repeat(4, 1fr)",
+              },
+              gap: { xs: 3, md: 4 },
+            }}
           >
-            <Box>
-              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 0.95, color: "text.primary" }}>
-                Shop by category
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-                Explore the store by the kinds of items you need most.
-              </Typography>
-            </Box>
-            <Button
-              component={Link}
-              href="/products"
-              variant="text"
-              endIcon={<ArrowOutward />}
-              sx={{ textTransform: "none", fontWeight: 900 }}
-            >
-              View full catalog
-            </Button>
-          </Stack>
+            {trustPillars.map((pillar, i) => (
+              <motion.div
+                key={pillar.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.06 * i, ease }}
+              >
+                <Stack gap={1.5} sx={{
+                      alignItems: "center",
+                      alignContent: "center",
+                      justifyContent: "center",}}>
+                  <Box
+                    sx={(theme) => ({
+                      width: 48,
+                      height: 48,
+                      borderRadius: 2.5,
+                      display: "flex",
+                      alignItems: "center",
+                      alignContent: "center",
+                      justifyContent: "center",
+                      bgcolor: alpha(theme.palette[pillar.color].main, 0.12),
+                      color: `${pillar.color}.main`,
+                      "& svg": { fontSize: 24 },
+                    })}
+                  >
+                    {pillar.icon}
+                  </Box>
+                  <Typography variant="subtitle1" fontWeight={800} color="text.primary">
+                    {pillar.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" lineHeight={1.6} textAlign="center">
+                    {pillar.desc}
+                  </Typography>
+                </Stack>
+              </motion.div>
+            ))}
+          </Box>
+        </Container>
+      </Box>
 
-          {homeFeed.categories.length ? (
+      {/* ── CATEGORIES ────────────────────────────────────────────── */}
+      {homeFeed.categories.length > 0 && (
+        <Box sx={{ py: { xs: 6, md: 8 } }}>
+          <Container maxWidth="lg">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease }}
+            >
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="flex-end"
+                mb={3.5}
+              >
+                <Box>
+                  <Typography
+                    variant="overline"
+                    color="primary.main"
+                    fontWeight={700}
+                    letterSpacing={2}
+                  >
+                    Browse
+                  </Typography>
+                  <Typography variant="h3" fontWeight={900} lineHeight={1}>
+                    Shop by category
+                  </Typography>
+                </Box>
+                <Button
+                  component={Link}
+                  href="/products"
+                  endIcon={<ArrowForwardRounded />}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  All products
+                </Button>
+              </Stack>
+            </motion.div>
+
             <Box
               sx={{
                 display: "grid",
                 gap: 2,
                 gridTemplateColumns: {
-                  xs: "1fr",
-                  sm: "repeat(2, minmax(0, 1fr))",
-                  xl: "repeat(4, minmax(0, 1fr))",
+                  xs: "repeat(2, 1fr)",
+                  sm: "repeat(3, 1fr)",
+                  md: "repeat(4, 1fr)",
+                  lg: "repeat(auto-fill, minmax(148px, 1fr))",
                 },
               }}
             >
-              {homeFeed.categories.map((category) => (
-                <Paper
+              {homeFeed.categories.map((category, i) => (
+                <motion.div
                   key={category.id}
-                  component={Link}
-                  href="/products"
-                  elevation={0}
-                  sx={(theme) => ({
-                    p: 2,
-                    display: "block",
-                    color: "text.primary",
-                    textDecoration: "none",
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    background: `linear-gradient(155deg, ${alpha(
-                      theme.palette.primary.main,
-                      theme.palette.mode === "dark" ? 0.12 : 0.08
-                    )}, transparent)`,
-                    transition: "transform 0.2s ease, border-color 0.2s ease",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      borderColor: "primary.main",
-                    },
-                  })}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.35, delay: 0.04 * Math.min(i, 6), ease }}
                 >
-                  <Stack spacing={2}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
+                  <Paper
+                    component={Link}
+                    href={`/products?category=${encodeURIComponent(category.name)}`}
+                    elevation={0}
+                    sx={(theme) => ({
+                      p: 2,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 1.5,
+                      color: "text.primary",
+                      textDecoration: "none",
+                      borderRadius: 3,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      transition:
+                        "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        borderColor: "primary.main",
+                        boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.14)}`,
+                      },
+                    })}
+                  >
+                    <Box sx={{ position: "relative", width: 56, height: 56 }}>
+                      <Image
+                        src={category.image}
+                        alt={category.name}
+                        fill
+                        sizes="56px"
+                        style={{ objectFit: "contain" }}
+                      />
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      fontWeight={700}
+                      textAlign="center"
+                      lineHeight={1.3}
                     >
-                      <Box
-                        sx={{
-                          position: "relative",
-                          width: 52,
-                          height: 52,
-                        }}
-                      >
-                        <Image
-                          src={category.image}
-                          alt={category.name}
-                          fill
-                          sizes="52px"
-                          style={{ objectFit: "contain" }}
-                        />
-                      </Box>
-                      <Chip label={`${category.itemCount} items`} size="small" />
-                    </Box>
-                    <Box>
-                      <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                        {category.name}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={(theme) => ({
-                          mt: 0.5,
-                          color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                        })}
-                      >
-                        Explore more in {category.name.toLowerCase()}.
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </Paper>
+                      {category.name}
+                    </Typography>
+                    <Chip
+                      label={`${category.itemCount}`}
+                      size="small"
+                      sx={{ height: 20, fontSize: "0.7rem" }}
+                    />
+                  </Paper>
+                </motion.div>
               ))}
             </Box>
-          ) : (
-            renderEmptyPanel(
-              "No categories yet",
-              "Categories will appear here as more items arrive."
-            )
-          )}
-        </Stack>
+          </Container>
+        </Box>
+      )}
 
-        <Stack spacing={2}>
+      {/* ── FEATURED PRODUCTS ─────────────────────────────────────── */}
+      <Box
+        sx={{
+          py: { xs: 6, md: 8 },
+          borderTop: "1px solid",
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        <Container maxWidth="lg">
           <Stack
-            direction={{ xs: "column", md: "row" }}
+            direction="row"
             justifyContent="space-between"
-            spacing={1.5}
-            alignItems={{ xs: "flex-start", md: "flex-end" }}
+            alignItems="flex-end"
+            mb={3.5}
           >
             <Box>
-              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1, color: "text.primary" }}>
-                Featured now
+              <Typography
+                variant="overline"
+                color="primary.main"
+                fontWeight={700}
+                letterSpacing={2}
+              >
+                Handpicked
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-                A closer look at a few standout picks.
+              <Typography variant="h3" fontWeight={900} lineHeight={1} color="text.primary">
+                Featured now
               </Typography>
             </Box>
             <Button
               component={Link}
               href="/products"
-              variant="text"
-              endIcon={<ArrowOutward />}
-              sx={{ textTransform: "none", fontWeight: 900 }}
+              endIcon={<ArrowForwardRounded />}
+              sx={{ textTransform: "none", fontWeight: 700 }}
             >
-              Browse all products
+              See all
             </Button>
           </Stack>
 
-          {featuredProducts.length ? (
+          {featuredProducts.length > 0 ? (
             <Box
               sx={{
                 display: "grid",
-                gap: 1.5,
+                gap: 2,
                 gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
               }}
             >
-              {featuredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} size="compact" />
+              {featuredProducts.map((product, i) => (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 5), ease }}
+                >
+                  <ProductCard product={product} size="compact" />
+                </motion.div>
               ))}
             </Box>
           ) : (
-            renderEmptyPanel(
-              "No featured products yet",
-              "Featured favorites will appear here soon."
-            )
+            <Paper
+              elevation={0}
+              sx={{
+                p: 4,
+                borderRadius: 3,
+                border: "1px solid",
+                borderColor: "divider",
+                textAlign: "center",
+              }}
+            >
+              <Typography variant="h6" fontWeight={700} mb={1}>
+                Coming soon
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Featured products will appear here as sellers list their items.
+              </Typography>
+            </Paper>
           )}
-        </Stack>
+        </Container>
+      </Box>
 
-        <Stack spacing={2}>
-          <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1, color: "text.primary" }}>
-            Fresh arrivals
-          </Typography>
-          {newArrivals.length ? (
+      {/* ── WHY SPREE ─────────────────────────────────────────────── */}
+      <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: "background.paper" }}>
+        <Container maxWidth="lg">
+          <Box  sx={{ textAlign: "center", mb: 5 }}>
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease }}
+            >
+              <Typography
+                variant="overline"
+                color="primary.main"
+                fontWeight={700}
+                letterSpacing={2}
+              >
+                Why Spree
+              </Typography>
+              <Typography variant="h3" fontWeight={900} lineHeight={1.1} mt={0.5} color="text.primary">
+                Built for Ghana. Built for trust.
+              </Typography>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                mt={1.5}
+                sx={{ maxWidth: 560, mx: "auto", lineHeight: 1.65 }}
+              >
+                Online shopping in Ghana comes with uncertainty. Spree eliminates that — with
+                escrow payments, verified seller identities, and full order tracking from day one.
+              </Typography>
+            </motion.div>
+          </Box>
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
+              gap: 2.5,
+            }}
+          >
+            {escrowSteps.map((item, i) => (
+              <motion.div
+                key={item.step}
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.08 * i, ease }}
+              >
+                <Paper sx={{ bgcolor: "white", borderRadius: 3, border: 0 }}>
+                  <Paper
+                    elevation={0}
+                    sx={(theme) => ({
+                      p: 3.5,
+                      height: "100%",
+                      borderRadius: 3,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      background: `linear-gradient(145deg, ${alpha(theme.palette[item.color].main, theme.palette.mode === "dark" ? 0.1 : 0.1)}, white)`,
+                    })}
+                  >
+                    <Typography
+                      variant="h2"
+                      fontWeight={900}
+                      sx={(theme) => ({
+                        color: alpha(theme.palette[item.color].main, theme.palette.mode === "dark" ? 0.4 : 0.2),
+                        lineHeight: 1,
+                        mb: 2.5,
+                        fontSize: "3.5rem",
+                      })}
+                    >
+                      {item.step}
+                    </Typography>
+                    <Typography variant="h6" fontWeight={800} mb={1.25} color="black">
+                      {item.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>
+                      {item.body}
+                    </Typography>
+                  </Paper>
+                </Paper>
+              </motion.div>
+            ))}
+          </Box>
+        </Container>
+      </Box>
+
+      {/* ── NEW ARRIVALS ──────────────────────────────────────────── */}
+      {newArrivals.length > 0 && (
+        <Box
+          sx={(theme) => ({
+            py: { xs: 6, md: 8 },
+            borderTop: "1px solid",
+            borderColor: "divider",
+            background: `radial-gradient(ellipse 60% 50% at 50% 100%, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.1 : 0.06)}, transparent), ${theme.palette.background.paper}`,
+          })}
+        >
+          <Container maxWidth="lg">
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="flex-end"
+              mb={3.5}
+            >
+              <Box>
+                <Typography
+                  variant="overline"
+                  color="primary.main"
+                  fontWeight={700}
+                  letterSpacing={2}
+                >
+                  Just in
+                </Typography>
+                <Typography variant="h3" fontWeight={900} lineHeight={1}>
+                  Fresh arrivals
+                </Typography>
+              </Box>
+              <Button
+                component={Link}
+                href="/products?sort=newest"
+                endIcon={<ArrowForwardRounded />}
+                sx={{ textTransform: "none", fontWeight: 700 }}
+              >
+                All new
+              </Button>
+            </Stack>
+
             <Box
               sx={{
                 display: "grid",
                 gap: 2,
                 gridTemplateColumns: {
                   xs: "1fr",
-                  md: "repeat(3, minmax(0, 1fr))",
+                  sm: "repeat(2, 1fr)",
+                  lg: "repeat(3, 1fr)",
                 },
               }}
             >
-              {newArrivals.map((product) => (
-                <Paper
+              {newArrivals.map((product, i) => (
+                <motion.div
                   key={product.id}
-                  component={Link}
-                  href={`/products/${product.slug}`}
-                  elevation={0}
-                  sx={{
-                    display: "block",
-                    color: "text.primary",
-                    textDecoration: "none",
-                    p: 2,
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    transition: "transform 0.2s ease, border-color 0.2s ease",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      borderColor: "primary.main",
-                    },
-                  }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 4), ease }}
                 >
-                  <Stack direction="row" spacing={2} alignItems="center">
+                  <Paper
+                    component={Link}
+                    href={`/products/${product.slug}`}
+                    elevation={0}
+                    sx={(theme) => ({
+                      display: "flex",
+                      gap: 2,
+                      p: 2,
+                      alignItems: "center",
+                      color: "text.primary",
+                      textDecoration: "none",
+                      borderRadius: 3,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      transition:
+                        "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
+                      "&:hover": {
+                        transform: "translateY(-3px)",
+                        borderColor: "primary.main",
+                        boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.12)}`,
+                      },
+                    })}
+                  >
                     <Box
                       sx={{
                         position: "relative",
-                        width: 92,
-                        height: 92,
+                        width: 88,
+                        height: 88,
                         borderRadius: 2,
-                        backgroundColor: "action.hover",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                        bgcolor: "action.hover",
                         border: "1px solid",
                         borderColor: "divider",
-                        overflow: "hidden",
                       }}
                     >
                       <Image
                         src={product.image}
                         alt={product.name}
                         fill
-                        sizes="92px"
-                        style={{
-                          objectFit: "contain",
-                          padding: "10px",
-                        }}
+                        sizes="88px"
+                        style={{ objectFit: "contain", padding: 8 }}
                       />
                     </Box>
-                    <Stack spacing={0.5} sx={{ minWidth: 0 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1 }}>
+                    <Stack gap={0.25} minWidth={0}>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        fontWeight={600}
+                        letterSpacing={0.8}
+                      >
                         {product.brand.toUpperCase()}
                       </Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
+                      <Typography variant="body1" fontWeight={700} lineHeight={1.25} noWrap>
                         {product.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" noWrap>
                         {product.description}
                       </Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 900, pt: 0.5 }}>
+                      <Typography
+                        variant="body1"
+                        fontWeight={900}
+                        mt={0.5}
+                        color="primary.main"
+                      >
                         {formatPrice(product.price)}
                       </Typography>
                     </Stack>
-                  </Stack>
-                </Paper>
+                  </Paper>
+                </motion.div>
               ))}
             </Box>
-          ) : (
-            renderEmptyPanel(
-              "No arrivals yet",
-              "New arrivals will show up here as soon as fresh items are added."
-            )
-          )}
-        </Stack>
+          </Container>
+        </Box>
+      )}
 
-        <Stack spacing={2}>
-          <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1, color: "text.primary" }}>
-            Collection spotlight
-          </Typography>
-          {homeFeed.collections.length ? (
+      {/* ── COLLECTIONS ───────────────────────────────────────────── */}
+      {homeFeed.collections.length > 0 && (
+        <Box
+          sx={{ py: { xs: 6, md: 8 }, borderTop: "1px solid", borderColor: "divider" }}
+        >
+          <Container maxWidth="lg">
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="flex-end"
+              mb={3.5}
+            >
+              <Box>
+                <Typography
+                  variant="overline"
+                  color="primary.main"
+                  fontWeight={700}
+                  letterSpacing={2}
+                >
+                  Curated
+                </Typography>
+                <Typography variant="h3" fontWeight={900} lineHeight={1}>
+                  Collections
+                </Typography>
+              </Box>
+            </Stack>
+
             <Box
               sx={{
                 display: "grid",
                 gap: 2,
                 gridTemplateColumns: {
                   xs: "1fr",
-                  lg: "repeat(3, minmax(0, 1fr))",
+                  sm: "repeat(2, 1fr)",
+                  lg: "repeat(3, 1fr)",
                 },
               }}
             >
-              {homeFeed.collections.map((collection, index) => (
-                <Paper
+              {homeFeed.collections.map((collection, i) => (
+                <motion.div
                   key={collection.id}
-                  component={Link}
-                  href="/products"
-                  elevation={0}
-                  sx={(theme) => ({
-                    p: 2.5,
-                    display: "block",
-                    color: "text.primary",
-                    textDecoration: "none",
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    background: `linear-gradient(150deg, ${alpha(
-                      index === 0
-                        ? theme.palette.primary.main
-                        : index === 1
-                          ? theme.palette.info.main
-                          : theme.palette.secondary.main,
-                      theme.palette.mode === "dark" ? 0.18 : 0.12
-                    )}, transparent 70%)`,
-                    transition: "transform 0.2s ease, border-color 0.2s ease",
-                    "&:hover": {
-                      transform: "translateY(-4px)",
-                      borderColor: "primary.main",
-                    },
-                  })}
+                  initial={{ opacity: 0, scale: 0.97 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 4), ease }}
                 >
-                  <Stack spacing={2}>
-                    <Box
-                      sx={{
-                        position: "relative",
-                        width: 64,
-                        height: 64,
-                      }}
-                    >
-                      <Image
-                        src={collection.image}
-                        alt={collection.name}
-                        fill
-                        sizes="64px"
-                        style={{ objectFit: "contain" }}
-                      />
-                    </Box>
-                    <Box>
-                      <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                        {collection.name}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={(theme) => ({
-                          mt: 0.75,
-                          color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                        })}
-                      >
-                        {collection.description}
-                      </Typography>
-                    </Box>
-                    <Divider />
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography
-                        variant="body2"
-                        sx={(theme) => ({
-                          color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                        })}
-                      >
-                        {collection.productCount} products
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 900 }}>
-                        Browse collection
-                      </Typography>
+                  <Paper
+                    component={Link}
+                    href="/products"
+                    elevation={0}
+                    sx={(theme) => ({
+                      p: 3,
+                      display: "block",
+                      color: "text.primary",
+                      textDecoration: "none",
+                      borderRadius: 3,
+                      border: "1px solid",
+                      borderColor: "divider",
+                      transition: "transform 0.2s ease, border-color 0.2s ease",
+                      "&:hover": {
+                        transform: "translateY(-4px)",
+                        borderColor: "primary.main",
+                      },
+                      background: `linear-gradient(150deg, ${alpha(
+                        [
+                          theme.palette.primary.main,
+                          theme.palette.info.main,
+                          theme.palette.secondary.main,
+                        ][i % 3],
+                        theme.palette.mode === "dark" ? 0.18 : 0.08
+                      )}, ${theme.palette.background.paper} 70%)`,
+                    })}
+                  >
+                    <Stack gap={2}>
+                      <Box sx={{ position: "relative", width: 56, height: 56 }}>
+                        <Image
+                          src={collection.image}
+                          alt={collection.name}
+                          fill
+                          sizes="56px"
+                          style={{ objectFit: "contain" }}
+                        />
+                      </Box>
+                      <Box>
+                        <Typography variant="h6" fontWeight={800}>
+                          {collection.name}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          mt={0.5}
+                          lineHeight={1.6}
+                        >
+                          {collection.description}
+                        </Typography>
+                      </Box>
+                      <Divider />
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="caption" color="text.secondary">
+                          {collection.productCount} products
+                        </Typography>
+                        <Typography variant="body2" fontWeight={700} color="primary.main">
+                          Browse →
+                        </Typography>
+                      </Stack>
                     </Stack>
-                  </Stack>
-                </Paper>
+                  </Paper>
+                </motion.div>
               ))}
             </Box>
-          ) : (
-            renderEmptyPanel(
-              "No collections yet",
-              "Curated collections will appear here soon."
-            )
-          )}
-        </Stack>
+          </Container>
+        </Box>
+      )}
 
-        <Paper
-          elevation={0}
-          sx={(theme) => ({
-            p: { xs: 3, md: 4 },
-            borderRadius: 3,
-            border: "1px solid",
-            borderColor: "divider",
-            background: `linear-gradient(135deg, ${alpha(
-              theme.palette.primary.main,
-              theme.palette.mode === "dark" ? 0.18 : 0.12
-            )}, ${alpha(
-              theme.palette.background.paper,
-              theme.palette.mode === "dark" ? 0.88 : 0.96
-            )})`,
-          })}
-        >
-          <Stack
-            direction={{ xs: "column", lg: "row" }}
-            justifyContent="space-between"
-            spacing={2}
-            alignItems={{ xs: "flex-start", lg: "center" }}
+      {/* ── SELL ON SPREE ─────────────────────────────────────────── */}
+      <Box
+        sx={(theme) => ({
+          py: { xs: 7, md: 9 },
+          borderTop: "1px solid",
+          borderColor: "divider",
+          background: `linear-gradient(135deg,
+            ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.09)},
+            ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.12 : 0.06)}),
+            ${theme.palette.background.paper}`,
+        })}
+      >
+        <Container maxWidth="lg">
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "1fr auto" },
+              gap: { xs: 4, md: 6 },
+              alignItems: "center",
+            }}
           >
-            <Box sx={{ maxWidth: 760 }}>
-              <Chip
-                icon={<Inventory2Rounded />}
-                label={hasProducts ? "Ready to explore" : "More to come"}
-                color="primary"
-                sx={{ mb: 1.5, borderRadius: 999 }}
-              />
-              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-                Shop your way, whenever you&apos;re ready.
+            <Box>
+              <Typography
+                variant="overline"
+                color="primary.main"
+                fontWeight={700}
+                letterSpacing={2}
+              >
+                For sellers
+              </Typography>
+              <Typography
+                variant="h3"
+                fontWeight={900}
+                lineHeight={1.05}
+                mt={0.5}
+                color="text.primary"
+              >
+                Sell across Ghana.
+                <br />
+                Get paid instantly.
               </Typography>
               <Typography
                 variant="body1"
-                sx={(theme) => ({
-                  mt: 1,
-                  color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.78 : 0.7),
-                })}
+                color="text.secondary"
+                mt={1.5}
+                lineHeight={1.65}
+                sx={{ maxWidth: 520 }}
               >
-                Browse featured finds, discover new arrivals, and keep your favorites close at hand.
+                List your products, reach buyers nationwide, and receive your payout via Mobile
+                Money the moment delivery is confirmed — no delays, no middlemen, no stress.
               </Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} gap={1.5} mt={3}>
+                <Button
+                  component={Link}
+                  href="/profile"
+                  variant="contained"
+                  size="large"
+                  endIcon={<ArrowForwardRounded />}
+                  sx={{
+                    borderRadius: 999,
+                    px: 3.5,
+                    textTransform: "none",
+                    fontWeight: 800,
+                  }}
+                >
+                  Start selling
+                </Button>
+                <Button
+                  component={Link}
+                  href="/products"
+                  variant="outlined"
+                  size="large"
+                  sx={{
+                    borderRadius: 999,
+                    px: 3.5,
+                    textTransform: "none",
+                    fontWeight: 800,
+                  }}
+                >
+                  Browse marketplace
+                </Button>
+              </Stack>
             </Box>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 1.5,
+                flexShrink: 0,
+              }}
+            >
+              {[
+                { icon: <SecurityRounded />, label: "Escrow payout", color: "primary" as const },
+                { icon: <VerifiedRounded />, label: "ID verified", color: "success" as const },
+                { icon: <PhoneAndroidRounded />, label: "Mobile money", color: "info" as const },
+                {
+                  icon: <LocalShippingRounded />,
+                  label: "Fast delivery",
+                  color: "warning" as const,
+                },
+              ].map((item) => (
+                <Paper
+                  key={item.label}
+                  elevation={0}
+                  sx={(theme) => ({
+                    p: 2,
+                    borderRadius: 2.5,
+                    border: "1px solid",
+                    borderColor: "divider",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: 1,
+                    bgcolor: "background.paper",
+                    minWidth: 110,
+                  })}
+                >
+                  <Box
+                    sx={(theme) => ({
+                      color: `${item.color}.main`,
+                      "& svg": { fontSize: 28 },
+                    })}
+                  >
+                    {item.icon}
+                  </Box>
+                  <Typography variant="caption" fontWeight={700} textAlign="center">
+                    {item.label}
+                  </Typography>
+                </Paper>
+              ))}
+            </Box>
+          </Box>
+        </Container>
+      </Box>
+
+      {/* ── FINAL CTA ─────────────────────────────────────────────── */}
+      <Box
+        sx={{
+          py: { xs: 7, md: 9 },
+          borderTop: "1px solid",
+          borderColor: "divider",
+          textAlign: "center",
+        }}
+      >
+        <Container maxWidth="sm">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease }}
+          >
+            <Typography variant="h3" fontWeight={900} lineHeight={1.05} mb={1.5}>
+              {hasProducts ? "Ready to start shopping?" : "Coming soon to Ghana."}
+            </Typography>
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              mb={3.5}
+              lineHeight={1.65}
+            >
+              {hasProducts
+                ? `${totalProducts.toLocaleString()} products from verified Ghanaian sellers — with escrow protection on every single order.`
+                : "We're setting up the store. Check back soon for the first arrivals."}
+            </Typography>
+            <Stack
+              direction={{ xs: "column", sm: "row" }}
+              gap={1.5}
+              justifyContent="center"
+            >
               <Button
                 component={Link}
                 href="/products"
                 variant="contained"
-                endIcon={<ArrowOutward />}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
+                size="large"
+                endIcon={<ArrowForwardRounded />}
+                sx={{
+                  borderRadius: 999,
+                  px: 4,
+                  py: 1.5,
+                  textTransform: "none",
+                  fontWeight: 800,
+                  fontSize: "1rem",
+                }}
               >
-                {hasProducts ? "Start shopping" : "Browse the shop"}
+                Shop now
               </Button>
               <Button
                 component={Link}
                 href="/cart"
                 variant="outlined"
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
+                size="large"
+                sx={{
+                  borderRadius: 999,
+                  px: 4,
+                  py: 1.5,
+                  textTransform: "none",
+                  fontWeight: 800,
+                  fontSize: "1rem",
+                }}
               >
                 View cart
               </Button>
             </Stack>
-          </Stack>
-        </Paper>
-      </Stack>
+          </motion.div>
+        </Container>
+      </Box>
     </Box>
   );
 }

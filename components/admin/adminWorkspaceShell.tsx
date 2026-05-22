@@ -10,6 +10,7 @@ import {
   Inventory2Rounded,
   ManageAccountsRounded,
   MenuRounded,
+  ReceiptLongOutlined,
   SettingsRounded,
   SpaceDashboardRounded,
   StorefrontRounded,
@@ -81,6 +82,11 @@ export function AdminWorkspaceShell({
             label: "Create product",
             href: "/dashboard/products/new",
             icon: <AddBoxRounded fontSize="small" />,
+          },
+          {
+            label: "Orders",
+            href: "/dashboard/orders",
+            icon: <ReceiptLongOutlined fontSize="small" />,
           },
         ]
       : []),

@@ -1,7 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -107,6 +117,9 @@ class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    recipient_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -125,7 +138,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), default="customer")
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     store_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    store_slug: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    store_slug: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True, index=True)
     store_tagline: Mapped[str | None] = mapped_column(String(160), nullable=True)
     store_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     store_location: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -143,6 +156,11 @@ class User(Base):
     seller_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     shipping_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     payment_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payout_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    paystack_recipient_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    id_front_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    id_back_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    selfie_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -159,6 +177,9 @@ class User(Base):
 
 class SellerFollow(Base):
     __tablename__ = "seller_follows"
+    __table_args__ = (
+        UniqueConstraint("seller_id", "follower_id", name="uq_seller_follow"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     seller_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
@@ -220,3 +241,75 @@ class CartItem(Base):
 
     cart: Mapped[Cart] = relationship(back_populates="items")
     product: Mapped[Product | None] = relationship()
+
+
+class Order(Base):
+    __tablename__ = "orders"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
+
+    full_name: Mapped[str] = mapped_column(String(120))
+    email: Mapped[str] = mapped_column(String(255))
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    address_line1: Mapped[str] = mapped_column(String(160))
+    address_line2: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    city: Mapped[str] = mapped_column(String(120))
+    state: Mapped[str] = mapped_column(String(120))
+    postal_code: Mapped[str] = mapped_column(String(40))
+    country: Mapped[str] = mapped_column(String(120))
+
+    shipping_method: Mapped[str] = mapped_column(String(32), default="standard")
+    payment_method: Mapped[str] = mapped_column(String(32), default="card")
+    subtotal: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    shipping_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    tax: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    total: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    currency: Mapped[str] = mapped_column(String(8), default="USD")
+
+    tracking_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    tracking_carrier: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payout_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    payout_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paystack_reference: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    paystack_tx_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    estimated_delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    estimated_delivery_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    items: Mapped[list["OrderItem"]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class OrderItem(Base):
+    __tablename__ = "order_items"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), index=True)
+    product_id: Mapped[str | None] = mapped_column(ForeignKey("products.id"), nullable=True)
+    seller_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    name: Mapped[str] = mapped_column(String(255))
+    image: Mapped[str] = mapped_column(String(255))
+    price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    quantity: Mapped[int] = mapped_column(Integer)
+    color: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    size: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    order: Mapped[Order] = relationship(back_populates="items")

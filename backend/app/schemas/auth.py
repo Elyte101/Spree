@@ -65,6 +65,17 @@ class SellerContact(BaseModel):
     registrationNumber: str = Field(default="", max_length=80)
 
 
+class PayoutInfoRequest(BaseModel):
+    method: Literal["bank", "mobile_money"] = "bank"
+    bankName: str = Field(default="", max_length=120)
+    accountNumber: str = Field(default="", max_length=32)
+    bankCode: str = Field(default="", max_length=20)
+    mobileMoneyNetwork: str = Field(default="", max_length=20)
+    mobileMoneyNumber: str = Field(default="", max_length=20)
+    currency: str = Field(default="GHS", max_length=8)
+    accountName: str = Field(default="", max_length=120)
+
+
 class ProfileUpdateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=255)
@@ -106,3 +117,7 @@ class UserProfileOut(BaseModel):
     sellerIdentity: SellerIdentityInfo
     shippingAddress: ShippingAddress
     paymentInfo: PaymentInfo
+    payoutInfo: dict = {}
+    idFrontUrl: str = ""
+    idBackUrl: str = ""
+    selfieUrl: str = ""

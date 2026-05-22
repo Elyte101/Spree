@@ -28,7 +28,6 @@ class SellerSummaryOut(BaseModel):
     completedDeliveries: int = 0
     averageDeliveryDays: float | None = None
     sellerNotice: str = ""
-    adminNote: str = ""
     governmentIdType: str = "ghana-card"
     governmentIdVerified: bool = False
     followerCount: int
@@ -37,6 +36,11 @@ class SellerSummaryOut(BaseModel):
     reportCount: int
     startedAt: datetime | None = None
     createdAt: datetime
+
+
+class AdminSellerSummaryOut(SellerSummaryOut):
+    """Extended summary that includes admin-only fields."""
+    adminNote: str = ""
 
 
 class SellerReportOut(BaseModel):
@@ -53,7 +57,7 @@ class SellerDetailOut(SellerSummaryOut):
     products: list[ProductOut]
 
 
-class AdminSellerDetailOut(SellerSummaryOut):
+class AdminSellerDetailOut(AdminSellerSummaryOut):
     governmentIdNumber: str = ""
     shippingAddress: ShippingAddress
     paymentInfo: PaymentInfo
@@ -61,6 +65,10 @@ class AdminSellerDetailOut(SellerSummaryOut):
 
 
 class FollowSellerRequest(BaseModel):
+    followerId: str = Field(min_length=3, max_length=64)
+
+
+class UnfollowSellerRequest(BaseModel):
     followerId: str = Field(min_length=3, max_length=64)
 
 
