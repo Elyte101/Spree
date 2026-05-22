@@ -286,7 +286,7 @@ export function ProductDetailsPage({
                   {product.rating.toFixed(1)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  based on {product.reviewCount} reviews
+                  based on {product.reviewsCount} reviews
                 </Typography>
               </Stack>
 

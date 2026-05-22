@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Chip,
@@ -368,14 +370,14 @@ export function AdminSellerDetailPage({
                 type="number"
                 value={completedDeliveries}
                 onChange={(event) => setCompletedDeliveries(event.target.value)}
-                inputProps={{ min: 0, step: 1 }}
+                slotProps={{ htmlInput: { min: 0, step: 1 } }}
               />
               <TextField
                 label="Average delivery days"
                 type="number"
                 value={averageDeliveryDays}
                 onChange={(event) => setAverageDeliveryDays(event.target.value)}
-                inputProps={{ min: 0, step: 0.1 }}
+                slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
               />
               <TextField
                 label="Seller notice"
@@ -401,6 +403,103 @@ export function AdminSellerDetailPage({
               >
                 {saving ? "Saving..." : "Save status"}
               </Button>
+            </Stack>
+          </Paper>
+
+          {/* ID Document Review */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+            }}
+          >
+            <Stack spacing={2}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                  Identity documents
+                </Typography>
+                <Chip
+                  label={seller.governmentIdVerified ? "Verified" : "Pending review"}
+                  color={seller.governmentIdVerified ? "success" : "warning"}
+                  size="small"
+                />
+              </Stack>
+
+              {seller.idFrontUrl || seller.idBackUrl || seller.selfieUrl ? (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 1.5,
+                    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                  }}
+                >
+                  {[
+                    { label: "ID front", url: seller.idFrontUrl },
+                    { label: "ID back", url: seller.idBackUrl },
+                    { label: "Selfie", url: seller.selfieUrl },
+                  ]
+                    .filter((doc) => doc.url)
+                    .map((doc) => {
+                      const proxyUrl = `/api/uploads/${doc.url.replace(/^\/uploads\//, "")}`;
+                      return (
+                        <Box key={doc.label}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            fontWeight={600}
+                            sx={{ display: "block", mb: 0.75 }}
+                          >
+                            {doc.label}
+                          </Typography>
+                          <Box
+                            component="a"
+                            href={proxyUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={(theme) => ({
+                              display: "block",
+                              position: "relative",
+                              width: "100%",
+                              aspectRatio: "3/2",
+                              borderRadius: 1.5,
+                              overflow: "hidden",
+                              border: "1px solid",
+                              borderColor: "divider",
+                              bgcolor: "action.hover",
+                              cursor: "pointer",
+                              transition: "border-color 0.15s",
+                              "&:hover": {
+                                borderColor: "primary.main",
+                                boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
+                              },
+                            })}
+                          >
+                            <Image
+                              src={proxyUrl}
+                              alt={doc.label}
+                              fill
+                              sizes="160px"
+                              style={{ objectFit: "cover" }}
+                              unoptimized
+                            />
+                          </Box>
+                        </Box>
+                      );
+                    })}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  No identity documents uploaded yet.
+                </Typography>
+              )}
+
+              <Typography variant="caption" color="text.secondary">
+                Use the &quot;Verify seller identity&quot; toggle in Admin controls to approve after review.
+                Clicking an image opens it full size in a new tab.
+              </Typography>
             </Stack>
           </Paper>
 

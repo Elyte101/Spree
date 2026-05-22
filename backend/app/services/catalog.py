@@ -5,7 +5,7 @@ from math import ceil
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import Brand, Category, Collection, Product, PromoBanner, SellerReport, User
@@ -103,9 +103,14 @@ def _seller_location_label(seller: User | None) -> str | None:
     return label or None
 
 
+_SPREE_MARKUP = Decimal("1.10")
+
+
 def _product_to_dict(product: Product) -> dict:
     images = product.images or ["/product-placeholder.svg"]
     variants = product.variants or []
+    seller_price = Decimal(str(product.price))
+    listed_price = (seller_price * _SPREE_MARKUP).quantize(Decimal("0.01"))
     discount = Decimal(str(product.discount_percentage))
 
     return {
@@ -113,7 +118,8 @@ def _product_to_dict(product: Product) -> dict:
         "slug": product.slug,
         "name": product.name,
         "description": product.description,
-        "price": float(product.price),
+        "price": float(listed_price),
+        "sellerPrice": float(seller_price),
         "discount": float(discount),
         "images": images,
         "image": images[0],
@@ -135,11 +141,10 @@ def _product_to_dict(product: Product) -> dict:
         "stock": product.stock,
         "rating": float(product.rating),
         "reviewsCount": product.reviews_count,
-        "reviewCount": product.reviews_count,
         "purchaseCount": product.purchase_count,
         "variants": variants,
         "createdAt": product.created_at,
-        "originalPrice": _build_original_price(Decimal(str(product.price)), discount),
+        "originalPrice": _build_original_price(listed_price, discount),
         "badge": product.badge,
         "inStock": product.stock > 0,
         "colors": _extract_unique_values(variants, "color"),
@@ -251,6 +256,14 @@ def _apply_product_filters(statement, params: ProductListParams):
             )
         )
 
+    if params.tag:
+        # Cast JSON array to text and use LIKE to find the slugified tag value.
+        # This works on both SQLite (JSON stored as text) and PostgreSQL.
+        normalized_tag = _slugify(params.tag)
+        statement = statement.where(
+            cast(Product.tags, String).like(f'%"{normalized_tag}"%')
+        )
+
     if params.search:
         query = f"%{params.search.strip().lower()}%"
         statement = statement.where(
@@ -294,25 +307,6 @@ def _sort_product_query(statement, sort: str):
         Product.reviews_count.desc(),
         Product.created_at.desc(),
     )
-
-
-def _load_products(
-    db: Session,
-    params: ProductListParams,
-    *,
-    include_inactive_sellers: bool = False,
-) -> list[Product]:
-    statement = _sort_product_query(
-        _apply_product_filters(_base_product_query(include_inactive_sellers), params),
-        params.sort,
-    )
-    products = list(db.scalars(statement).unique().all())
-
-    if params.tag:
-        normalized_tag = _slugify(params.tag)
-        products = [product for product in products if normalized_tag in (product.tags or [])]
-
-    return products
 
 
 def _catalog_filters(db: Session) -> dict:
@@ -505,6 +499,20 @@ def _resolve_collection(
     return collection
 
 
+def _load_products(
+    db: Session,
+    params: ProductListParams,
+    *,
+    include_inactive_sellers: bool = False,
+) -> list[Product]:
+    """Return a flat list of products matching params (no pagination, no count)."""
+    statement = _sort_product_query(
+        _apply_product_filters(_base_product_query(include_inactive_sellers), params),
+        params.sort,
+    )
+    return list(db.scalars(statement.limit(params.limit)).unique().all())
+
+
 def get_home_feed(db: Session) -> dict:
     banner = db.scalar(select(PromoBanner).limit(1))
 
@@ -549,16 +557,25 @@ def get_home_feed(db: Session) -> dict:
 
 
 def list_products(db: Session, params: ProductListParams) -> dict:
-    products = _load_products(db, params)
-    total = len(products)
     page = max(params.page, 1)
     limit = max(params.limit, 1)
+    offset = (page - 1) * limit
+
+    filtered = _apply_product_filters(_base_product_query(), params)
+    sorted_filtered = _sort_product_query(filtered, params.sort)
+
+    # Count via subquery to avoid double-counting from JOINs
+    total = db.scalar(
+        select(func.count(distinct(Product.id))).select_from(filtered.subquery())
+    ) or 0
+
     total_pages = max(1, ceil(total / limit)) if total else 1
-    start = (page - 1) * limit
-    end = start + limit
+    products = list(
+        db.scalars(sorted_filtered.offset(offset).limit(limit)).unique().all()
+    )
 
     return {
-        "items": [_product_to_dict(product) for product in products[start:end]],
+        "items": [_product_to_dict(product) for product in products],
         "total": total,
         "page": page,
         "limit": limit,
@@ -596,24 +613,10 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
             detail="At least one product image is required",
         )
 
-    category = _resolve_category(
-        db,
-        payload.categoryId,
-        payload.categoryName,
-        images[0],
-    )
-    brand = _resolve_brand(
-        db,
-        payload.brandId,
-        payload.brandName,
-        images[0],
-    )
+    category = _resolve_category(db, payload.categoryId, payload.categoryName, images[0])
+    brand = _resolve_brand(db, payload.brandId, payload.brandName, images[0])
     collection = _resolve_collection(
-        db,
-        payload.collectionId,
-        payload.collectionName,
-        payload.description.strip(),
-        images[0],
+        db, payload.collectionId, payload.collectionName, payload.description.strip(), images[0]
     )
 
     product_slug = _slugify(payload.slug or payload.name)
@@ -648,9 +651,9 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
         collection_id=collection.id if collection else None,
         seller_id=actor.id,
         stock=stock,
-        rating=payload.rating,
-        reviews_count=payload.reviewsCount,
-        purchase_count=payload.purchaseCount,
+        rating=0,
+        reviews_count=0,
+        purchase_count=0,
         variants=variants,
         badge=payload.badge,
         tags=normalized_tags,
@@ -661,7 +664,7 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
     db.commit()
 
     created_product = db.scalar(
-        _base_product_query().where(Product.id == product.id)
+        _base_product_query(include_inactive_sellers=True).where(Product.id == product.id)
     )
     if created_product is None:
         raise HTTPException(
@@ -737,23 +740,56 @@ def search_storefront(db: Session, query: str) -> dict:
             "collections": [],
         }
 
-    products = _load_products(db, ProductListParams(search=trimmed_query, limit=6))
-    query_lower = trimmed_query.lower()
+    products = list(
+        db.scalars(
+            _sort_product_query(
+                _apply_product_filters(_base_product_query(), ProductListParams(search=trimmed_query)),
+                "featured",
+            ).limit(6)
+        ).unique().all()
+    )
 
-    categories = [category for category in list_categories(db) if query_lower in category["name"].lower()]
-    brands = [brand for brand in list_brands(db) if query_lower in brand["name"].lower()]
-    collections = [
-        collection
-        for collection in list_collections(db)
-        if query_lower in collection["name"].lower() or query_lower in collection["description"].lower()
-    ]
+    query_lower = trimmed_query.lower()
+    query_like = f"%{query_lower}%"
+
+    categories = db.execute(
+        select(Category, func.count(Product.id))
+        .outerjoin(Product, Product.category_id == Category.id)
+        .where(func.lower(Category.name).like(query_like))
+        .group_by(Category.id)
+        .order_by(Category.name.asc())
+        .limit(5)
+    ).all()
+
+    brands = db.execute(
+        select(Brand, func.count(Product.id))
+        .outerjoin(Product, Product.brand_id == Brand.id)
+        .where(func.lower(Brand.name).like(query_like))
+        .group_by(Brand.id)
+        .order_by(Brand.name.asc())
+        .limit(5)
+    ).all()
+
+    collections = db.execute(
+        select(Collection, func.count(Product.id))
+        .outerjoin(Product, Product.collection_id == Collection.id)
+        .where(
+            or_(
+                func.lower(Collection.name).like(query_like),
+                func.lower(Collection.description).like(query_like),
+            )
+        )
+        .group_by(Collection.id)
+        .order_by(Collection.name.asc())
+        .limit(5)
+    ).all()
 
     return {
         "query": trimmed_query,
-        "products": [_product_to_dict(product) for product in products[:6]],
-        "categories": categories[:5],
-        "brands": brands[:5],
-        "collections": collections[:5],
+        "products": [_product_to_dict(product) for product in products],
+        "categories": [_category_to_dict(c, cnt) for c, cnt in categories],
+        "brands": [_brand_to_dict(b, cnt) for b, cnt in brands],
+        "collections": [_collection_to_dict(c, cnt) for c, cnt in collections],
     }
 
 

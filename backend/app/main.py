@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.router import api_router
@@ -10,6 +12,7 @@ from app.core.config import settings
 from app.core.logging import configure_logging, request_logging_middleware, security_headers_middleware
 from app.db.init_db import initialize_database
 from app.db.session import engine
+from app.services.uploads import _uploads_root
 
 configure_logging()
 cors_origins = [str(origin) for origin in settings.cors_origins]
@@ -57,3 +60,7 @@ def readiness_check():
 
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+# Serve uploaded ID documents and seller photos
+uploads_path = _uploads_root()
+app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")

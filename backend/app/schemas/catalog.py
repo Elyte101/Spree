@@ -23,7 +23,7 @@ class ProductCreateIn(BaseModel):
     slug: str | None = Field(default=None, max_length=160)
     name: str = Field(min_length=2, max_length=255)
     description: str = Field(min_length=8)
-    price: float = Field(gt=0)
+    price: float = Field(gt=0, le=999_999)
     discount: float = Field(default=0, ge=0, le=90)
     images: list[str] = Field(min_length=1)
     categoryId: str | None = None
@@ -33,15 +33,11 @@ class ProductCreateIn(BaseModel):
     collectionId: str | None = None
     collectionName: str | None = Field(default=None, max_length=120)
     stock: int = Field(default=0, ge=0)
-    rating: float = Field(default=0, ge=0, le=5)
-    reviewsCount: int = Field(default=0, ge=0)
-    purchaseCount: int = Field(default=0, ge=0)
     variants: list[ProductVariantIn] = Field(default_factory=list)
     colors: list[str] = Field(default_factory=list)
     sizes: list[str] = Field(default_factory=list)
     badge: str | None = Field(default=None, max_length=120)
     tags: list[str] = Field(default_factory=list)
-    createdAt: datetime | None = None
 
     @model_validator(mode="after")
     def validate_relations(self) -> "ProductCreateIn":
@@ -81,7 +77,6 @@ class ProductOut(BaseModel):
     stock: int
     rating: float
     reviewsCount: int
-    reviewCount: int
     purchaseCount: int
     variants: list[ProductVariantOut]
     createdAt: datetime

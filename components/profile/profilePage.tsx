@@ -5,24 +5,32 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
+  AccountBalanceRounded,
   AccountCircleRounded,
   AddBusinessRounded,
   BadgeRounded,
+  CameraAltRounded,
+  CheckCircleOutlined,
   ContactPhoneRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
   PaymentRounded,
+  PhoneAndroidRounded,
   PlaceRounded,
   SaveRounded,
   StoreRounded,
   StorefrontRounded,
+  UploadFileRounded,
 } from "@mui/icons-material";
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Chip,
+  CircularProgress,
+  Divider,
   FormControlLabel,
   MenuItem,
   Paper,
@@ -54,6 +62,29 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+
+  // ID document upload state
+  const [idFront, setIdFront] = React.useState<File | null>(null);
+  const [idBack, setIdBack] = React.useState<File | null>(null);
+  const [selfie, setSelfie] = React.useState<File | null>(null);
+  const [uploadingDocs, setUploadingDocs] = React.useState(false);
+  const [docsError, setDocsError] = React.useState<string | null>(null);
+  const [docsSuccess, setDocsSuccess] = React.useState<string | null>(null);
+
+  // Payout info state
+  const [payout, setPayout] = React.useState({
+    method: (profile.payoutInfo?.method ?? "bank") as "bank" | "mobile_money",
+    bankName: profile.payoutInfo?.bankName ?? "",
+    accountNumber: profile.payoutInfo?.accountNumber ?? profile.payoutInfo?.mobileMoneyNumber ?? "",
+    bankCode: profile.payoutInfo?.bankCode ?? "",
+    mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? "",
+    mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
+    currency: profile.payoutInfo?.currency ?? "GHS",
+    accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
+  });
+  const [savingPayout, setSavingPayout] = React.useState(false);
+  const [payoutError, setPayoutError] = React.useState<string | null>(null);
+  const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
   const isAdmin = profile.role === "admin";
   const sellerSwitchChecked = isAdmin || sellerMode;
@@ -196,6 +227,56 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
       sellerSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
+
+  const handleUploadDocs = async () => {
+    if (!idFront && !idBack && !selfie) return;
+    setDocsError(null);
+    setDocsSuccess(null);
+    setUploadingDocs(true);
+    try {
+      const fd = new FormData();
+      if (idFront) fd.append("id_front", idFront);
+      if (idBack) fd.append("id_back", idBack);
+      if (selfie) fd.append("selfie", selfie);
+      const res = await fetch("/api/auth/id-documents", { method: "POST", body: fd });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        throw new Error(d.detail ?? "Upload failed");
+      }
+      setDocsSuccess("Documents uploaded. An admin will review and verify your identity.");
+      setIdFront(null);
+      setIdBack(null);
+      setSelfie(null);
+    } catch (err) {
+      setDocsError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploadingDocs(false);
+    }
+  };
+
+  const handleSavePayout = async () => {
+    setPayoutError(null);
+    setPayoutSuccess(null);
+    setSavingPayout(true);
+    try {
+      const res = await fetch("/api/auth/payout-info", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payout),
+      });
+      if (!res.ok) {
+        const d = (await res.json()) as { detail?: string };
+        throw new Error(d.detail ?? "Could not save payout info");
+      }
+      setPayoutSuccess("Payout account saved. Funds will be sent here after delivery confirmation.");
+    } catch (err) {
+      setPayoutError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSavingPayout(false);
+    }
+  };
+
+  const canUploadDocs = sellerMode || isAdmin;
 
   return (
     <Box
@@ -815,6 +896,235 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 </Typography>
               </Stack>
             </Paper>
+
+            {/* ── ID DOCUMENT UPLOAD ── */}
+            {canUploadDocs && (
+              <Paper
+                elevation={0}
+                sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+              >
+                <Stack spacing={2.5}>
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <BadgeRounded color="primary" />
+                    <Box>
+                      <Typography variant="h5" fontWeight={900}>Identity verification</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Upload the front and back of your government ID plus a selfie holding it.
+                        An admin will review within 24 hours.
+                      </Typography>
+                    </Box>
+                    {profile.governmentIdVerified && (
+                      <Chip
+                        icon={<CheckCircleOutlined fontSize="small" />}
+                        label="Verified"
+                        color="success"
+                        size="small"
+                        sx={{ ml: "auto !important", fontWeight: 700 }}
+                      />
+                    )}
+                  </Stack>
+
+                  {docsError && <Alert severity="error" onClose={() => setDocsError(null)}>{docsError}</Alert>}
+                  {docsSuccess && <Alert severity="success" onClose={() => setDocsSuccess(null)}>{docsSuccess}</Alert>}
+
+                  {!profile.governmentIdVerified && (
+                    <Box
+                      sx={(theme) => ({
+                        p: 2,
+                        borderRadius: 2,
+                        bgcolor: alpha(theme.palette.warning.main, 0.07),
+                        border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
+                      })}
+                    >
+                      <Typography variant="caption" color="warning.main" fontWeight={600}>
+                        Your identity has not been verified yet. Upload your documents below to begin the review process.
+                      </Typography>
+                    </Box>
+                  )}
+
+                  <Stack spacing={2}>
+                    {(
+                      [
+                        { label: "ID card — front", slot: "id_front", file: idFront, set: setIdFront, icon: <UploadFileRounded fontSize="small" />, existing: profile.idFrontUrl },
+                        { label: "ID card — back", slot: "id_back", file: idBack, set: setIdBack, icon: <UploadFileRounded fontSize="small" />, existing: profile.idBackUrl },
+                        { label: "Selfie holding ID", slot: "selfie", file: selfie, set: setSelfie, icon: <CameraAltRounded fontSize="small" />, existing: profile.selfieUrl },
+                      ] as const
+                    ).map(({ label, file, set, icon, existing }) => (
+                      <Stack key={label} direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} spacing={1.5}>
+                        <Box flex={1}>
+                          <Typography variant="body2" fontWeight={600} gutterBottom>{label}</Typography>
+                          {existing && !file && (
+                            <Typography variant="caption" color="success.main">
+                              ✓ Previously uploaded
+                            </Typography>
+                          )}
+                        </Box>
+                        <Button
+                          component="label"
+                          variant={file ? "contained" : "outlined"}
+                          color={file ? "success" : "primary"}
+                          startIcon={icon}
+                          size="small"
+                          sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                        >
+                          {file ? file.name.slice(0, 24) : `Choose file`}
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            hidden
+                            onChange={(e) => set(e.target.files?.[0] ?? null)}
+                          />
+                        </Button>
+                      </Stack>
+                    ))}
+                  </Stack>
+
+                  <Button
+                    variant="contained"
+                    onClick={handleUploadDocs}
+                    disabled={uploadingDocs || (!idFront && !idBack && !selfie)}
+                    startIcon={uploadingDocs ? <CircularProgress size={16} color="inherit" /> : <UploadFileRounded />}
+                    sx={{ alignSelf: "flex-start", borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
+                  >
+                    {uploadingDocs ? "Uploading…" : "Submit documents"}
+                  </Button>
+                </Stack>
+              </Paper>
+            )}
+
+            {/* ── PAYOUT INFO ── */}
+            {(sellerMode || isAdmin) && (
+              <Paper
+                elevation={0}
+                sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
+              >
+                <Stack spacing={2.5}>
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
+                    <AccountBalanceRounded color="primary" />
+                    <Box>
+                      <Typography variant="h5" fontWeight={900}>Payout account</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Where Spree sends your earnings after a buyer confirms delivery. Your original listing price is transferred in full.
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  {payoutError && <Alert severity="error" onClose={() => setPayoutError(null)}>{payoutError}</Alert>}
+                  {payoutSuccess && <Alert severity="success" onClose={() => setPayoutSuccess(null)}>{payoutSuccess}</Alert>}
+
+                  {/* Method toggle */}
+                  <Stack direction="row" spacing={1}>
+                    {(["bank", "mobile_money"] as const).map((m) => (
+                      <Button
+                        key={m}
+                        variant={payout.method === m ? "contained" : "outlined"}
+                        size="small"
+                        startIcon={m === "bank" ? <AccountBalanceRounded fontSize="small" /> : <PhoneAndroidRounded fontSize="small" />}
+                        onClick={() => setPayout((p) => ({ ...p, method: m }))}
+                        sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+                      >
+                        {m === "bank" ? "Bank account" : "Mobile money"}
+                      </Button>
+                    ))}
+                  </Stack>
+
+                  <Divider />
+
+                  {payout.method === "bank" ? (
+                    <Stack spacing={2}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        <TextField
+                          label="Account name"
+                          value={payout.accountName}
+                          onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
+                          size="small"
+                          fullWidth
+                        />
+                        <TextField
+                          label="Bank name"
+                          value={payout.bankName}
+                          onChange={(e) => setPayout((p) => ({ ...p, bankName: e.target.value }))}
+                          size="small"
+                          fullWidth
+                        />
+                      </Stack>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        <TextField
+                          label="Account number"
+                          value={payout.accountNumber}
+                          onChange={(e) => setPayout((p) => ({ ...p, accountNumber: e.target.value }))}
+                          size="small"
+                          fullWidth
+                          inputProps={{ maxLength: 20 }}
+                        />
+                        <TextField
+                          label="Bank code (GHIPSS / sort code)"
+                          value={payout.bankCode}
+                          onChange={(e) => setPayout((p) => ({ ...p, bankCode: e.target.value }))}
+                          size="small"
+                          fullWidth
+                          inputProps={{ maxLength: 10 }}
+                        />
+                      </Stack>
+                    </Stack>
+                  ) : (
+                    <Stack spacing={2}>
+                      <TextField
+                        label="Account name"
+                        value={payout.accountName}
+                        onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
+                        size="small"
+                        fullWidth
+                      />
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                        <TextField
+                          select
+                          label="Network"
+                          value={payout.mobileMoneyNetwork}
+                          onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNetwork: e.target.value }))}
+                          size="small"
+                          sx={{ minWidth: 160 }}
+                        >
+                          {["MTN", "Vodafone", "AirtelTigo"].map((n) => (
+                            <MenuItem key={n} value={n}>{n}</MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          label="Mobile money number"
+                          value={payout.mobileMoneyNumber}
+                          onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNumber: e.target.value }))}
+                          size="small"
+                          fullWidth
+                          inputProps={{ maxLength: 15 }}
+                        />
+                      </Stack>
+                    </Stack>
+                  )}
+
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      select
+                      label="Currency"
+                      value={payout.currency}
+                      onChange={(e) => setPayout((p) => ({ ...p, currency: e.target.value }))}
+                      size="small"
+                      sx={{ width: 120 }}
+                    >
+                      {["GHS", "USD"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                    </TextField>
+                    <Button
+                      variant="contained"
+                      onClick={handleSavePayout}
+                      disabled={savingPayout}
+                      startIcon={savingPayout ? <CircularProgress size={16} color="inherit" /> : <SaveRounded />}
+                      sx={{ borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
+                    >
+                      {savingPayout ? "Saving…" : "Save payout account"}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Paper>
+            )}
           </Stack>
         </Box>
       </Stack>

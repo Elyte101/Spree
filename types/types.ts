@@ -26,12 +26,85 @@ export interface PriceRange {
   max: number;
 }
 
+export type OrderStatus = "paid" | "shipped" | "completed" | "cancelled";
+
+export interface OrderListItem {
+  id: string;
+  status: OrderStatus;
+  fullName: string;
+  email: string;
+  total: number;
+  currency: string;
+  itemCount: number;
+  shippingMethod: string;
+  trackingNumber?: string | null;
+  createdAt: string;
+}
+
+export interface OrderDetailItem {
+  id: string;
+  productId?: string | null;
+  sellerId?: string | null;
+  name: string;
+  image: string;
+  price: number;
+  quantity: number;
+  color?: string | null;
+  size?: string | null;
+}
+
+export interface OrderDetail {
+  id: string;
+  userId?: string | null;
+  status: OrderStatus;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  addressLine1: string;
+  addressLine2?: string | null;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  shippingMethod: string;
+  paymentMethod: string;
+  subtotal: number;
+  shippingCost: number;
+  tax: number;
+  total: number;
+  currency: string;
+  trackingNumber?: string | null;
+  trackingCarrier?: string | null;
+  paidAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  payoutAmount?: number | null;
+  payoutReleasedAt?: string | null;
+  paystackReference?: string | null;
+  estimatedDeliveryDays?: number | null;
+  estimatedDeliveryDate?: string | null;
+  createdAt: string;
+  items: OrderDetailItem[];
+}
+
+export interface PayoutInfo {
+  method: "bank" | "mobile_money";
+  bankName?: string;
+  accountNumber?: string;
+  bankCode?: string;
+  mobileMoneyNetwork?: string;
+  mobileMoneyNumber?: string;
+  currency?: string;
+  accountName?: string;
+}
+
 export interface Product {
   id: string;
   slug: string;
   name: string;
   description: string;
   price: number;
+  sellerPrice?: number | null;
   discount: number;
   images: string[];
   image: string;
@@ -53,7 +126,6 @@ export interface Product {
   stock: number;
   rating: number;
   reviewsCount: number;
-  reviewCount: number;
   purchaseCount: number;
   variants: ProductVariant[];
   createdAt: string;
@@ -263,6 +335,10 @@ export interface UserProfile extends AuthUser {
   sellerIdentity: SellerIdentityInfo;
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
+  payoutInfo: Partial<PayoutInfo>;
+  idFrontUrl: string;
+  idBackUrl: string;
+  selfieUrl: string;
 }
 
 export interface SellerSummary {
@@ -310,6 +386,9 @@ export interface SellerDetail extends SellerSummary {
 
 export interface AdminSellerDetail extends SellerSummary {
   governmentIdNumber: string;
+  idFrontUrl: string;
+  idBackUrl: string;
+  selfieUrl: string;
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
   reports: SellerReport[];

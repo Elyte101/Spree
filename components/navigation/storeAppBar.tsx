@@ -14,6 +14,7 @@ import {
   LoginRounded,
   LogoutRounded,
   NotificationsOutlined,
+  ReceiptLongOutlined,
   SettingsOutlined,
   ShoppingBagOutlined,
 } from "@mui/icons-material";
@@ -137,7 +138,7 @@ export function StoreAppBar() {
 
   return (
     <AppBar
-      position="sticky"
+      position="fixed"
       color="transparent"
       elevation={0}
       sx={(theme) => ({
@@ -146,6 +147,7 @@ export function StoreAppBar() {
         backgroundColor: alpha(theme.palette.background.paper, 0.82),
         borderBottom: "1px solid",
         borderColor: "divider",
+        mb: 10,
       })}
     >
       <Toolbar
@@ -311,6 +313,17 @@ export function StoreAppBar() {
                 <AccountCircleOutlined fontSize="small" />
               </ListItemIcon>
               <ListItemText primary="Open profile" />
+            </MenuItem>,
+            <MenuItem
+              key="my-orders"
+              component={Link}
+              href="/orders"
+              onClick={closeProfileMenu}
+            >
+              <ListItemIcon>
+                <ReceiptLongOutlined fontSize="small" />
+              </ListItemIcon>
+              <ListItemText primary="My orders" />
             </MenuItem>,
             <Divider key="profile-divider" />,
             <MenuItem

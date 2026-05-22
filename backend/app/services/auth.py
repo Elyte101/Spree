@@ -2,13 +2,15 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
 from app.db.models import User
-from app.schemas.auth import ProfileUpdateRequest, SignupRequest
+from app.schemas.auth import PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
+from app.services import paystack as paystack_svc
+from app.services.uploads import delete_upload, save_upload
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 GHANA_CARD_PATTERN = re.compile(r"^[A-Z0-9-]{8,32}$")
@@ -169,6 +171,10 @@ def _serialize_profile(user: User) -> dict:
             **_default_payment_info(user.name),
             **payment_info,
         },
+        "payoutInfo": user.payout_info or {},
+        "idFrontUrl": user.id_front_url or "",
+        "idBackUrl": user.id_back_url or "",
+        "selfieUrl": user.selfie_url or "",
     }
 
 
@@ -360,4 +366,79 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
     db.commit()
     db.refresh(user)
 
+    return _serialize_profile(user)
+
+
+def upload_id_documents(
+    db: Session,
+    user_id: str,
+    id_front: UploadFile | None,
+    id_back: UploadFile | None,
+    selfie: UploadFile | None,
+) -> dict:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if id_front is not None:
+        if user.id_front_url:
+            delete_upload(user.id_front_url)
+        user.id_front_url = save_upload(id_front, user_id, "id_front")
+
+    if id_back is not None:
+        if user.id_back_url:
+            delete_upload(user.id_back_url)
+        user.id_back_url = save_upload(id_back, user_id, "id_back")
+
+    if selfie is not None:
+        if user.selfie_url:
+            delete_upload(user.selfie_url)
+        user.selfie_url = save_upload(selfie, user_id, "selfie")
+
+    # Reset verification whenever documents are re-uploaded
+    user.government_id_verified = False
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _serialize_profile(user)
+
+
+def update_payout_info(db: Session, user_id: str, payload: "PayoutInfoRequest") -> dict:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    payout = {
+        "method": payload.method,
+        "bankName": payload.bankName,
+        "accountNumber": payload.accountNumber,
+        "bankCode": payload.bankCode,
+        "mobileMoneyNetwork": payload.mobileMoneyNetwork,
+        "mobileMoneyNumber": payload.mobileMoneyNumber,
+        "currency": payload.currency,
+        "accountName": payload.accountName,
+    }
+    user.payout_info = payout
+
+    # Create or refresh the Paystack transfer recipient
+    if settings.paystack_secret_key and payload.accountNumber:
+        try:
+            recipient_code = paystack_svc.create_transfer_recipient(
+                name=payload.accountName or user.name,
+                account_number=payload.accountNumber,
+                bank_code=payload.bankCode,
+                mobile_money_network=payload.mobileMoneyNetwork,
+                currency=payload.currency,
+            )
+            user.paystack_recipient_code = recipient_code
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not register payout account with Paystack: {exc}",
+            ) from exc
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return _serialize_profile(user)

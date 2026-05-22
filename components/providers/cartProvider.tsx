@@ -13,10 +13,12 @@ export function CartProvider({
   initialCart: CartSummary;
 }) {
   const initialize = useCartStore((state) => state.initialize);
+  const initialized = React.useRef(false);
 
-  React.useEffect(() => {
+  if (!initialized.current) {
+    initialized.current = true;
     initialize(initialCart);
-  }, [initialCart, initialize]);
+  }
 
   return <>{children}</>;
 }

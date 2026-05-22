@@ -343,7 +343,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             {product.rating.toFixed(1)}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            ({product.reviewCount} reviews)
+            ({product.reviewsCount} reviews)
           </Typography>
         </Stack>
 

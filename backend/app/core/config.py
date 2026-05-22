@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     internal_api_key: str = "spree-internal-dev-key"
     auto_initialize_database: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    paystack_secret_key: str = ""
+    paystack_public_key: str = ""
+    uploads_dir: str = ""  # defaults to backend/uploads at runtime
 
     model_config = SettingsConfigDict(
         env_file=str(BACKEND_DIR / ".env"),
