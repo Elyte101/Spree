@@ -147,7 +147,6 @@ export function StoreAppBar() {
         backgroundColor: alpha(theme.palette.background.paper, 0.82),
         borderBottom: "1px solid",
         borderColor: "divider",
-        mb: 10,
       })}
     >
       <Toolbar
