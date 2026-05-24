@@ -53,6 +53,9 @@ def healthcheck():
 
 @app.get("/readyz")
 def readiness_check():
+    if engine is None:
+        return {"status": "unavailable", "reason": "DATABASE_URL not configured"}
+
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
 

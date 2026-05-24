@@ -13,10 +13,11 @@ LOCAL_DB_PATH = BACKEND_DIR / "data" / "spree_store.db"
 VERCEL_DB_PATH = Path(tempfile.gettempdir()) / "spree_store.db"
 
 
-def default_database_url() -> str:
-    # Vercel's writable filesystem is limited to /tmp at runtime.
-    if os.getenv("VERCEL") == "1":
-        return f"sqlite:///{VERCEL_DB_PATH.as_posix()}"
+def default_database_url() -> str | None:
+    # In deployed environments, require an explicit DATABASE_URL rather than
+    # silently using an ephemeral SQLite file that loses data on every cold start.
+    if os.getenv("VERCEL") == "1" or os.getenv("APP_ENV") == "production":
+        return None
 
     return f"sqlite:///{LOCAL_DB_PATH.as_posix()}"
 
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     app_name: str = "Spree Backend"
     environment: Literal["development", "test", "production"] = "development"
     api_v1_prefix: str = "/api/v1"
-    database_url: str = Field(default_factory=default_database_url)
+    database_url: str | None = Field(default_factory=default_database_url)
     enable_api_docs: bool | None = None
     cors_origins: list[str] = [
         "http://localhost:3000",
@@ -69,7 +70,10 @@ class Settings(BaseSettings):
 
     @field_validator("database_url", mode="before")
     @classmethod
-    def normalize_database_url(cls, value: str) -> str:
+    def normalize_database_url(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+
         if value.startswith("postgres://"):
             return value.replace("postgres://", "postgresql+psycopg://", 1)
 
@@ -102,8 +106,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_deployed_settings(self) -> "Settings":
-        if self.is_deployed and not os.getenv("DATABASE_URL"):
-            raise ValueError("DATABASE_URL must be set for deployed environments.")
+        # DATABASE_URL is validated lazily in session.py so a missing DB does not
+        # crash the entire process — routes that need the DB return HTTP 503 instead.
 
         if self.is_deployed and self.internal_api_key == "spree-internal-dev-key":
             raise ValueError("INTERNAL_API_KEY must be set for deployed environments.")
@@ -123,7 +127,7 @@ class Settings(BaseSettings):
     @property
     def sqlite_path(self) -> Path | None:
         prefix = "sqlite:///"
-        if not self.database_url.startswith(prefix):
+        if not self.database_url or not self.database_url.startswith(prefix):
             return None
 
         return Path(self.database_url.removeprefix(prefix))

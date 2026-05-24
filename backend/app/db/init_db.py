@@ -190,6 +190,10 @@ def initialize_database() -> None:
     if not settings.auto_initialize_database:
         return
 
+    if engine is None:
+        logger.warning("DATABASE_URL is not configured — skipping database initialization.")
+        return
+
     if settings.sqlite_path:
         settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 
