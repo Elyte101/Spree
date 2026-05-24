@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     seed_admin_name: str = "Spree Admin"
     seed_admin_email: str = "admin@spree.local"
     seed_admin_password: str = "ChangeMe123!"
-    internal_api_key: str = "spree-internal-dev-key"
+    backend_internal_api_key: str = "spree-internal-dev-key"
     auto_initialize_database: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     paystack_secret_key: str = ""
@@ -109,11 +109,11 @@ class Settings(BaseSettings):
         # DATABASE_URL is validated lazily in session.py so a missing DB does not
         # crash the entire process — routes that need the DB return HTTP 503 instead.
 
-        if self.is_deployed and self.internal_api_key == "spree-internal-dev-key":
-            raise ValueError("INTERNAL_API_KEY must be set for deployed environments.")
+        if self.is_deployed and self.backend_internal_api_key == "spree-internal-dev-key":
+            raise ValueError("BACKEND_INTERNAL_API_KEY must be set for deployed environments.")
 
-        if self.is_deployed and len(self.internal_api_key) < 24:
-            raise ValueError("INTERNAL_API_KEY must be at least 24 characters in deployed environments.")
+        if self.is_deployed and len(self.backend_internal_api_key) < 24:
+            raise ValueError("BACKEND_INTERNAL_API_KEY must be at least 24 characters in deployed environments.")
 
         if self.is_deployed and self.should_seed_admin:
             if self.seed_admin_password == "ChangeMe123!" or len(self.seed_admin_password) < 12:
