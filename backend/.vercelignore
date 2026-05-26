@@ -3,3 +3,6 @@ spree_backend.egg-info/
 data/
 tests/
 .env
+__pycache__/
+*.pyc
+*.pyo

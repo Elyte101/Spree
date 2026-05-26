@@ -1,21 +1,18 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from fastapi.responses import Response
 
 from app.api.router import api_router
 from app.core.config import settings
 from app.core.logging import configure_logging, request_logging_middleware, security_headers_middleware
 from app.db.init_db import initialize_database
 from app.db.session import engine
-from app.services.uploads import _uploads_root
 
 configure_logging()
-cors_origins = [str(origin) for origin in settings.cors_origins]
 
 
 @asynccontextmanager
@@ -37,8 +34,8 @@ if settings.trusted_hosts != ["*"]:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials="*" not in cors_origins,
+    allow_origins=[str(o) for o in settings.cors_origins],
+    allow_credentials="*" not in settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -55,15 +52,32 @@ def healthcheck():
 def readiness_check():
     if engine is None:
         return {"status": "unavailable", "reason": "DATABASE_URL not configured"}
-
-    with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
-
     return {"status": "ready"}
 
 
-app.include_router(api_router, prefix=settings.api_v1_prefix)
+@app.get("/uploads/{path:path}")
+def serve_upload(path: str):
+    """Serve uploaded identity documents. On Vercel these live in /tmp and are
+    ephemeral — replace with cloud storage (S3/Cloudinary) for production."""
+    from app.services.uploads import _uploads_root
 
-# Serve uploaded ID documents and seller photos
-uploads_path = _uploads_root()
-app.mount("/uploads", StaticFiles(directory=str(uploads_path)), name="uploads")
+    uploads_root = _uploads_root()
+    file_path = (uploads_root / path).resolve()
+
+    # Path traversal guard
+    try:
+        file_path.relative_to(uploads_root.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    suffix = Path(path).suffix.lower()
+    media_types = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+    media_type = media_types.get(suffix, "application/octet-stream")
+
+    return Response(content=file_path.read_bytes(), media_type=media_type)
+
+
+app.include_router(api_router, prefix=settings.api_v1_prefix)
