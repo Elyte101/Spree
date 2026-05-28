@@ -11,43 +11,73 @@ Spree is a Next.js storefront with a FastAPI backend for catalog, auth, cart, pr
 - MUI
 - FastAPI
 - SQLAlchemy
-- PostgreSQL for local docker setup
+- SQLite (local dev) / PostgreSQL (production)
 
-## Frontend
+## Local development
+
+Both servers must be running for the full stack to work. Start them in two terminals (or use `npm run dev:full` to run both together in one terminal).
+
+### Quick start (two terminals)
+
+**Terminal 1 — FastAPI backend (port 8000)**
 
 ```bash
+# First time only: create the virtualenv and install deps
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
+# Copy env and start
+cp .env.example .env            # edit if needed — defaults work for local dev
+.venv/bin/uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+The backend auto-creates `backend/data/spree_store.db` and seeds the admin account on first start. Verify it is ready:
+
+```bash
+curl http://127.0.0.1:8000/healthz   # → {"status":"ok","environment":"development"}
+curl http://127.0.0.1:8000/readyz    # → {"status":"ready"}
+```
+
+**Terminal 2 — Next.js frontend (port 3000)**
+
+```bash
+# From the repo root
 npm install
+cp .env.example .env.local           # already configured for local dev
 npm run dev
 ```
 
-Create `.env.local` from `.env.example`.
-
-For local full-stack work, start both servers together:
+### One-liner (both servers together)
 
 ```bash
 npm run dev:full
 ```
 
-This runs the Next.js frontend and the FastAPI backend expected by
-`BACKEND_API_URL=http://127.0.0.1:8000/api/v1`.
+### Environment variables (frontend — `.env.local`)
 
-## Backend
+| Variable | Default | Description |
+|---|---|---|
+| `BACKEND_API_URL` | `http://127.0.0.1:8000/api/v1` | FastAPI base URL (must match the port uvicorn binds) |
+| `BACKEND_INTERNAL_API_KEY` | `spree-internal-dev-key` | Must match `INTERNAL_API_KEY` in `backend/.env` |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Frontend origin — do not change for local dev |
+| `NEXTAUTH_SECRET` | _(set in file)_ | Any random string for local dev |
 
-```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload
-```
-
-Create `backend/.env` from `backend/.env.example`.
-
-The local seeded admin account is:
+### Seeded admin account
 
 ```text
-Email: admin@spree.local
+Email:    admin@spree.local
 Password: ChangeMe123!
+```
+
+### Schema migrations
+
+The backend uses SQLAlchemy `create_all` — tables are created automatically on startup. There are no migration files. If the local database is stale after a model change, delete it and restart:
+
+```bash
+rm backend/data/spree_store.db
+# then restart the backend — it will recreate the DB and re-seed the admin account
 ```
 
 ## Production Deploy

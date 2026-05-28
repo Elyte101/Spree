@@ -158,6 +158,9 @@ class User(Base):
     payment_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     payout_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     paystack_recipient_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    oauth_provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     id_front_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     id_back_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     selfie_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -173,6 +176,18 @@ class User(Base):
     )
 
     products: Mapped[list[Product]] = relationship(back_populates="seller")
+
+
+class VerificationToken(Base):
+    __tablename__ = "verification_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class SellerFollow(Base):

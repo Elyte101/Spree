@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { Stack } from "@mui/material";
 
 import { ProductCreateForm } from "@/components/admin/productCreateForm";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import { getBrands, getCategories, getCollections, getUserProfile } from "@/lib/serverApi";
 
@@ -14,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminProductCreatePage() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const callbackUrl = "/dashboard/products/new";
 
   if (!session) {

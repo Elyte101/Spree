@@ -6,18 +6,24 @@ from app.api.deps import DBSession, InternalAPIKey
 from app.schemas.auth import (
     AuthUserOut,
     LoginRequest,
+    OAuthUpsertRequest,
     PayoutInfoRequest,
     ProfileUpdateRequest,
+    SendVerificationRequest,
     SignupRequest,
     UserProfileOut,
+    VerifyEmailRequest,
 )
 from app.services.auth import (
     authenticate_user,
+    create_verification_token,
     get_user_profile,
     register_user,
     update_payout_info,
     update_user_profile,
     upload_id_documents,
+    upsert_oauth_user,
+    verify_email_token,
 )
 
 router = APIRouter(prefix="/auth")
@@ -76,3 +82,25 @@ def profile_payout_info(
     _: InternalAPIKey,
 ):
     return update_payout_info(db, user_id, payload)
+
+
+@router.post("/oauth-upsert", response_model=AuthUserOut)
+def oauth_upsert(payload: OAuthUpsertRequest, db: DBSession, _: InternalAPIKey):
+    return upsert_oauth_user(db, payload)
+
+
+@router.post("/send-verification")
+def send_verification(payload: SendVerificationRequest, db: DBSession, _: InternalAPIKey):
+    token = create_verification_token(db, payload.email)
+    return {"token": token}
+
+
+@router.post("/verify-email", response_model=AuthUserOut)
+def verify_email(payload: VerifyEmailRequest, db: DBSession, _: InternalAPIKey):
+    user = verify_email_token(db, payload.token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link",
+        )
+    return user

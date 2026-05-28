@@ -1,18 +1,20 @@
 import re
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password
-from app.db.models import User
-from app.schemas.auth import PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
+from app.db.models import User, VerificationToken
+from app.schemas.auth import OAuthUpsertRequest, PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
 from app.services import paystack as paystack_svc
 from app.services.uploads import delete_upload, save_upload
 
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# RFC 5321/5322 permissive but sane — accepts user+tag@sub.domain.tld
+EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 GHANA_CARD_PATTERN = re.compile(r"^[A-Z0-9-]{8,32}$")
 
 
@@ -51,6 +53,7 @@ def _serialize_user(user: User) -> dict:
         "name": user.name,
         "email": user.email,
         "role": user.role,
+        "email_verified": bool(user.email_verified),
     }
 
 
@@ -217,6 +220,70 @@ def register_user(db: Session, payload: SignupRequest) -> dict:
     db.commit()
     db.refresh(user)
 
+    return _serialize_user(user)
+
+
+def upsert_oauth_user(db: Session, req: OAuthUpsertRequest) -> dict:
+    email = req.email.lower().strip()
+    user = db.scalar(select(User).where(User.email == email))
+
+    if user is not None:
+        if not user.oauth_provider:
+            user.oauth_provider = req.provider
+            user.oauth_provider_id = req.provider_account_id
+        user.email_verified = True
+        db.commit()
+        db.refresh(user)
+        return _serialize_user(user)
+
+    user = User(
+        id=f"user-{uuid4().hex[:12]}",
+        name=req.name.strip() or email.split("@")[0],
+        email=email,
+        password_hash="",
+        role="customer",
+        seller_status="buyer",
+        oauth_provider=req.provider,
+        oauth_provider_id=req.provider_account_id,
+        email_verified=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _serialize_user(user)
+
+
+def create_verification_token(db: Session, email: str) -> str:
+    email = email.lower().strip()
+    db.execute(delete(VerificationToken).where(VerificationToken.email == email))
+    token = secrets.token_urlsafe(32)
+    vt = VerificationToken(
+        id=uuid4().hex,
+        email=email,
+        token=token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+    )
+    db.add(vt)
+    db.commit()
+    return token
+
+
+def verify_email_token(db: Session, token: str) -> dict | None:
+    vt = db.scalar(
+        select(VerificationToken).where(
+            VerificationToken.token == token,
+            VerificationToken.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    if not vt:
+        return None
+    user = db.scalar(select(User).where(User.email == vt.email))
+    if not user:
+        return None
+    user.email_verified = True
+    db.delete(vt)
+    db.commit()
+    db.refresh(user)
     return _serialize_user(user)
 
 

@@ -1,4 +1,4 @@
-import { DefaultSession } from "next-auth";
+import type { DefaultSession } from "next-auth";
 
 type AppUserRole = "customer" | "seller" | "admin";
 
@@ -7,12 +7,13 @@ declare module "next-auth" {
     user: DefaultSession["user"] & {
       id: string;
       role: AppUserRole;
+      emailVerified: Date | null;
     };
   }
 
   interface User {
-    id: string;
-    role: AppUserRole;
+    role?: AppUserRole;
+    emailVerified?: Date | null;
   }
 }
 
@@ -20,5 +21,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
     role?: AppUserRole;
+    emailVerified?: boolean;
   }
 }

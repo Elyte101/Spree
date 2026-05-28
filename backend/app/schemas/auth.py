@@ -23,6 +23,22 @@ class AuthUserOut(BaseModel):
     name: str
     email: str
     role: str
+    email_verified: bool = False
+
+
+class OAuthUpsertRequest(BaseModel):
+    email: str
+    name: str
+    provider: str
+    provider_account_id: str
+
+
+class SendVerificationRequest(BaseModel):
+    email: str
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
 
 
 class ShippingAddress(BaseModel):

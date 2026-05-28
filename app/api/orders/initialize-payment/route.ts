@@ -1,12 +1,11 @@
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { badRequest, unauthorized } from "@/lib/errors";
 import { CreateOrderSchema, parseOrBadRequest } from "@/lib/validation";
 import { proxyBackend } from "@/lib/serverApi";
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     return unauthorized();
   }

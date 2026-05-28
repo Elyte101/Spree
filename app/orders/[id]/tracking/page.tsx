@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 import type { Metadata } from "next";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getOrder } from "@/lib/serverApi";
 import { OrderTrackingPage } from "@/components/orders/orderTrackingPage";
 
@@ -15,7 +14,7 @@ export default async function OrderTrackingRoute({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=%2Forders");
   }

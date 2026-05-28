@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { SettingsPage } from "@/components/settings/settingsPage";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 
 export const metadata: Metadata = {
   title: "Settings | Spree",
@@ -11,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsRoute() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/settings");

@@ -1,4 +1,3 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import {
   Alert,
@@ -16,7 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import {
   BACKEND_UNAVAILABLE_MESSAGE,
@@ -39,7 +38,7 @@ const formatDate = (value: string) =>
   }).format(new Date(value));
 
 export default async function DashboardProductsPage() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const callbackUrl = "/dashboard/products";
 
   if (!session) {

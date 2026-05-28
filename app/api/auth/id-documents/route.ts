@@ -1,11 +1,10 @@
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     return NextResponse.json({ detail: "Authentication required" }, { status: 401 });
   }

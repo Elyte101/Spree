@@ -45,6 +45,16 @@ export default async function RootLayout({
       className={`${rubik.variable} ${nunitoSans.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      {/* Blocking script: runs before React hydrates so the page background
+          matches the stored theme even during the JS loading window. */}
+      <head>
+        {/* eslint-disable-next-line @next/next/no-sync-scripts */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('spree-theme-mode'),d=s==='dark'||(s===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.style.background='#0C0B14';document.documentElement.style.color='#F0EEFF';document.documentElement.style.colorScheme='dark';}}catch(e){}}())`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <ThemeRegistry>

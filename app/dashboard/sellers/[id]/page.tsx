@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth";
 import { notFound, redirect } from "next/navigation";
 
 import { AdminSellerDetailPage } from "@/components/admin/adminSellerDetailPage";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getAdminSeller } from "@/lib/serverApi";
 
 interface DashboardSellerDetailPageProps {
@@ -12,7 +11,7 @@ interface DashboardSellerDetailPageProps {
 export default async function DashboardSellerDetailPage({
   params,
 }: DashboardSellerDetailPageProps) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/dashboard/sellers");

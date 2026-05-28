@@ -1,7 +1,6 @@
-import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import { proxyBackend } from "@/lib/serverApi";
 
@@ -11,7 +10,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     return NextResponse.json(

@@ -175,6 +175,11 @@ const isConnectionError = (error: unknown) => {
         : "";
   const details = [error.message, causeCode, causeMessage].join(" ");
 
+  // Also catch AbortError raised by AbortSignal.timeout()
+  if (error.name === "AbortError" || error.name === "TimeoutError") {
+    return true;
+  }
+
   return /fetch failed|ECONNREFUSED|ENOTFOUND|EHOSTUNREACH|ETIMEDOUT|UND_ERR_CONNECT_TIMEOUT/i.test(
     details
   );
@@ -188,14 +193,24 @@ const reportBackendUnavailable = (path: string, error: unknown) => {
   }
 
   reportedUnavailablePaths.add(backendUrl);
-  const detail =
+
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : undefined;
+  const code =
+    cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string"
+      ? cause.code
+      : error instanceof Error && "code" in error && typeof (error as Error & { code?: unknown }).code === "string"
+        ? (error as Error & { code: string }).code
+        : "UNKNOWN";
+  const message =
     error instanceof Error
       ? error.message
       : typeof error === "string"
         ? error
         : "Unknown backend connection error";
 
-  console.warn(`[serverApi] Backend unavailable for ${backendUrl}: ${detail}`);
+  console.warn(
+    JSON.stringify({ event: "upstream_unreachable", url: backendUrl, code, message })
+  );
 };
 
 export class BackendUnavailableError extends Error {
@@ -236,6 +251,7 @@ async function fetchBackend(
       ...init,
       headers,
       cache: "no-store",
+      signal: AbortSignal.timeout(5000),
     });
   } catch (error) {
     if (isConnectionError(error)) {

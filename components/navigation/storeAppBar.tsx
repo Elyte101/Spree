@@ -155,12 +155,11 @@ export function StoreAppBar() {
                 height: { xs: 36, sm: 40 },
                 borderRadius: 2,
                 overflow: "hidden",
-                border: "1px solid",
-                borderColor: theme.palette.divider,
-                background:
+                bgcolor: "#F5F4FF",
+                boxShadow:
                   theme.palette.mode === "dark"
-                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.24)}, ${alpha(theme.palette.primary.dark, 0.16)})`
-                    : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.primary.light, 0.06)})`,
+                    ? "0 0 0 1.5px rgba(101,90,255,0.35)"
+                    : "none",
                 flexShrink: 0,
               })}
             >

@@ -1,4 +1,3 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import {
   Button,
@@ -14,7 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getAdminTopProducts } from "@/lib/serverApi";
 
 const formatPrice = (price: number) =>
@@ -28,7 +27,7 @@ interface TopProductsPageProps {
 }
 
 export default async function TopProductsPage({ searchParams }: TopProductsPageProps) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/dashboard/products/top");

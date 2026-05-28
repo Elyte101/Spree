@@ -1,11 +1,10 @@
-import { getServerSession } from "next-auth";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { unauthorized } from "@/lib/errors";
 import { proxyBackend } from "@/lib/serverApi";
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     return unauthorized();
   }
@@ -18,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     return unauthorized();
   }

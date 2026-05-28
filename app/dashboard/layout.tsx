@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { getServerSession } from "next-auth";
 
 import { AdminWorkspaceShell } from "@/components/admin/adminWorkspaceShell";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import { getUserProfile } from "@/lib/serverApi";
 
@@ -11,7 +10,7 @@ export default async function DashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   const userRole = session?.user.role ?? "customer";
   const profile =
     session && userRole === "seller"

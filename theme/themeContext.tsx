@@ -11,13 +11,10 @@ interface ThemeContextType {
 
 const STORAGE_KEY = "spree-theme-mode";
 
-function getInitialMode(): PaletteMode {
-  if (typeof window === "undefined") return "light";
-  const saved = window.localStorage.getItem(STORAGE_KEY);
-  if (saved === "light" || saved === "dark") return saved;
-  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
-  return "light";
-}
+// useLayoutEffect on the client (fires before the browser paints, so no flash),
+// useEffect on the server (no-op, avoids the SSR warning about useLayoutEffect).
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? React.useLayoutEffect : React.useEffect;
 
 const ThemeContext = createContext<ThemeContextType>({
   mode: "light",
@@ -27,14 +24,28 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useThemeContext = () => useContext(ThemeContext);
 
 export const CustomThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [mode, setMode] = useState<PaletteMode>(getInitialMode);
+  // Always initialise to "light" so the first client render matches the SSR
+  // render and there is no hydration mismatch. The layout effect then applies
+  // the user's real preference synchronously before the browser paints.
+  const [mode, setMode] = useState<PaletteMode>("light");
 
-  React.useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, mode);
-  }, [mode]);
+  useIsomorphicLayoutEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    if (saved === "dark" || saved === "light") {
+      setMode(saved);
+    } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      setMode("dark");
+    }
+  }, []);
 
   const toggleMode = () => {
-    setMode((prev) => (prev === "light" ? "dark" : "light"));
+    setMode((prev) => {
+      const next = prev === "light" ? "dark" : "light";
+      // Write directly in the updater — no useEffect needed and no race with
+      // the initialisation layout effect.
+      window.localStorage.setItem(STORAGE_KEY, next);
+      return next;
+    });
   };
 
   const theme = useMemo(() => getAppTheme(mode), [mode]);

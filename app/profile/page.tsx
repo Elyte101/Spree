@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 import { ProfilePage } from "@/components/profile/profilePage";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getUserProfile } from "@/lib/serverApi";
 
 export const metadata: Metadata = {
@@ -12,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfileRoute() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/profile");

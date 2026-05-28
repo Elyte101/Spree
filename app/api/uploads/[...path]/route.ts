@@ -1,13 +1,12 @@
 import "server-only";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getBackendStaticBaseUrl } from "@/lib/runtimeConfig";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session || session.user.role !== "admin") {
     return new Response("Forbidden", { status: 403 });
   }

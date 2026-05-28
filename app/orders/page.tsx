@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
 import type { Metadata } from "next";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getOrders } from "@/lib/serverApi";
 import { OrderHistoryPage } from "@/components/orders/orderHistoryPage";
 
@@ -12,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export default async function OrdersRoute() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=%2Forders");
   }

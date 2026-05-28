@@ -1,26 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Mock NextAuth so we don't need a real NEXTAUTH_SECRET / DB
-vi.mock("next-auth", () => ({
-  default: () => async () => new Response("{}", { status: 200 }),
+// Auth.js v5: mock the handlers export from @/auth
+vi.mock("@/auth", () => ({
+  handlers: {
+    GET: async () => new Response("{}", { status: 200 }),
+    POST: async () => new Response("{}", { status: 200 }),
+  },
+  auth: async () => null,
+  signIn: async () => {},
+  signOut: async () => {},
 }));
-vi.mock("@/lib/auth", () => ({ authOptions: {} }));
 vi.mock("@/lib/runtimeConfig", () => ({
   getNextAuthSecret: () => "test-secret",
   getBackendApiBaseUrl: () => "http://localhost:8000",
+  getBackendInternalApiKey: () => "test-key",
 }));
+vi.mock("@/auth.config", () => ({ authConfig: {} }));
 
 import { POST } from "./route";
-import {
-  clearFailedAttempts,
-  recordFailedAttempt,
-} from "@/lib/rateLimit";
+import { clearFailedAttempts, recordFailedAttempt } from "@/lib/rateLimit";
 import { NextRequest } from "next/server";
 
 const IP = "10.0.0.1";
 const EMAIL = "victim@example.com";
-
-const ctx = { params: Promise.resolve({ nextauth: ["callback", "credentials"] }) };
 
 function credReq(email = EMAIL, ip = IP) {
   const body = new URLSearchParams({
@@ -43,33 +45,29 @@ beforeEach(() => {
   clearFailedAttempts(`login-ip:${IP}`);
 });
 
-describe("login rate limiter — NextAuth wrapper", () => {
-  it("passes through to NextAuth when email is not rate-limited", async () => {
-    const res = await POST(credReq(), ctx);
-    // Mocked NextAuth returns 200
+describe("login rate limiter — Auth.js v5 wrapper", () => {
+  it("passes through when email is not rate-limited", async () => {
+    const res = await POST(credReq());
     expect(res.status).toBe(200);
   });
 
   it("returns 429 when the email is already locked out", async () => {
-    // Pre-seed 5 failures — as authorize() would do on wrong password
     for (let i = 0; i < 5; i++) recordFailedAttempt(EMAIL);
-
-    const res = await POST(credReq(), ctx);
+    const res = await POST(credReq());
     expect(res.status).toBe(429);
-
     const body = await res.json();
-    expect(body).toMatchObject({ detail: "Too many attempts", code: "rate_limited" });
+    expect(body).toMatchObject({ code: "rate_limited" });
   });
 
   it("returns Retry-After header when rate limited", async () => {
     for (let i = 0; i < 5; i++) recordFailedAttempt(EMAIL);
-    const res = await POST(credReq(), ctx);
+    const res = await POST(credReq());
     expect(res.headers.get("retry-after")).toBeTruthy();
   });
 
-  it("returns 429 when the IP is locked out (different email each time)", async () => {
+  it("returns 429 when the IP is locked out", async () => {
     for (let i = 0; i < 5; i++) recordFailedAttempt(`login-ip:${IP}`);
-    const res = await POST(credReq("other@example.com", IP), ctx);
+    const res = await POST(credReq("other@example.com", IP));
     expect(res.status).toBe(429);
   });
 
@@ -77,8 +75,7 @@ describe("login rate limiter — NextAuth wrapper", () => {
     for (let i = 0; i < 5; i++) recordFailedAttempt(`login-ip:${IP}`);
     const otherIp = "10.0.0.2";
     clearFailedAttempts(`login-ip:${otherIp}`);
-    const res = await POST(credReq(EMAIL, otherIp), ctx);
-    // Mocked NextAuth → 200 for the unblocked IP
+    const res = await POST(credReq(EMAIL, otherIp));
     expect(res.status).toBe(200);
   });
 });

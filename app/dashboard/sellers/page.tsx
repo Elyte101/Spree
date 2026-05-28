@@ -1,4 +1,3 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import {
   Chip,
@@ -13,7 +12,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { getAdminSellers } from "@/lib/serverApi";
 import { SellerType } from "@/types/types";
 
@@ -39,7 +38,7 @@ const formatStoreLocation = (seller: { storeLocation: { city: string; state: str
   ].filter(Boolean).join(", ") || "Not provided";
 
 export default async function DashboardSellersPage() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/dashboard/sellers");

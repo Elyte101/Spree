@@ -1,4 +1,3 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import {
   Alert,
@@ -10,7 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 
-import { authOptions } from "@/lib/auth";
+import { auth } from "@/auth";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { canCreateProductsRole } from "@/lib/roles";
 import {
@@ -34,7 +33,7 @@ const formatDate = (value: string) =>
   }).format(new Date(value));
 
 export default async function Dashboard() {
-  const session = await getServerSession(authOptions);
+  const session = await auth();
 
   if (!session) {
     redirect("/auth/sign-in?callbackUrl=/dashboard");
