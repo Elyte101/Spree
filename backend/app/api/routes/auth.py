@@ -24,7 +24,7 @@ router = APIRouter(prefix="/auth")
 
 
 @router.post("/login", response_model=AuthUserOut)
-def login(payload: LoginRequest, db: DBSession):
+def login(payload: LoginRequest, db: DBSession, _: InternalAPIKey):
     user = authenticate_user(db, payload.email, payload.password)
     if user is None:
         raise HTTPException(
@@ -35,7 +35,7 @@ def login(payload: LoginRequest, db: DBSession):
 
 
 @router.post("/signup", response_model=AuthUserOut, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, db: DBSession):
+def signup(payload: SignupRequest, db: DBSession, _: InternalAPIKey):
     return register_user(db, payload)
 
 

@@ -19,6 +19,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { useSession } from "next-auth/react";
 
 import { ProductCard } from "@/components/product/productCard";
@@ -125,9 +126,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
         minHeight: "100%",
         px: { xs: 1.5, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
-        background: `radial-gradient(circle at top left, rgba(25, 118, 210, ${
-          theme.palette.mode === "dark" ? 0.18 : 0.1
-        }) 0%, transparent 24%), linear-gradient(180deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 100%)`,
+        background: `radial-gradient(circle at top left, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1)} 0%, transparent 24%), linear-gradient(180deg, ${theme.palette.background.default} 0%, ${theme.palette.background.paper} 100%)`,
       })}
     >
       <Stack spacing={3}>

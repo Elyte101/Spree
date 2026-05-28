@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Forbid dangerouslySetInnerHTML for user-controlled content.
+      // The only legitimate callsite is themeRegistry.tsx (Emotion CSS injection)
+      // which has an eslint-disable-next-line comment explaining why it is safe.
+      "react/no-danger": "error",
+    },
+  },
 ]);
 
 export default eslintConfig;

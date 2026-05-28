@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   AccountCircleOutlined,
@@ -15,6 +15,7 @@ import {
   LogoutRounded,
   NotificationsOutlined,
   ReceiptLongOutlined,
+  SearchRounded,
   SettingsOutlined,
   ShoppingBagOutlined,
 } from "@mui/icons-material";
@@ -24,6 +25,8 @@ import {
   Box,
   Divider,
   IconButton,
+  InputAdornment,
+  InputBase,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -45,6 +48,7 @@ import { useThemeContext } from "@/theme/themeContext";
 
 export function StoreAppBar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { status } = useSession();
   const theme = useTheme();
   const { toggleMode } = useThemeContext();
@@ -55,41 +59,41 @@ export function StoreAppBar() {
     notificationsQuery.data?.filter((item) => !item.isRead).length ?? 0;
   const [profileAnchorEl, setProfileAnchorEl] = React.useState<HTMLElement | null>(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = React.useState<HTMLElement | null>(null);
+  const [searchValue, setSearchValue] = React.useState("");
 
   const isAuthenticated = status === "authenticated";
-  const isCartRoute =
-    pathname === "/cart" ||
-    pathname === "/checkout" ||
-    pathname.startsWith("/checkout/");
+  const isCartRoute = pathname === "/cart" || pathname === "/checkout" || pathname.startsWith("/checkout/");
   const isNotificationsRoute = pathname === "/notifications";
   const isFavoritesRoute = pathname === "/favorites";
-  const isDashboardRoute =
-    pathname === "/dashboard" || pathname.startsWith("/dashboard/");
+  const isDashboardRoute = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const isProfileRoute = pathname === "/profile";
   const isSettingsRoute = pathname === "/settings";
   const profileMenuOpen = Boolean(profileAnchorEl);
   const settingsMenuOpen = Boolean(settingsAnchorEl);
 
-  const profileHref = isAuthenticated
-    ? "/profile"
-    : "/auth/sign-in?callbackUrl=%2Fprofile";
-  const settingsHref = isAuthenticated
-    ? "/settings"
-    : "/auth/sign-in?callbackUrl=%2Fsettings";
+  const profileHref = isAuthenticated ? "/profile" : "/auth/sign-in?callbackUrl=%2Fprofile";
+  const settingsHref = isAuthenticated ? "/settings" : "/auth/sign-in?callbackUrl=%2Fsettings";
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchValue.trim()) {
+      router.push(`/products?search=${encodeURIComponent(searchValue.trim())}`);
+    }
+  };
 
   const getNavButtonSx = (active: boolean): SxProps<Theme> => (theme) => ({
     color: active
       ? theme.palette.primary.main
-      : alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.86 : 0.72),
+      : alpha(theme.palette.text.primary, 0.65),
     borderRadius: 999,
     backgroundColor: active
-      ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.12)
+      ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1)
       : "transparent",
-    transition: "background-color 0.2s ease, color 0.2s ease, transform 0.2s ease",
+    transition: "background-color 0.18s ease, color 0.18s ease, transform 0.18s ease",
     "&:hover": {
       backgroundColor: active
-        ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.24 : 0.16)
-        : alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.1 : 0.06),
+        ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.24 : 0.14)
+        : alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.08 : 0.06),
       color: active ? theme.palette.primary.main : theme.palette.text.primary,
       transform: "translateY(-1px)",
     },
@@ -97,40 +101,11 @@ export function StoreAppBar() {
 
   const navItems = [
     ...(isAuthenticated
-      ? [
-          {
-            label: "Dashboard",
-            href: "/dashboard",
-            active: isDashboardRoute,
-            icon: <DashboardRounded />,
-            ariaLabel: "dashboard",
-          },
-        ]
+      ? [{ label: "Dashboard", href: "/dashboard", active: isDashboardRoute, icon: <DashboardRounded />, ariaLabel: "dashboard" }]
       : []),
-    {
-      label: "Favorites",
-      href: "/favorites",
-      active: isFavoritesRoute,
-      badge: favoriteCount,
-      icon: <FavoriteBorderOutlined />,
-      ariaLabel: "favorites",
-    },
-    {
-      label: "Notifications",
-      href: "/notifications",
-      active: isNotificationsRoute,
-      badge: notificationCount,
-      icon: <NotificationsOutlined />,
-      ariaLabel: "notifications",
-    },
-    {
-      label: "Cart",
-      href: "/cart",
-      active: isCartRoute,
-      badge: cartCount,
-      icon: <ShoppingBagOutlined />,
-      ariaLabel: "cart",
-    },
+    { label: "Favorites", href: "/favorites", active: isFavoritesRoute, badge: favoriteCount, icon: <FavoriteBorderOutlined />, ariaLabel: "favorites" },
+    { label: "Notifications", href: "/notifications", active: isNotificationsRoute, badge: notificationCount, icon: <NotificationsOutlined />, ariaLabel: "notifications" },
+    { label: "Cart", href: "/cart", active: isCartRoute, badge: cartCount, icon: <ShoppingBagOutlined />, ariaLabel: "cart" },
   ];
 
   const closeProfileMenu = () => setProfileAnchorEl(null);
@@ -143,19 +118,24 @@ export function StoreAppBar() {
       elevation={0}
       sx={(theme) => ({
         color: theme.palette.text.primary,
-        backdropFilter: "blur(18px)",
-        backgroundColor: alpha(theme.palette.background.paper, 0.82),
+        backdropFilter: "blur(20px) saturate(180%)",
+        WebkitBackdropFilter: "blur(20px) saturate(180%)",
+        backgroundColor: alpha(
+          theme.palette.background.paper,
+          theme.palette.mode === "dark" ? 0.78 : 0.88
+        ),
         borderBottom: "1px solid",
-        borderColor: "divider",
+        borderColor: theme.palette.divider,
       })}
     >
       <Toolbar
         sx={{
-          minHeight: { xs: 64, sm: 72, md: 80 },
-          px: { xs: 1.25, sm: 3, md: 5 },
-          gap: { xs: 1, sm: 1.5 },
+          minHeight: { xs: 64, sm: 72 },
+          px: { xs: 1.5, sm: 2.5, md: 4 },
+          gap: 1.5,
         }}
       >
+        {/* Logo */}
         <Box
           component={Link}
           href="/"
@@ -164,65 +144,134 @@ export function StoreAppBar() {
             textDecoration: "none",
             display: "inline-flex",
             alignItems: "center",
+            flexShrink: 0,
           }}
-         >
-          <Stack direction="row" spacing={{ xs: 1, sm: 1.5 }} alignItems="center">
+        >
+          <Stack direction="row" spacing={1.25} alignItems="center">
             <Box
-              sx={{
+              sx={(theme) => ({
                 position: "relative",
-                width: { xs: 40, sm: 46 },
-                height: { xs: 40, sm: 46 },
-                borderRadius: { xs: 2.5, sm: 3 },
+                width: { xs: 36, sm: 40 },
+                height: { xs: 36, sm: 40 },
+                borderRadius: 2,
                 overflow: "hidden",
                 border: "1px solid",
-                borderColor: "divider",
-                background: "#fff4f9",
-              }}
+                borderColor: theme.palette.divider,
+                background:
+                  theme.palette.mode === "dark"
+                    ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.24)}, ${alpha(theme.palette.primary.dark, 0.16)})`
+                    : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.primary.light, 0.06)})`,
+                flexShrink: 0,
+              })}
             >
               <Image
                 src="/spreelogo.png"
                 alt="Spree logo"
                 fill
-                sizes="(max-width: 600px) 40px, 46px"
+                sizes="40px"
                 style={{ objectFit: "contain", padding: 4 }}
                 priority
               />
             </Box>
-            <Box sx={{ minWidth: 0 }}>
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
               <Typography
                 variant="h6"
                 sx={{
                   lineHeight: 1,
-                  fontWeight: 900,
+                  fontWeight: 800,
                   color: "text.primary",
-                  fontSize: { xs: "1rem", sm: "1.25rem" },
+                  fontSize: "1.1rem",
+                  letterSpacing: "-0.02em",
                 }}
               >
                 Spree
               </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: { xs: "none", sm: "block" } }}
-              >
+              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
                 Shop with ease
               </Typography>
             </Box>
           </Stack>
         </Box>
 
-        <Box sx={{ flexGrow: 1 }} />
+        {/* Search bar — center */}
+        <Box
+          component="form"
+          onSubmit={handleSearchSubmit}
+          sx={{
+            flexGrow: 1,
+            maxWidth: { xs: "100%", md: 520 },
+            mx: { md: "auto" },
+            display: { xs: "none", sm: "flex" },
+          }}
+        >
+          <InputBase
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            placeholder="Search products, brands…"
+            fullWidth
+            startAdornment={
+              <InputAdornment position="start" sx={{ ml: 0.5 }}>
+                <SearchRounded fontSize="small" sx={{ color: "text.secondary" }} />
+              </InputAdornment>
+            }
+            sx={(theme) => ({
+              px: 1.5,
+              py: 0.75,
+              borderRadius: 999,
+              border: "1.5px solid",
+              borderColor: theme.palette.divider,
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? alpha(theme.palette.common.white, 0.05)
+                  : alpha(theme.palette.primary.main, 0.04),
+              fontSize: "0.875rem",
+              transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+              "&:hover": {
+                borderColor: alpha(theme.palette.primary.main, 0.4),
+              },
+              "&.Mui-focused": {
+                borderColor: "primary.main",
+                boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.12)}`,
+              },
+              "& .MuiInputBase-input": {
+                py: 0,
+                "&::placeholder": {
+                  color: theme.palette.text.secondary,
+                  opacity: 0.8,
+                },
+              },
+            })}
+          />
+        </Box>
 
+        {/* Mobile search icon */}
+        <Tooltip title="Search">
+          <IconButton
+            aria-label="search"
+            component={Link}
+            href="/products"
+            sx={{
+              display: { xs: "flex", sm: "none" },
+              ...getNavButtonSx(false)(theme as Theme),
+            }}
+          >
+            <SearchRounded />
+          </IconButton>
+        </Tooltip>
+
+        <Box sx={{ flexGrow: { xs: 1, sm: 0 } }} />
+
+        {/* Nav icons */}
         <Stack
           direction="row"
-          spacing={{ xs: 0, sm: 1 }}
+          spacing={0}
           alignItems="center"
           sx={{
             "& .MuiIconButton-root": {
-              p: { xs: 0.75, sm: 1 },
+              p: { xs: 0.75, sm: 0.875 },
             },
             "& .MuiSvgIcon-root": {
-              fontSize: { xs: 22, sm: 24 },
+              fontSize: { xs: 21, sm: 22 },
             },
           }}
         >
@@ -235,8 +284,8 @@ export function StoreAppBar() {
                 href={item.href}
                 sx={getNavButtonSx(item.active)}
               >
-                {"badge" in item && typeof item.badge === "number" ? (
-                  <Badge badgeContent={item.badge} color="primary">
+                {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+                  <Badge badgeContent={item.badge} color="primary" max={99}>
                     {item.icon}
                   </Badge>
                 ) : (
@@ -270,6 +319,7 @@ export function StoreAppBar() {
         </Stack>
       </Toolbar>
 
+      {/* Profile menu */}
       <Menu
         anchorEl={profileAnchorEl}
         open={profileMenuOpen}
@@ -284,74 +334,44 @@ export function StoreAppBar() {
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
             },
           },
         }}
       >
-        {isAuthenticated ? (
-          [
-            <MenuItem
-              key="open-dashboard"
-              component={Link}
-              href="/dashboard"
-              onClick={closeProfileMenu}
-            >
-              <ListItemIcon>
-                <DashboardRounded fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="Open dashboard" />
-            </MenuItem>,
-            <Divider key="dashboard-divider" />,
-            <MenuItem
-              key="open-profile"
-              component={Link}
-              href={profileHref}
-              onClick={closeProfileMenu}
-            >
-              <ListItemIcon>
-                <AccountCircleOutlined fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="Open profile" />
-            </MenuItem>,
-            <MenuItem
-              key="my-orders"
-              component={Link}
-              href="/orders"
-              onClick={closeProfileMenu}
-            >
-              <ListItemIcon>
-                <ReceiptLongOutlined fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="My orders" />
-            </MenuItem>,
-            <Divider key="profile-divider" />,
-            <MenuItem
-              key="sign-out"
-              onClick={() => {
-                closeProfileMenu();
-                void signOut({ callbackUrl: "/" });
-              }}
-            >
-              <ListItemIcon>
-                <LogoutRounded fontSize="small" />
-              </ListItemIcon>
-              <ListItemText primary="Sign out" />
-            </MenuItem>,
-          ]
-        ) : (
-          <MenuItem
-            component={Link}
-            href="/auth/sign-in?callbackUrl=%2Fprofile"
-            onClick={closeProfileMenu}
-          >
-            <ListItemIcon>
-              <LoginRounded fontSize="small" />
-            </ListItemIcon>
-            <ListItemText primary="Sign in" />
-          </MenuItem>
-        )}
+        {isAuthenticated
+          ? [
+              <MenuItem key="open-dashboard" component={Link} href="/dashboard" onClick={closeProfileMenu}>
+                <ListItemIcon><DashboardRounded fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Dashboard" />
+              </MenuItem>,
+              <Divider key="d1" />,
+              <MenuItem key="open-profile" component={Link} href={profileHref} onClick={closeProfileMenu}>
+                <ListItemIcon><AccountCircleOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="My profile" />
+              </MenuItem>,
+              <MenuItem key="my-orders" component={Link} href="/orders" onClick={closeProfileMenu}>
+                <ListItemIcon><ReceiptLongOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="My orders" />
+              </MenuItem>,
+              <Divider key="d2" />,
+              <MenuItem
+                key="sign-out"
+                onClick={() => { closeProfileMenu(); void signOut({ callbackUrl: "/" }); }}
+              >
+                <ListItemIcon><LogoutRounded fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Sign out" />
+              </MenuItem>,
+            ]
+          : (
+            <MenuItem component={Link} href="/auth/sign-in?callbackUrl=%2Fprofile" onClick={closeProfileMenu}>
+              <ListItemIcon><LoginRounded fontSize="small" /></ListItemIcon>
+              <ListItemText primary="Sign in" />
+            </MenuItem>
+          )}
       </Menu>
 
+      {/* Settings menu */}
       <Menu
         anchorEl={settingsAnchorEl}
         open={settingsMenuOpen}
@@ -366,41 +386,26 @@ export function StoreAppBar() {
               borderRadius: 3,
               border: "1px solid",
               borderColor: "divider",
+              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
             },
           },
         }}
       >
-        <MenuItem
-          onClick={() => {
-            toggleMode();
-          }}
-        >
+        <MenuItem onClick={() => { toggleMode(); }}>
           <ListItemIcon>
-            {theme.palette.mode === "dark" ? (
-              <Brightness7Rounded fontSize="small" />
-            ) : (
-              <Brightness4Rounded fontSize="small" />
-            )}
+            {theme.palette.mode === "dark"
+              ? <Brightness7Rounded fontSize="small" />
+              : <Brightness4Rounded fontSize="small" />}
           </ListItemIcon>
           <ListItemText
-            primary="Theme"
-            secondary={
-              theme.palette.mode === "dark"
-                ? "Dark appearance is on"
-                : "Light appearance is on"
-            }
+            primary="Appearance"
+            secondary={theme.palette.mode === "dark" ? "Dark mode on" : "Light mode on"}
           />
         </MenuItem>
         <Divider />
-        <MenuItem
-          component={Link}
-          href={settingsHref}
-          onClick={closeSettingsMenu}
-        >
-          <ListItemIcon>
-            <SettingsOutlined fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary={isAuthenticated ? "Open settings" : "Sign in"} />
+        <MenuItem component={Link} href={settingsHref} onClick={closeSettingsMenu}>
+          <ListItemIcon><SettingsOutlined fontSize="small" /></ListItemIcon>
+          <ListItemText primary={isAuthenticated ? "Settings" : "Sign in"} />
         </MenuItem>
       </Menu>
     </AppBar>

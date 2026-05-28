@@ -11,14 +11,19 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:backend": "cd backend && ./.venv/bin/pytest",
-    "verify": "npm run lint && npm run typecheck && npm run build && npm run test:backend"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:backend"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.9",
     "@mui/material": "^7.3.9",
+    "@playwright/test": "^1.60.0",
     "@prisma/client": "^7.5.0",
+    "@vitest/coverage-v8": "^4.1.7",
     "axios": "^1.13.6",
     "motion": "^12.38.0",
     "next": "^16.2.1",
@@ -27,6 +32,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-query": "^3.39.3",
+    "vitest": "^4.1.7",
+    "zod": "^4.4.3",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

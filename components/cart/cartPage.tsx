@@ -1,13 +1,14 @@
 'use client';
 
-import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
   AddRounded,
   ArrowForwardRounded,
   DeleteOutlineRounded,
+  LocalShippingRounded,
   RemoveRounded,
+  SecurityRounded,
   ShoppingBagOutlined,
 } from "@mui/icons-material";
 import {
@@ -17,10 +18,13 @@ import {
   Chip,
   Divider,
   IconButton,
+  LinearProgress,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
+import { motion } from "motion/react";
+
 import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
@@ -31,14 +35,18 @@ interface CartPageProps {
 }
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
+
+const FREE_SHIPPING_THRESHOLD = 200;
+const ease = [0.22, 1, 0.36, 1] as const;
 
 export function CartPage({ recommendations }: CartPageProps) {
   const { cart, itemCount, updateQuantity, removeItem } = useCart();
   const { items, shipping, subtotal, tax, total } = cart;
+
+  const toFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const freeShippingProgress = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
+  const hasFreeShipping = shipping === 0;
 
   return (
     <Box
@@ -46,92 +54,124 @@ export function CartPage({ recommendations }: CartPageProps) {
         minHeight: "100vh",
         px: { xs: 1.5, sm: 3, md: 5 },
         py: { xs: 3, md: 5 },
-        background: `radial-gradient(circle at top left, ${alpha(
-          theme.palette.primary.main,
-          theme.palette.mode === "dark" ? 0.16 : 0.08
-        )}, transparent 24%), linear-gradient(180deg, ${
-          theme.palette.background.default
-        } 0%, ${theme.palette.background.paper} 100%)`,
+        background:
+          theme.palette.mode === "dark"
+            ? `radial-gradient(circle at top left, ${alpha(theme.palette.primary.main, 0.14)}, transparent 28%), ${theme.palette.background.default}`
+            : `radial-gradient(circle at top left, ${alpha(theme.palette.primary.main, 0.07)}, transparent 28%), #F5F4FF`,
       })}
     >
-      <Stack spacing={4}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2.5, md: 4 },
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: "divider",
-          }}
-        >
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={2}
-            justifyContent="space-between"
-            alignItems={{ xs: "flex-start", md: "center" }}
+      <Stack spacing={3.5}>
+
+        {/* ── Page header ── */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
+          <Paper
+            sx={(theme) => ({
+              p: { xs: 2.5, md: 3.5 },
+              borderRadius: 3,
+              border: "1.5px solid",
+              borderColor: theme.palette.divider,
+            })}
           >
-            <Box>
-              <Chip
-                icon={<ShoppingBagOutlined />}
-                label="Cart"
-                color="primary"
-                sx={{ mb: 1.5, borderRadius: 999 }}
-              />
-              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-                Your cart is ready.
-              </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-                Review your items, adjust quantities, and move into checkout when you’re ready.
-              </Typography>
-            </Box>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              justifyContent="space-between"
+              alignItems={{ xs: "flex-start", md: "center" }}
+            >
+              <Box>
+                <Stack direction="row" alignItems="center" gap={1.5} mb={0.75}>
+                  <Box
+                    sx={(theme) => ({
+                      width: 36,
+                      height: 36,
+                      borderRadius: 2,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                      color: "primary.main",
+                    })}
+                  >
+                    <ShoppingBagOutlined sx={{ fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="h4" fontWeight={800} lineHeight={1}>
+                    Your cart
+                  </Typography>
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  Review your items, adjust quantities, and proceed to checkout.
+                </Typography>
+              </Box>
+
+              <Paper
+                sx={(theme) => ({
+                  px: 2.5,
+                  py: 1.5,
+                  borderRadius: 2.5,
+                  border: "1.5px solid",
+                  borderColor: theme.palette.divider,
+                  bgcolor: alpha(theme.palette.primary.main, 0.05),
+                  textAlign: "center",
+                  minWidth: 120,
+                })}
+              >
+                <Typography variant="h4" fontWeight={800} color="primary.main" lineHeight={1}>
+                  {itemCount}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  {itemCount === 1 ? "item" : "items"}
+                </Typography>
+              </Paper>
+            </Stack>
+          </Paper>
+        </motion.div>
+
+        {/* ── Empty state ── */}
+        {items.length === 0 ? (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
             <Paper
-              elevation={0}
               sx={{
-                p: 2,
-                minWidth: { md: 220 },
-                width: { xs: "100%", md: "auto" },
-                borderRadius: 2,
-                backgroundColor: "action.hover",
+                p: { xs: 5, md: 8 },
+                borderRadius: 3,
+                border: "1.5px solid",
+                borderColor: "divider",
+                textAlign: "center",
               }}
             >
-              <Typography variant="body2" color="text.secondary">
-                Current selection
+              <Box
+                sx={(theme) => ({
+                  width: 72,
+                  height: 72,
+                  borderRadius: 3,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+                  color: "primary.main",
+                  mx: "auto",
+                  mb: 2.5,
+                })}
+              >
+                <ShoppingBagOutlined sx={{ fontSize: 34 }} />
+              </Box>
+              <Typography variant="h5" fontWeight={700} mb={0.75}>
+                Your cart is empty
               </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 900 }}>
-                {itemCount}
+              <Typography variant="body1" color="text.secondary" mb={3.5}>
+                Take a look around and add anything you love.
               </Typography>
-              <Typography variant="body2">{itemCount === 1 ? "item" : "items"} in cart</Typography>
+              <Button
+                component={Link}
+                href="/products"
+                variant="contained"
+                size="large"
+                endIcon={<ArrowForwardRounded />}
+                sx={{ fontWeight: 800 }}
+              >
+                Browse products
+              </Button>
             </Paper>
-          </Stack>
-        </Paper>
-
-        {items.length === 0 ? (
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 4, md: 6 },
-              borderRadius: 2,
-              border: "1px solid",
-              borderColor: "divider",
-              textAlign: "center",
-            }}
-          >
-            <Typography variant="h4" sx={{ fontWeight: 900, mb: 1 }}>
-              Your cart is empty
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Take a look around and add anything you love.
-            </Typography>
-            <Button
-              component={Link}
-              href="/products"
-              variant="contained"
-              endIcon={<ArrowForwardRounded />}
-              sx={{ borderRadius: 999, px: 3, textTransform: "none", fontWeight: 900 }}
-            >
-              Browse products
-            </Button>
-          </Paper>
+          </motion.div>
         ) : (
           <Box
             sx={{
@@ -141,205 +181,285 @@ export function CartPage({ recommendations }: CartPageProps) {
               alignItems: "start",
             }}
           >
-            <Stack spacing={2}>
-              {items.map((item) => (
-                <Paper
+            {/* ── Cart items ── */}
+            <Stack spacing={1.75}>
+              {items.map((item, i) => (
+                <motion.div
                   key={item.id}
-                  elevation={0}
-                  sx={{
-                    p: { xs: 2, sm: 2.5 },
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: "divider",
-                  }}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.32, delay: 0.05 * Math.min(i, 5), ease }}
                 >
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={2.5}>
-                    <Box
-                      sx={{
-                        position: "relative",
-                        width: { xs: "100%", sm: 140 },
-                        height: { xs: 180, sm: 140 },
-                        borderRadius: 2,
-                        border: "1px solid",
-                        borderColor: "divider",
-                        backgroundColor: "action.hover",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <Image
-                        src={item.image}
-                        alt={item.name}
-                        fill
-                        sizes="(max-width: 600px) 100vw, 140px"
-                        style={{
-                          objectFit: "contain",
-                          padding: "12px",
+                  <Paper
+                    sx={(theme) => ({
+                      p: { xs: 2, sm: 2.5 },
+                      borderRadius: 3,
+                      border: "1.5px solid",
+                      borderColor: theme.palette.divider,
+                      transition: "border-color 0.2s ease",
+                      "&:hover": { borderColor: alpha(theme.palette.primary.main, 0.4) },
+                    })}
+                  >
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2.5}>
+                      {/* Product image */}
+                      <Box
+                        component={Link}
+                        href={`/products/${item.id}`}
+                        sx={{
+                          position: "relative",
+                          width: { xs: "100%", sm: 128 },
+                          height: { xs: 160, sm: 128 },
+                          borderRadius: 2.5,
+                          overflow: "hidden",
+                          flexShrink: 0,
+                          bgcolor: "action.hover",
+                          border: "1px solid",
+                          borderColor: "divider",
+                          display: "block",
+                          textDecoration: "none",
                         }}
-                      />
-                    </Box>
-
-                    <Stack spacing={1.25} sx={{ flex: 1 }}>
-                      <Stack
-                        direction={{ xs: "column", md: "row" }}
-                        justifyContent="space-between"
-                        spacing={1}
                       >
-                        <Box>
-                          <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                            {item.name}
+                        <Image
+                          src={item.image}
+                          alt={item.name}
+                          fill
+                          sizes="(max-width: 600px) 100vw, 128px"
+                          style={{ objectFit: "contain", padding: "12px" }}
+                        />
+                      </Box>
+
+                      {/* Product info */}
+                      <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+                        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={0.75}>
+                          <Box minWidth={0}>
+                            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.3} noWrap>
+                              {item.name}
+                            </Typography>
+                            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" mt={0.75}>
+                              {item.isPreorder && <Chip label="Preorder" size="small" color="warning" sx={{ height: 20, fontSize: "0.68rem" }} />}
+                              {item.color && <Chip label={item.color} size="small" variant="outlined" sx={{ height: 20, fontSize: "0.68rem" }} />}
+                              {item.size && <Chip label={item.size} size="small" variant="outlined" sx={{ height: 20, fontSize: "0.68rem" }} />}
+                            </Stack>
+                          </Box>
+                          <Typography variant="h6" fontWeight={800} color="primary.main" sx={{ flexShrink: 0 }}>
+                            {formatPrice(item.price * item.quantity)}
                           </Typography>
-                          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.75 }}>
-                            {item.isPreorder ? <Chip label="Preorder" size="small" color="warning" /> : null}
-                            {item.color ? <Chip label={item.color} size="small" variant="outlined" /> : null}
-                            {item.size ? <Chip label={item.size} size="small" variant="outlined" /> : null}
-                          </Stack>
-                        </Box>
-                        <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                          {formatPrice(item.price * item.quantity)}
-                        </Typography>
-                      </Stack>
-
-                      <Typography variant="body2" color="text.secondary">
-                        Unit price {formatPrice(item.price)}
-                      </Typography>
-
-                      <Stack
-                        direction={{ xs: "column", sm: "row" }}
-                        spacing={1.5}
-                        justifyContent="space-between"
-                        alignItems={{ xs: "flex-start", sm: "center" }}
-                      >
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <IconButton
-                            onClick={() => updateQuantity(item.id, -1)}
-                            aria-label={`Decrease quantity for ${item.name}`}
-                            size="small"
-                          >
-                            <RemoveRounded fontSize="small" />
-                          </IconButton>
-                          <Chip label={`Qty ${item.quantity}`} />
-                          <IconButton
-                            onClick={() => updateQuantity(item.id, 1)}
-                            aria-label={`Increase quantity for ${item.name}`}
-                            size="small"
-                          >
-                            <AddRounded fontSize="small" />
-                          </IconButton>
                         </Stack>
 
-                        <Button
-                          onClick={() => removeItem(item.id)}
-                          startIcon={<DeleteOutlineRounded />}
-                          color="inherit"
-                          sx={{ textTransform: "none", fontWeight: 900 }}
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                          Unit price: {formatPrice(item.price)}
+                        </Typography>
+
+                        <Stack
+                          direction={{ xs: "column", sm: "row" }}
+                          spacing={1.5}
+                          justifyContent="space-between"
+                          alignItems={{ xs: "flex-start", sm: "center" }}
+                          mt={0.5}
                         >
-                          Remove
-                        </Button>
+                          {/* Quantity stepper */}
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            spacing={0}
+                            sx={(theme) => ({
+                              border: "1.5px solid",
+                              borderColor: theme.palette.divider,
+                              borderRadius: 999,
+                              overflow: "hidden",
+                              width: "fit-content",
+                            })}
+                          >
+                            <IconButton
+                              onClick={() => updateQuantity(item.id, -1)}
+                              aria-label={`Decrease quantity for ${item.name}`}
+                              size="small"
+                              sx={{ borderRadius: 0, width: 32, height: 32 }}
+                            >
+                              <RemoveRounded sx={{ fontSize: 16 }} />
+                            </IconButton>
+                            <Typography
+                              variant="body2"
+                              fontWeight={700}
+                              sx={{ minWidth: 32, textAlign: "center", px: 0.5 }}
+                            >
+                              {item.quantity}
+                            </Typography>
+                            <IconButton
+                              onClick={() => updateQuantity(item.id, 1)}
+                              aria-label={`Increase quantity for ${item.name}`}
+                              size="small"
+                              sx={{ borderRadius: 0, width: 32, height: 32 }}
+                            >
+                              <AddRounded sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Stack>
+
+                          <Button
+                            onClick={() => removeItem(item.id)}
+                            startIcon={<DeleteOutlineRounded sx={{ fontSize: "16px !important" }} />}
+                            size="small"
+                            color="error"
+                            variant="text"
+                            sx={{ fontWeight: 600, fontSize: "0.8rem", textTransform: "none" }}
+                          >
+                            Remove
+                          </Button>
+                        </Stack>
                       </Stack>
                     </Stack>
-                  </Stack>
-                </Paper>
+                  </Paper>
+                </motion.div>
               ))}
             </Stack>
 
+            {/* ── Order summary ── */}
             <ResponsiveDisclosurePanel
               title="Order summary"
               titleVariant="h5"
-              action={<Chip label={formatPrice(total)} size="small" color="primary" sx={{ borderRadius: 999 }} />}
+              action={
+                <Chip
+                  label={formatPrice(total)}
+                  size="small"
+                  color="primary"
+                  sx={{ borderRadius: 999, fontWeight: 700 }}
+                />
+              }
               collapseBelow="xl"
               paperSx={{
                 position: { xl: "sticky" },
                 top: { xl: 96 },
+                borderRadius: 3,
+                border: "1.5px solid",
+                borderColor: "divider",
               }}
             >
-              <Stack spacing={2}>
-                <Stack spacing={1.25}>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">Subtotal</Typography>
-                    <Typography fontWeight={700}>{formatPrice(subtotal)}</Typography>
-                  </Stack>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">Shipping</Typography>
-                    <Typography fontWeight={700}>
-                      {shipping === 0 ? "Free" : formatPrice(shipping)}
+              <Stack spacing={2.5}>
+
+                {/* Free shipping progress */}
+                <Paper
+                  sx={(theme) => ({
+                    p: 2,
+                    borderRadius: 2,
+                    border: "1px solid",
+                    borderColor: hasFreeShipping
+                      ? alpha("#22C55E", 0.3)
+                      : theme.palette.divider,
+                    bgcolor: hasFreeShipping
+                      ? alpha("#22C55E", 0.06)
+                      : alpha(theme.palette.primary.main, 0.04),
+                  })}
+                >
+                  <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                    <LocalShippingRounded
+                      sx={{ fontSize: 18, color: hasFreeShipping ? "#22C55E" : "text.secondary" }}
+                    />
+                    <Typography variant="body2" fontWeight={700} color={hasFreeShipping ? "#16A34A" : "text.primary"}>
+                      {hasFreeShipping
+                        ? "You've unlocked free shipping!"
+                        : `${formatPrice(toFreeShipping)} away from free shipping`}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">Estimated tax</Typography>
-                    <Typography fontWeight={700}>{formatPrice(tax)}</Typography>
-                  </Stack>
+                  <LinearProgress
+                    variant="determinate"
+                    value={freeShippingProgress}
+                    sx={(theme) => ({
+                      borderRadius: 999,
+                      height: 6,
+                      bgcolor: alpha(theme.palette.primary.main, 0.12),
+                      "& .MuiLinearProgress-bar": {
+                        borderRadius: 999,
+                        bgcolor: hasFreeShipping ? "#22C55E" : "primary.main",
+                      },
+                    })}
+                  />
+                </Paper>
+
+                {/* Line items */}
+                <Stack spacing={1.25}>
+                  {[
+                    { label: "Subtotal", value: formatPrice(subtotal) },
+                    {
+                      label: "Shipping",
+                      value: shipping === 0 ? "Free" : formatPrice(shipping),
+                      valueColor: shipping === 0 ? "#22C55E" : undefined,
+                    },
+                    { label: "Estimated tax", value: formatPrice(tax) },
+                  ].map(({ label, value, valueColor }) => (
+                    <Stack key={label} direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="body2" color="text.secondary">{label}</Typography>
+                      <Typography variant="body2" fontWeight={700} color={valueColor ?? "text.primary"}>
+                        {value}
+                      </Typography>
+                    </Stack>
+                  ))}
                 </Stack>
 
                 <Divider />
 
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Total
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="h6" fontWeight={800}>Total</Typography>
+                  <Typography variant="h6" fontWeight={800} color="primary.main">
                     {formatPrice(total)}
                   </Typography>
                 </Stack>
 
-                <Typography variant="body2" color="text.secondary">
-                  Spend {formatPrice(Math.max(0, 200 - subtotal))} more to unlock free shipping.
-                </Typography>
-
+                {/* Checkout CTA */}
                 <Button
                   component={Link}
                   href="/checkout"
                   variant="contained"
+                  size="large"
                   endIcon={<ArrowForwardRounded />}
-                  sx={{ borderRadius: 999, py: 1.4, textTransform: "none", fontWeight: 900 }}
+                  fullWidth
+                  sx={{ fontWeight: 800, fontSize: "1rem", py: 1.5 }}
                 >
                   Proceed to checkout
                 </Button>
+
                 <Button
                   component={Link}
                   href="/products"
                   variant="outlined"
-                  sx={{ borderRadius: 999, py: 1.2, textTransform: "none", fontWeight: 900 }}
+                  size="medium"
+                  fullWidth
+                  sx={{ fontWeight: 700 }}
                 >
                   Continue shopping
                 </Button>
+
+                {/* Trust signal */}
+                <Stack direction="row" alignItems="center" spacing={1} justifyContent="center">
+                  <SecurityRounded sx={{ fontSize: 15, color: "#22C55E" }} />
+                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                    Secured by Spree escrow — pay safely
+                  </Typography>
+                </Stack>
               </Stack>
             </ResponsiveDisclosurePanel>
           </Box>
         )}
 
-        <Stack spacing={2}>
-          <Typography variant="h4" sx={{ fontWeight: 900, color: "text.primary" }}>
-            You might want these too
-          </Typography>
-          {recommendations.length ? (
+        {/* ── Recommendations ── */}
+        {recommendations.length > 0 && (
+          <Stack spacing={2.5}>
+            <Box>
+              <Typography variant="overline" color="primary.main" fontWeight={700}>Suggested</Typography>
+              <Typography variant="h5" fontWeight={700} color="text.primary">You might also like</Typography>
+            </Box>
             <Box
               sx={{
                 display: "grid",
-                gap: 1.5,
-                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+                gap: 1.75,
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 210px), 1fr))",
               }}
             >
               {recommendations.map((product) => (
                 <ProductCard key={product.id} product={product} size="compact" />
               ))}
             </Box>
-          ) : (
-            <Paper
-              elevation={0}
-              sx={{
-                p: 3,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-                backgroundColor: "action.hover",
-              }}
-            >
-              <Typography variant="body1" color="text.secondary">
-                More suggestions will appear here soon.
-              </Typography>
-            </Paper>
-          )}
-        </Stack>
+          </Stack>
+        )}
       </Stack>
     </Box>
   );

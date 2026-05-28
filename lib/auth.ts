@@ -1,8 +1,11 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { getBackendApiBaseUrl, getNextAuthSecret } from "@/lib/runtimeConfig";
+import { checkRateLimit, clearFailedAttempts } from "@/lib/rateLimit";
+import { isSafeCallbackUrl } from "@/lib/safeUrl";
 import { UserRole } from "@/types/types";
 
+const isProd = process.env.NODE_ENV === "production";
 const authSecret = getNextAuthSecret();
 
 interface BackendAuthUser {
@@ -16,9 +19,31 @@ export const authOptions: NextAuthOptions = {
   secret: authSecret,
   session: {
     strategy: "jwt",
+    maxAge: 7 * 24 * 60 * 60, // 7 days
+  },
+  cookies: {
+    sessionToken: {
+      name: isProd
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: isProd },
+    },
+    callbackUrl: {
+      name: isProd
+        ? "__Secure-next-auth.callback-url"
+        : "next-auth.callback-url",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: isProd },
+    },
+    csrfToken: {
+      name: isProd
+        ? "__Host-next-auth.csrf-token"
+        : "next-auth.csrf-token",
+      options: { httpOnly: true, sameSite: "lax", path: "/", secure: isProd },
+    },
   },
   pages: {
     signIn: "/auth/sign-in",
+    error: "/auth/error",
   },
   providers: [
     CredentialsProvider({
@@ -41,6 +66,10 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        if (!checkRateLimit(email).allowed) {
+          return null;
+        }
+
         try {
           const response = await fetch(`${getBackendApiBaseUrl()}/auth/login`, {
             method: "POST",
@@ -57,6 +86,7 @@ export const authOptions: NextAuthOptions = {
 
           const user = (await response.json()) as BackendAuthUser;
 
+          clearFailedAttempts(email);
           return {
             id: user.id,
             name: user.name,
@@ -69,7 +99,21 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
+  events: {
+    async signIn({ user }) {
+      // Clear the per-email pessimistic counter on successful login so the
+      // account is not locked out after 5 cumulative attempts (including successes).
+      if (user?.email) {
+        clearFailedAttempts(user.email);
+      }
+    },
+  },
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      return isSafeCallbackUrl(url)
+        ? new URL(url, baseUrl).toString()
+        : baseUrl;
+    },
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;

@@ -1,12 +1,13 @@
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
+import { unauthorized } from "@/lib/errors";
 import { proxyBackend } from "@/lib/serverApi";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) {
-    return Response.json({ detail: "Authentication required" }, { status: 401 });
+    return unauthorized();
   }
   return proxyBackend("/orders", {
     headers: {
@@ -18,13 +19,16 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
+  if (!session) {
+    return unauthorized();
+  }
   const body = await request.json();
 
   return proxyBackend(
     "/orders",
     {
       method: "POST",
-      body: JSON.stringify({ ...body, userId: session?.user?.id ?? null }),
+      body: JSON.stringify({ ...body, userId: session.user.id }),
       headers: { "Content-Type": "application/json" },
     },
     { internal: true }

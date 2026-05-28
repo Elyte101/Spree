@@ -28,6 +28,8 @@ export const useFavoritesStore = create<FavoritesStoreState>()(
       clearFavorites: () => set({ favoriteIds: [] }),
     }),
     {
+      // localStorage safety: persists only an array of product ID strings.
+      // No auth tokens, user IDs, addresses, or payment data are stored here.
       name: "spree-favorites",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ favoriteIds: state.favoriteIds }),

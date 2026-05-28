@@ -11,6 +11,14 @@ interface ThemeContextType {
 
 const STORAGE_KEY = "spree-theme-mode";
 
+function getInitialMode(): PaletteMode {
+  if (typeof window === "undefined") return "light";
+  const saved = window.localStorage.getItem(STORAGE_KEY);
+  if (saved === "light" || saved === "dark") return saved;
+  if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) return "dark";
+  return "light";
+}
+
 const ThemeContext = createContext<ThemeContextType>({
   mode: "light",
   toggleMode: () => {},
@@ -19,21 +27,7 @@ const ThemeContext = createContext<ThemeContextType>({
 export const useThemeContext = () => useContext(ThemeContext);
 
 export const CustomThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [mode, setMode] = useState<PaletteMode>("light");
-
-  React.useEffect(() => {
-    const savedMode = window.localStorage.getItem(STORAGE_KEY);
-
-    if (savedMode === "light" || savedMode === "dark") {
-      const timeoutId = window.setTimeout(() => {
-        setMode(savedMode);
-      }, 0);
-
-      return () => {
-        window.clearTimeout(timeoutId);
-      };
-    }
-  }, []);
+  const [mode, setMode] = useState<PaletteMode>(getInitialMode);
 
   React.useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, mode);

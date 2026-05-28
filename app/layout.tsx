@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Rubik, Nunito_Sans } from "next/font/google";
 
 import "./globals.css";
 
@@ -12,15 +12,23 @@ import ThemeRegistry from "@/components/providers/themeRegistry";
 
 import { getCart } from "@/lib/serverApi";
 
-const inter = Inter({
+const rubik = Rubik({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter",
+  variable: "--font-rubik",
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+});
+
+const nunitoSans = Nunito_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-nunito-sans",
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
-  title: "Spree",
-  description: "Spree storefront UI",
+  title: "Spree — Shop Safe. Pay Smart. Delivered.",
+  description: "Ghana's trusted marketplace with escrow protection, verified sellers, and Mobile Money payments.",
 };
 
 export default async function RootLayout({
@@ -33,7 +41,8 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.className} h-full antialiased`}
+      className={`${rubik.variable} ${nunitoSans.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
@@ -43,7 +52,7 @@ export default async function RootLayout({
                 <CartProvider initialCart={initialCart}>
                   <StoreAppBar />
 
-                  <main style={{ flex: 1, paddingTop: "60px" }}>
+                  <main style={{ flex: 1, paddingTop: "72px" }}>
                     {children}
                   </main>
                 </CartProvider>

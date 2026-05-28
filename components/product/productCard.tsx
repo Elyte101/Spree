@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Favorite, FavoriteBorder, LocalOfferOutlined, StarRounded } from "@mui/icons-material";
+import { Favorite, FavoriteBorder, ShoppingBagOutlined, StarRounded } from "@mui/icons-material";
 import {
   Box,
   Button,
@@ -14,6 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { motion, AnimatePresence } from "motion/react";
 import { useCart } from "@/components/providers/cartProvider";
 import { useFavorites } from "@/components/providers/favoritesProvider";
 import { Product } from "@/types/types";
@@ -24,401 +25,329 @@ interface ProductCardProps {
 }
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
-
-const sellerTypeLabels: Record<NonNullable<Product["sellerType"]>, string> = {
-  retail: "Retail",
-  wholesale: "Wholesale",
-};
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 
 export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const { addToCart } = useCart();
   const { isFavorite, toggleFavorite } = useFavorites();
   const [lastAddedAt, setLastAddedAt] = React.useState(0);
-  const isCompact = size === "compact";
+  const [hovered, setHovered] = React.useState(false);
   const liked = isFavorite(product.id);
-  const tallViewportQuery = "@media (min-height: 800px)";
   const recentlyAdded = lastAddedAt > 0;
+  const isCompact = size === "compact";
+  const discount = product.originalPrice
+    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+    : 0;
+
+  const allImages = product.images?.length ? product.images : [product.image];
+  const heroImage = hovered && allImages.length > 1 ? allImages[1] : allImages[0];
 
   React.useEffect(() => {
-    if (!recentlyAdded) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setLastAddedAt(0);
-    }, 1600);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    if (!recentlyAdded) return;
+    const id = window.setTimeout(() => setLastAddedAt(0), 1800);
+    return () => window.clearTimeout(id);
   }, [recentlyAdded, lastAddedAt]);
 
   return (
     <Card
       elevation={0}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       sx={(theme) => ({
         height: "100%",
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        borderRadius: isCompact ? 2 : 3,
+        borderRadius: 3,
         overflow: "hidden",
-        border: "1px solid",
-        borderColor: "divider",
+        border: "1.5px solid",
+        borderColor: hovered ? "primary.main" : theme.palette.divider,
         backgroundColor: "background.paper",
-        transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
-        ...(isCompact
-          ? {}
-          : {
-              [tallViewportQuery]: {
-                maxWidth: 420,
-                mx: "auto",
-              },
-            }),
+        transition: "transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease",
+        cursor: "pointer",
         "&:hover": {
-          transform: "translateY(-4px)",
-          boxShadow: `0 18px 40px ${alpha(
-            theme.palette.common.black,
-            theme.palette.mode === "dark" ? 0.28 : 0.12
-          )}`,
-          borderColor: "primary.main",
+          transform: "translateY(-5px)",
+          boxShadow: `0 20px 48px ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.14)}`,
         },
       })}
     >
-      <Box
-        sx={{
-          position: "relative",
-          px: isCompact ? 1.25 : 2,
-          pt: isCompact ? 1.25 : 2,
-          ...(isCompact
-            ? {}
-            : {
-                [tallViewportQuery]: {
-                  px: 1.75,
-                  pt: 1.75,
-                },
-              }),
-        }}
-      >
+      {/* Image zone */}
+      <Box sx={{ position: "relative", pt: isCompact ? 1.25 : 1.75, px: isCompact ? 1.25 : 1.75 }}>
         <Box
           component={Link}
           href={`/products/${product.slug}`}
-          sx={{
-            display: "block",
-            textDecoration: "none",
-          }}
+          sx={{ display: "block", textDecoration: "none" }}
         >
           <Box
             sx={(theme) => ({
               position: "relative",
-              minHeight: isCompact ? 180 : 260,
-              aspectRatio: isCompact ? "4 / 5" : "5 / 6",
-              borderRadius: isCompact ? 2.5 : 3,
-              background: `linear-gradient(145deg, ${alpha(
-                theme.palette.primary.main,
-                theme.palette.mode === "dark" ? 0.2 : 0.14
-              )}, ${alpha(
-                theme.palette.background.default,
-                theme.palette.mode === "dark" ? 0.92 : 0.95
-              )})`,
+              aspectRatio: "4 / 3.6",
+              borderRadius: 2.5,
               overflow: "hidden",
-              ...(isCompact
-                ? {}
-                : {
-                    [tallViewportQuery]: {
-                      minHeight: 220,
-                    },
-                  }),
+              // Theme-aware background shows around product images (contain keeps whitespace visible)
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? alpha(theme.palette.primary.main, 0.08)
+                  : alpha(theme.palette.primary.main, 0.04),
             })}
-            >
-            <Image
-              src={product.image}
-              alt={product.name}
-              fill
-              sizes={
-                isCompact
-                  ? "(max-width: 600px) 100vw, (max-width: 1200px) 33vw, 220px"
-                  : "(max-width: 900px) 100vw, 420px"
-              }
-              style={{
-                objectFit: "cover",
-                objectPosition: "center",
-              }}
-            />
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={heroImage}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                style={{ position: "absolute", inset: 0 }}
+              >
+                <Image
+                  src={heroImage}
+                  alt={product.name}
+                  fill
+                  sizes={isCompact ? "(max-width: 600px) 100vw, 33vw" : "(max-width: 900px) 100vw, 420px"}
+                  style={{ objectFit: "contain", padding: "12px" }}
+                />
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Image dot indicators */}
+            {allImages.length > 1 && (
+              <Stack
+                direction="row"
+                spacing={0.5}
+                sx={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)" }}
+              >
+                {allImages.slice(0, 4).map((_, i) => (
+                  <Box
+                    key={i}
+                    sx={(theme) => ({
+                      width: i === (hovered ? 1 : 0) ? 16 : 6,
+                      height: 6,
+                      borderRadius: 999,
+                      backgroundColor: alpha(theme.palette.common.white, 0.9),
+                      transition: "width 0.2s ease",
+                    })}
+                  />
+                ))}
+              </Stack>
+            )}
           </Box>
         </Box>
+
+        {/* Overlaid badges */}
         <Stack
           direction="row"
           justifyContent="space-between"
           alignItems="flex-start"
           sx={{
             position: "absolute",
-            top: isCompact ? 16 : 24,
-            left: isCompact ? 16 : 24,
-            right: isCompact ? 16 : 24,
+            top: isCompact ? 18 : 24,
+            left: isCompact ? 18 : 24,
+            right: isCompact ? 18 : 24,
             pointerEvents: "none",
           }}
         >
-          {product.badge ? (
-            <Chip
-              icon={<LocalOfferOutlined />}
-              label={product.badge}
-              size="small"
-              sx={(theme) => ({
-                pointerEvents: "auto",
-                borderRadius: 2,
-                color: theme.palette.text.primary,
-                border: "1px solid",
-                borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.42 : 0.18),
-                backgroundColor: alpha(
-                  theme.palette.background.paper,
-                  theme.palette.mode === "dark" ? 0.82 : 0.9
-                ),
-                backdropFilter: "blur(8px)",
-                height: isCompact ? 24 : undefined,
-                "& .MuiChip-label": {
-                  px: isCompact ? 0.75 : undefined,
-                },
-                "& .MuiChip-icon": {
-                  color: theme.palette.primary.main,
-                },
-              })}
-            />
-          ) : (
-            <span />
-          )}
+          <Stack direction="column" spacing={0.5}>
+            {discount > 0 && (
+              <Chip
+                label={`−${discount}%`}
+                size="small"
+                sx={(theme) => ({
+                  pointerEvents: "auto",
+                  borderRadius: 1.5,
+                  height: 22,
+                  fontWeight: 800,
+                  fontSize: "0.7rem",
+                  backgroundColor: theme.palette.error.main,
+                  color: "#fff",
+                  "& .MuiChip-label": { px: 0.75 },
+                })}
+              />
+            )}
+            {product.badge && !discount && (
+              <Chip
+                label={product.badge}
+                size="small"
+                sx={(theme) => ({
+                  pointerEvents: "auto",
+                  borderRadius: 1.5,
+                  height: 22,
+                  fontWeight: 700,
+                  fontSize: "0.7rem",
+                  backgroundColor: alpha(theme.palette.background.paper, 0.9),
+                  backdropFilter: "blur(8px)",
+                  border: "1px solid",
+                  borderColor: theme.palette.divider,
+                  "& .MuiChip-label": { px: 0.75 },
+                })}
+              />
+            )}
+          </Stack>
+
           <IconButton
             size="small"
-            aria-label={liked ? `Remove ${product.name} from saved items` : `Save ${product.name}`}
-            onClick={() => toggleFavorite(product.id)}
+            aria-label={liked ? `Remove ${product.name} from saved` : `Save ${product.name}`}
+            onClick={(e) => { e.preventDefault(); toggleFavorite(product.id); }}
             sx={(theme) => ({
               pointerEvents: "auto",
-              color: liked ? theme.palette.primary.main : theme.palette.text.primary,
-              border: "1px solid",
-              borderColor: liked
-                ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.66 : 0.34)
-                : alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.38 : 0.16),
-              backgroundColor: liked
-                ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.12)
-                : alpha(
-                    theme.palette.background.paper,
-                    theme.palette.mode === "dark" ? 0.82 : 0.9
-                  ),
+              width: 30,
+              height: 30,
+              color: liked ? "#EF4444" : theme.palette.text.primary,
+              backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.82 : 0.92),
               backdropFilter: "blur(8px)",
-              p: isCompact ? 0.625 : undefined,
-              transition:
-                "background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease",
+              border: "1px solid",
+              borderColor: liked ? alpha("#EF4444", 0.3) : theme.palette.divider,
+              transition: "all 0.18s ease",
               "&:hover": {
-                backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.24 : 0.16),
-                borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.72 : 0.36),
-                color: theme.palette.primary.main,
-                transform: "translateY(-1px)",
+                backgroundColor: alpha("#EF4444", 0.08),
+                borderColor: alpha("#EF4444", 0.4),
+                color: "#EF4444",
+                transform: "scale(1.08)",
               },
             })}
           >
-            {liked ? <Favorite fontSize="small" /> : <FavoriteBorder fontSize="small" />}
+            {liked
+              ? <Favorite sx={{ fontSize: 15 }} />
+              : <FavoriteBorder sx={{ fontSize: 15 }} />}
           </IconButton>
         </Stack>
       </Box>
 
+      {/* Content */}
       <Stack
-        spacing={isCompact ? 1.1 : 1.35}
-        sx={{
-          p: isCompact ? 1.5 : 2.25,
-          flexGrow: 1,
-          ...(isCompact
-            ? {}
-            : {
-                [tallViewportQuery]: {
-                  p: 2,
-                },
-              }),
-        }}
+        spacing={isCompact ? 1 : 1.25}
+        sx={{ p: isCompact ? 1.5 : 2, flexGrow: 1, pt: isCompact ? 1.25 : 1.5 }}
       >
-        <Stack direction="row" justifyContent="space-between" spacing={2}>
-          <Box width="100%">
-            <Stack direction="row" justifyContent="space-between" alignItems="center" alignContent="center" sx={{ mb:"5px" }}>
-              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 1 }}>
-                {product.brand.toUpperCase()}
-              </Typography>
-              <Chip
-              label={product.inStock ? "In Stock" : "Preorder"}
-              color={product.inStock ? "success" : "warning"}
-              size="small"
-              variant="filled"
-              />
-            </Stack>
-            <Typography
-              component={Link}
-              href={`/products/${product.slug}`}
-              variant={isCompact ? "subtitle1" : "h6"}
-              sx={{
-                mt: 0.5,
-                lineHeight: 1.2,
-                fontWeight: isCompact ? 700 : undefined,
-                color: "text.primary",
-                textDecoration: "none",
-                "&:hover": {
-                  color: "primary.main",
-                },
-              }}
-            >
-              {product.name}
-            </Typography>
-            {product.storeName && product.storeSlug ? (
-              <Stack spacing={0.75} sx={{ mt: 0.5 }}>
-                <Typography
-                  component={Link}
-                  href={`/stores/${product.storeSlug}`}
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{
-                    display: "inline-block",
-                    width: "fit-content",
-                    textDecoration: "none",
-                    "&:hover": {
-                      color: "primary.main",
-                    },
-                  }}
-                >
-                  Sold by {product.storeName}
-                </Typography>
-                <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
-                  {product.sellerType ? (
-                    <Chip
-                      label={sellerTypeLabels[product.sellerType]}
-                      size="small"
-                      variant="outlined"
-                    />
-                  ) : null}
-                  {product.sellerBadge ? (
-                    <Chip
-                      label={product.sellerBadge}
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                    />
-                  ) : null}
-                </Stack>
-              </Stack>
-            ) : null}
-          </Box>
+        {/* Brand + stock */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ letterSpacing: "0.08em", fontWeight: 700, textTransform: "uppercase", fontSize: "0.65rem" }}
+          >
+            {product.brand}
+          </Typography>
+          <Chip
+            label={product.inStock ? "In stock" : "Preorder"}
+            size="small"
+            color={product.inStock ? "success" : "warning"}
+            sx={{ height: 18, fontSize: "0.62rem", fontWeight: 700, "& .MuiChip-label": { px: 0.75 } }}
+          />
         </Stack>
 
+        {/* Name */}
         <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={
-            isCompact
-              ? {
-                  display: "-webkit-box",
-                  overflow: "hidden",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                }
-              : {
-                  display: "-webkit-box",
-                  overflow: "hidden",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                }
-          }
+          component={Link}
+          href={`/products/${product.slug}`}
+          variant={isCompact ? "subtitle1" : "h6"}
+          sx={{
+            lineHeight: 1.25,
+            fontWeight: 700,
+            color: "text.primary",
+            textDecoration: "none",
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+            "&:hover": { color: "primary.main" },
+          }}
         >
-          {product.description}
+          {product.name}
         </Typography>
 
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-          {product.colors.slice(0, isCompact ? 2 : 3).map((color) => (
-            <Chip key={color} label={color} size="small" variant="outlined" />
-          ))}
-        </Stack>
+        {/* Store */}
+        {product.storeName && product.storeSlug && (
+          <Typography
+            component={Link}
+            href={`/stores/${product.storeSlug}`}
+            variant="caption"
+            color="text.secondary"
+            sx={{ textDecoration: "none", "&:hover": { color: "primary.main" } }}
+          >
+            by {product.storeName}
+          </Typography>
+        )}
 
+        {/* Rating */}
         <Stack direction="row" alignItems="center" spacing={0.5}>
-          <StarRounded color="warning" sx={{ fontSize: 18 }} />
-          <Typography variant="body2" fontWeight={700}>
+          <StarRounded sx={{ fontSize: 15, color: "#F59E0B" }} />
+          <Typography variant="caption" fontWeight={700} color="text.primary">
             {product.rating.toFixed(1)}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            ({product.reviewsCount} reviews)
+          <Typography variant="caption" color="text.secondary">
+            ({product.reviewsCount})
           </Typography>
         </Stack>
 
+        {/* Price + CTA */}
         <Stack
           direction="row"
-          alignItems="flex-end"
+          alignItems="center"
           justifyContent="space-between"
-          spacing={1}
-          sx={{ mt: "auto", pt: isCompact ? 0.5 : 1 }}
+          sx={{ mt: "auto", pt: isCompact ? 0.5 : 0.75 }}
         >
           <Box>
-            <Typography variant={isCompact ? "subtitle1" : "h6"} fontWeight={800}>
+            <Typography
+              variant={isCompact ? "subtitle1" : "h6"}
+              fontWeight={800}
+              color="primary.main"
+              lineHeight={1}
+            >
               {formatPrice(product.price)}
             </Typography>
-            {product.originalPrice ? (
+            {product.originalPrice && (
               <Typography
-                variant="body2"
+                variant="caption"
                 color="text.secondary"
-                sx={{ textDecoration: "line-through" }}
+                sx={{ textDecoration: "line-through", lineHeight: 1.2 }}
               >
                 {formatPrice(product.originalPrice)}
               </Typography>
-            ) : null}
+            )}
           </Box>
-          <Stack
-            direction={isCompact ? "column" : { xs: "column", sm: "row" }}
-            spacing={0.75}
-            alignItems="stretch"
-          >
-            <Button
-              component={Link}
-              href={`/products/${product.slug}`}
-              variant="outlined"
-              size={isCompact ? "small" : "medium"}
-              sx={{
-                borderRadius: 999,
-                px: isCompact ? 1.5 : 2,
-                textTransform: "none",
-                fontWeight: 900,
-                whiteSpace: "nowrap",
-              }}
+
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={recentlyAdded ? "added" : "add"}
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.85 }}
+              transition={{ duration: 0.18 }}
             >
-              {isCompact ? "Details" : "View Details"}
-            </Button>
-            <Button
-              variant="contained"
-              size={isCompact ? "small" : "medium"}
-              disableElevation
-              onClick={() => {
-                addToCart(product, {
-                  color: product.colors[0],
-                  size: product.sizes?.[0],
-                  isPreorder: !product.inStock,
-                });
-                setLastAddedAt(Date.now());
-              }}
-              sx={{
-                borderRadius: 999,
-                px: isCompact ? 1.75 : 2.5,
-                textTransform: "none",
-                fontWeight: 900,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {recentlyAdded
-                ? product.inStock
-                  ? "Added"
-                  : "Preordered"
-                : !product.inStock
-                  ? "Preorder"
-                  : isCompact
-                    ? "Add"
-                    : "Add to Cart"}
-            </Button>
-          </Stack>
+              <Button
+                variant={recentlyAdded ? "outlined" : "contained"}
+                size="small"
+                color={recentlyAdded ? "success" : "primary"}
+                disableElevation
+                startIcon={!recentlyAdded ? <ShoppingBagOutlined sx={{ fontSize: "14px !important" }} /> : undefined}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (recentlyAdded) return;
+                  addToCart(product, {
+                    color: product.colors[0],
+                    size: product.sizes?.[0],
+                    isPreorder: !product.inStock,
+                  });
+                  setLastAddedAt(Date.now());
+                }}
+                sx={{
+                  borderRadius: 999,
+                  px: isCompact ? 1.5 : 2,
+                  py: 0.6,
+                  fontWeight: 700,
+                  fontSize: "0.75rem",
+                  whiteSpace: "nowrap",
+                  minWidth: 80,
+                }}
+              >
+                {recentlyAdded
+                  ? "Added ✓"
+                  : !product.inStock
+                    ? "Preorder"
+                    : isCompact ? "Add" : "Add to cart"}
+              </Button>
+            </motion.div>
+          </AnimatePresence>
         </Stack>
       </Stack>
     </Card>

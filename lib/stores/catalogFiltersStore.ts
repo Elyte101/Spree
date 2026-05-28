@@ -47,6 +47,9 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
       reset: () => set(defaultFilters),
     }),
     {
+      // localStorage safety: persists only UI filter/sort state (search text,
+      // category, brand, collection, sort order, page, inStockOnly toggle).
+      // No auth tokens, user IDs, addresses, or payment data are stored here.
       name: "spree-catalog-filters",
       storage: createJSONStorage(() => localStorage),
     }

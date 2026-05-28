@@ -1,12 +1,25 @@
 import { getServerSession } from "next-auth";
-import { NextResponse } from "next/server";
 
 import { authOptions } from "@/lib/auth";
+import { badRequest, unauthorized } from "@/lib/errors";
+import { CreateOrderSchema, parseOrBadRequest } from "@/lib/validation";
 import { proxyBackend } from "@/lib/serverApi";
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
-  const body = await request.json();
+  if (!session) {
+    return unauthorized();
+  }
+
+  let raw: unknown;
+  try {
+    raw = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON");
+  }
+
+  const parsed = parseOrBadRequest(CreateOrderSchema, raw);
+  if (!parsed.ok) return parsed.response;
 
   const callbackUrl = new URL("/checkout/verify", request.url).toString();
 
@@ -15,7 +28,7 @@ export async function POST(request: Request) {
     backendUrl,
     {
       method: "POST",
-      body: JSON.stringify({ ...body, userId: session?.user?.id ?? null }),
+      body: JSON.stringify({ ...parsed.data, userId: session.user.id }),
       headers: { "Content-Type": "application/json" },
     },
     { internal: true }

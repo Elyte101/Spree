@@ -53,6 +53,7 @@ export default function ThemeRegistry({
     return (
       <style
         data-emotion={`${cache.key} ${names.join(' ')}`}
+        // eslint-disable-next-line react/no-danger -- Emotion injects its own generated CSS; no user content involved
         dangerouslySetInnerHTML={{ __html: styles }}
       />
     );

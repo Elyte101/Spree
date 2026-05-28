@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+
+# Keep admin and API surfaces private
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /checkout/
+
+Sitemap: /sitemap.xml

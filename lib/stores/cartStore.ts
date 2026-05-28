@@ -206,6 +206,9 @@ export const useCartStore = create<CartStoreState>()(
       },
     }),
     {
+      // localStorage safety: persists only product IDs, names, images, prices,
+      // quantities, and variant selections (color/size). No auth tokens, user IDs,
+      // addresses, or payment data are stored here.
       name: "spree-cart",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ cart: state.cart }),

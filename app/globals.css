@@ -11,5 +11,5 @@ body {
 
 body {
   margin: 0;
-  font-family: "UI Sans", "Lato", "HelveticaNeue", Helvetica Neue, Helvetica, Arial, sans-serif;
+  font-family: var(--font-nunito-sans), var(--font-rubik), "Helvetica Neue", Arial, sans-serif;
 }

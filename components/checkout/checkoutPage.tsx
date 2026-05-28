@@ -7,8 +7,7 @@ import {
   CreditCardRounded,
   LockOutlined,
   LocalShippingRounded,
-  PhoneAndroidRounded,
-  AccountBalanceWalletRounded,
+  OpenInNewRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -91,16 +90,9 @@ const shippingOptions = [
   },
 ];
 
-const paymentOptions = [
-  { value: "card", label: "Credit or debit card", icon: <CreditCardRounded fontSize="small" /> },
-  { value: "paypal", label: "PayPal", icon: <AccountBalanceWalletRounded fontSize="small" /> },
-  { value: "wallet", label: "Mobile wallet", icon: <PhoneAndroidRounded fontSize="small" /> },
-];
-
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
   const { cart } = useCart();
   const [shippingMethod, setShippingMethod] = React.useState("standard");
-  const [paymentMethod, setPaymentMethod] = React.useState("card");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
@@ -160,7 +152,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
           postalCode: form.postalCode.trim(),
           country: form.country.trim(),
           shippingMethod,
-          paymentMethod,
+          paymentMethod: "paystack",
           subtotal: cart.subtotal,
           shippingCost: shipping,
           tax: cart.tax,
@@ -482,10 +474,10 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     <StepBadge n={3} />
                     <Box>
                       <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-                        Payment method
+                        Payment
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        How would you like to pay?
+                        Handled securely by Paystack
                       </Typography>
                     </Box>
                   </Stack>
@@ -493,105 +485,19 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                   <Divider />
 
                   <Stack spacing={1.5}>
-                    {paymentOptions.map((method) => {
-                      const isSelected = paymentMethod === method.value;
-                      return (
-                        <motion.div
-                          key={method.value}
-                          whileTap={{ scale: 0.985 }}
-                          transition={{ duration: 0.12 }}
-                        >
-                          <Box
-                            onClick={() => setPaymentMethod(method.value)}
-                            sx={(theme) => ({
-                              p: 2,
-                              borderRadius: 2,
-                              border: "1.5px solid",
-                              borderColor: isSelected ? "primary.main" : "divider",
-                              bgcolor: isSelected
-                                ? alpha(theme.palette.primary.main, 0.05)
-                                : "transparent",
-                              cursor: "pointer",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1.5,
-                              transition: "border-color 0.18s, background-color 0.18s",
-                              "&:hover": {
-                                borderColor: isSelected ? "primary.main" : "text.disabled",
-                              },
-                            })}
-                          >
-                            <Radio
-                              checked={isSelected}
-                              onChange={() => setPaymentMethod(method.value)}
-                              size="small"
-                              sx={{ p: 0 }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <Box
-                              sx={{
-                                color: isSelected ? "primary.main" : "text.secondary",
-                                display: "flex",
-                                transition: "color 0.18s",
-                              }}
-                            >
-                              {method.icon}
-                            </Box>
-                            <Typography fontWeight={isSelected ? 700 : 400}>
-                              {method.label}
-                            </Typography>
-                          </Box>
-                        </motion.div>
-                      );
-                    })}
+                    <Typography variant="body2" color="text.secondary">
+                      After you place your order you will be redirected to Paystack&apos;s secure
+                      payment page. Paystack accepts cards, bank transfers, and mobile money.
+                      Card details are never entered on this site.
+                    </Typography>
+                    <Chip
+                      icon={<OpenInNewRounded fontSize="small" />}
+                      label="Redirects to Paystack — PCI-DSS compliant"
+                      color="success"
+                      variant="outlined"
+                      sx={{ width: "fit-content", borderRadius: 999 }}
+                    />
                   </Stack>
-
-                  {/* Payment detail panel */}
-                  <AnimatePresence mode="wait" initial={false}>
-                    {paymentMethod === "card" ? (
-                      <motion.div
-                        key="card"
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.32, ease }}
-                        style={{ overflow: "hidden" }}
-                      >
-                        <Box
-                          sx={{
-                            display: "grid",
-                            gap: 2,
-                            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))" },
-                          }}
-                        >
-                          <TextField
-                            label="Card number"
-                            placeholder="1234 5678 9012 3456"
-                            slotProps={{ htmlInput: { maxLength: 19 } }}
-                            sx={{ gridColumn: { sm: "1 / -1" } }}
-                          />
-                          <TextField label="Expiry" placeholder="MM / YY" />
-                          <TextField label="CVC" placeholder="···" />
-                          <TextField
-                            label="Name on card"
-                            sx={{ gridColumn: { sm: "1 / -1" } }}
-                          />
-                        </Box>
-                      </motion.div>
-                    ) : (
-                      <motion.div
-                        key="alt"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Alert severity="info" sx={{ borderRadius: 2 }}>
-                          This payment method will be activated once a provider is configured.
-                        </Alert>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </Stack>
               </Paper>
             </motion.div>

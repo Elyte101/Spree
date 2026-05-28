@@ -5,7 +5,6 @@ import Image from "next/image";
 import { motion } from "motion/react";
 import {
   ArrowForwardRounded,
-  CheckCircleOutlined,
   LocalShippingRounded,
   PhoneAndroidRounded,
   SecurityRounded,
@@ -29,6 +28,23 @@ import { HomeFeed, Product } from "@/types/types";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
+};
+const staggerItem = {
+  hidden: { opacity: 0, y: 18 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease } },
+};
+const scaleItem = {
+  hidden: { opacity: 0, scale: 0.92 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.36, ease } },
+};
+const sectionHeader = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease } },
+};
+
 interface LandingPageProps {
   homeFeed: HomeFeed;
   featuredProducts: Product[];
@@ -42,28 +58,32 @@ const formatPrice = (price: number) =>
 
 const trustPillars = [
   {
-    icon: <SecurityRounded />,
+    icon: <SecurityRounded sx={{ fontSize: 22 }} />,
     title: "Escrow Protection",
-    desc: "Your payment is held safely until you confirm delivery. No risk, no stress.",
-    color: "primary" as const,
+    desc: "Your payment is held safely until you confirm delivery.",
+    color: "#655AFF",
+    bg: "rgba(101,90,255,0.1)",
   },
   {
-    icon: <VerifiedRounded />,
+    icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
     title: "Verified Sellers",
-    desc: "Every seller submits a Ghana Card and selfie before they can list a product.",
-    color: "success" as const,
+    desc: "Every seller submits a Ghana Card and selfie before listing.",
+    color: "#22C55E",
+    bg: "rgba(34,197,94,0.1)",
   },
   {
-    icon: <PhoneAndroidRounded />,
+    icon: <PhoneAndroidRounded sx={{ fontSize: 22 }} />,
     title: "Mobile Money",
-    desc: "Pay and receive via MTN MoMo, Vodafone Cash, AirtelTigo, or card.",
-    color: "info" as const,
+    desc: "Pay via MTN MoMo, Vodafone Cash, AirtelTigo, or card.",
+    color: "#0EA5E9",
+    bg: "rgba(14,165,233,0.1)",
   },
   {
-    icon: <LocalShippingRounded />,
+    icon: <LocalShippingRounded sx={{ fontSize: 22 }} />,
     title: "Live Tracking",
-    desc: "Track every order from dispatch to your door with real-time updates.",
-    color: "warning" as const,
+    desc: "Real-time updates from dispatch to your door.",
+    color: "#F59E0B",
+    bg: "rgba(245,158,11,0.1)",
   },
 ];
 
@@ -72,19 +92,22 @@ const escrowSteps = [
     step: "01",
     title: "You pay into escrow",
     body: "Place your order and pay via MoMo, card, or Vodafone Cash. Your money is held safely — the seller receives nothing yet.",
-    color: "primary" as const,
+    accent: "#655AFF",
+    icon: <SecurityRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "02",
     title: "Seller dispatches",
     body: "The verified seller packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
-    color: "info" as const,
+    accent: "#0EA5E9",
+    icon: <LocalShippingRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "03",
     title: "You confirm — seller gets paid",
-    body: "Once you confirm delivery, Spree releases the seller's payment instantly to their MoMo or bank. No delivery = no payment.",
-    color: "success" as const,
+    body: "Once you confirm delivery, Spree releases payment instantly to the seller's MoMo or bank. No delivery = no payment.",
+    accent: "#22C55E",
+    icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
   },
 ];
 
@@ -100,88 +123,94 @@ export function LandingPage({
 
   return (
     <Box component="main" sx={{ minHeight: "100vh", overflowX: "hidden" }}>
-      {/* ── HERO ─────────────────────────────────────────────────── */}
+
+      {/* ── HERO ─────────────────────────────────────── */}
       <Box
         sx={(theme) => ({
           position: "relative",
-          pt: { xs: 10, md: 12 },
+          pt: { xs: 8, md: 10 },
           pb: { xs: 7, md: 9 },
-          background: `
-            radial-gradient(ellipse 70% 55% at 50% -10%,
-              ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.28 : 0.16)} 0%,
-              transparent 65%),
-            radial-gradient(ellipse 40% 40% at 90% 40%,
-              ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.2 : 0.1)} 0%,
-              transparent 60%),
-            ${theme.palette.background.default}
-          `,
+          overflow: "hidden",
+          background:
+            theme.palette.mode === "dark"
+              ? `radial-gradient(ellipse 80% 60% at 50% -5%, ${alpha(theme.palette.primary.main, 0.3)} 0%, transparent 65%), ${theme.palette.background.default}`
+              : `radial-gradient(ellipse 80% 60% at 50% -5%, ${alpha(theme.palette.primary.main, 0.14)} 0%, transparent 65%), #F5F4FF`,
         })}
       >
+        {/* Decorative blobs */}
+        <Box
+          aria-hidden
+          sx={(theme) => ({
+            position: "absolute",
+            right: -120,
+            top: -60,
+            width: 500,
+            height: 500,
+            borderRadius: "50%",
+            background: `radial-gradient(circle, ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.18 : 0.1)} 0%, transparent 70%)`,
+            pointerEvents: "none",
+          })}
+        />
+
         <Container maxWidth="lg">
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "1fr 400px" },
-              gap: { xs: 5, lg: 7 },
+              gridTemplateColumns: { xs: "1fr", lg: "1fr 380px" },
+              gap: { xs: 5, lg: 8 },
               alignItems: "center",
             }}
           >
             {/* Left — copy */}
-            <Stack gap={3.5}>
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease }}
-              >
+            <Stack gap={3}>
+              <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
                 <Chip
-                  icon={<VerifiedRounded />}
+                  icon={<VerifiedRounded sx={{ fontSize: "16px !important" }} />}
                   label="Ghana's trusted marketplace"
-                  color="primary"
-                  sx={{ width: "fit-content", borderRadius: 999, fontWeight: 700 }}
+                  sx={(theme) => ({
+                    width: "fit-content",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    height: 30,
+                    backgroundColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.1),
+                    color: "primary.main",
+                    border: "1px solid",
+                    borderColor: alpha(theme.palette.primary.main, 0.25),
+                    "& .MuiChip-icon": { color: "primary.main" },
+                  })}
                 />
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 28 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.06, ease }}
-              >
+              <motion.div initial={{ opacity: 0, y: 26 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.06, ease }}>
                 <Typography
                   variant="h1"
-                  sx={(theme) => ({
+                  sx={{
                     fontWeight: 900,
-                    lineHeight: 0.92,
-                    fontSize: { xs: "2.75rem", sm: "3.8rem", md: "4.8rem" },
-                    letterSpacing: "-0.025em",
-                    color: theme.palette.text.primary,
-                  })}
+                    lineHeight: 0.93,
+                    fontSize: { xs: "2.8rem", sm: "3.6rem", md: "4.6rem" },
+                    letterSpacing: "-0.03em",
+                    color: "text.primary",
+                  }}
                 >
                   {hero?.title ?? (
                     <>
-                      Shop safe.
-                      <br />
-                      <Box component="span" sx={{ color: "primary.main" }}>
-                        Pay smart.
-                      </Box>
-                      <br />
-                      Delivered.
+                      Shop safe.{" "}
+                      <Box component="span" sx={{ color: "primary.main" }}>Pay smart.</Box>
+                      {" "}Delivered.
                     </>
                   )}
                 </Typography>
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.45, delay: 0.12, ease }}
-              >
+              <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, delay: 0.12, ease }}>
                 <Typography
-                  variant="h6"
+                  variant="body1"
                   sx={(theme) => ({
-                    maxWidth: 560,
-                    fontWeight: 400,
-                    lineHeight: 1.65,
-                    color: alpha(theme.palette.text.primary, 0.72),
+                    maxWidth: 520,
+                    fontSize: { xs: "1rem", md: "1.1rem" },
+                    color: alpha(theme.palette.text.primary, 0.68),
+                    lineHeight: 1.7,
                   })}
                 >
                   {hero?.subtitle ??
@@ -189,11 +218,7 @@ export function LandingPage({
                 </Typography>
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.17, ease }}
-              >
+              <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.17, ease }}>
                 <Stack direction={{ xs: "column", sm: "row" }} gap={1.5}>
                   <Button
                     component={Link}
@@ -201,14 +226,7 @@ export function LandingPage({
                     variant="contained"
                     size="large"
                     endIcon={<ArrowForwardRounded />}
-                    sx={{
-                      borderRadius: 999,
-                      px: 3.5,
-                      py: 1.5,
-                      textTransform: "none",
-                      fontWeight: 800,
-                      fontSize: "1rem",
-                    }}
+                    sx={{ fontWeight: 800, fontSize: "0.95rem" }}
                   >
                     {hero?.ctaLabel ?? (hasProducts ? "Shop now" : "Browse the shop")}
                   </Button>
@@ -218,27 +236,16 @@ export function LandingPage({
                     variant="outlined"
                     size="large"
                     startIcon={<StorefrontOutlined />}
-                    sx={{
-                      borderRadius: 999,
-                      px: 3.5,
-                      py: 1.5,
-                      textTransform: "none",
-                      fontWeight: 800,
-                      fontSize: "1rem",
-                    }}
+                    sx={{ fontWeight: 700, fontSize: "0.95rem" }}
                   >
                     Sell on Spree
                   </Button>
                 </Stack>
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.25, ease }}
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4, delay: 0.25, ease }}>
                 <Stack direction="row" gap={1} flexWrap="wrap" alignItems="center">
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  <Typography variant="caption" color="text.secondary" fontWeight={700}>
                     Pay with:
                   </Typography>
                   {["MTN MoMo", "Vodafone Cash", "AirtelTigo", "Card"].map((m) => (
@@ -247,7 +254,14 @@ export function LandingPage({
                       label={m}
                       size="small"
                       variant="outlined"
-                      sx={{ borderRadius: 999, fontWeight: 600 }}
+                      sx={(theme) => ({
+                        borderRadius: 999,
+                        fontWeight: 600,
+                        fontSize: "0.7rem",
+                        height: 22,
+                        borderColor: theme.palette.divider,
+                        "& .MuiChip-label": { px: 1 },
+                      })}
                     />
                   ))}
                 </Stack>
@@ -256,74 +270,81 @@ export function LandingPage({
 
             {/* Right — stats card */}
             <motion.div
-              initial={{ opacity: 0, x: 32, scale: 0.97 }}
+              initial={{ opacity: 0, x: 28, scale: 0.97 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               transition={{ duration: 0.55, delay: 0.1, ease }}
             >
               <Paper
-                elevation={0}
                 sx={(theme) => ({
-                  border: "1px solid",
-                  borderColor: "divider",
+                  border: "1.5px solid",
+                  borderColor: theme.palette.divider,
                   borderRadius: 4,
                   overflow: "hidden",
-                  background: `linear-gradient(145deg, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.15 : 0.07)}, ${theme.palette.background.paper})`,
+                  background:
+                    theme.palette.mode === "dark"
+                      ? `linear-gradient(145deg, ${alpha(theme.palette.primary.main, 0.14)}, ${theme.palette.background.paper})`
+                      : `linear-gradient(145deg, ${alpha(theme.palette.primary.main, 0.06)}, ${theme.palette.background.paper})`,
                 })}
               >
+                {/* Logo showcase area */}
                 <Box
                   sx={(theme) => ({
                     position: "relative",
-                    p: 4,
+                    p: 3.5,
                     display: "flex",
+                    flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "center",
-                    minHeight: 200,
-                    background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.13)}, ${alpha(theme.palette.secondary.main, 0.08)})`,
+                    gap: 1.5,
+                    background:
+                      theme.palette.mode === "dark"
+                        ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.18)}, ${alpha(theme.palette.secondary.main, 0.1)})`
+                        : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)}, ${alpha(theme.palette.secondary.main, 0.05)})`,
                   })}
                 >
                   <Image
                     src="/spreelogo.png"
                     alt="Spree"
-                    width={165}
-                    height={165}
-                    style={{ objectFit: "contain", borderRadius: 9, marginBottom: "10px" }}
+                    width={110}
+                    height={110}
+                    style={{ objectFit: "contain", borderRadius: 16 }}
                     priority
-                    
                   />
                   <Chip
-                    icon={<CheckCircleOutlined />}
+                    icon={<SecurityRounded sx={{ fontSize: "14px !important", color: "#22C55E !important" }} />}
                     label="Escrow protected"
-                    color="success"
                     size="small"
                     sx={{
-                      position: "absolute",
-                      bottom: 12,
                       borderRadius: 999,
                       fontWeight: 700,
+                      fontSize: "0.72rem",
+                      height: 24,
+                      backgroundColor: alpha("#22C55E", 0.12),
+                      color: "#16A34A",
+                      border: "1px solid",
+                      borderColor: alpha("#22C55E", 0.25),
+                      "& .MuiChip-label": { px: 0.75 },
                     }}
                   />
                 </Box>
 
+                {/* Stats grid */}
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
                   {[
                     { label: "Products", value: totalProducts.toLocaleString() },
                     { label: "Categories", value: homeFeed.categories.length.toString() },
                     { label: "Collections", value: homeFeed.collections.length.toString() },
-                    {
-                      label: "Avg. rating",
-                      value: hasProducts ? `${averageRating.toFixed(1)} ★` : "—",
-                    },
+                    { label: "Avg rating", value: hasProducts ? `${averageRating.toFixed(1)} ★` : "—" },
                   ].map((stat, i) => (
                     <Box
                       key={stat.label}
                       sx={{
-                        p: 2.5,
+                        p: 2,
                         borderTop: "1px solid",
                         borderRight: i % 2 === 0 ? "1px solid" : "none",
                         borderColor: "divider",
                       }}
                     >
-                      <Typography variant="h4" fontWeight={900} lineHeight={1}>
+                      <Typography variant="h5" fontWeight={800} lineHeight={1} color="primary.main">
                         {stat.value}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" fontWeight={600}>
@@ -338,181 +359,156 @@ export function LandingPage({
         </Container>
       </Box>
 
-      {/* ── TRUST PILLARS ─────────────────────────────────────────── */}
+      {/* ── TRUST PILLARS ────────────────────────────── */}
       <Box
         sx={{
-          py: { xs: 5, md: 7 },
+          py: { xs: 2, md: 2.5 },
           borderTop: "1px solid",
           borderBottom: "1px solid",
           borderColor: "divider",
           bgcolor: "background.paper",
+          overflow: "hidden",
         }}
       >
         <Container maxWidth="lg">
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                sm: "repeat(2, 1fr)",
-                md: "repeat(4, 1fr)",
-              },
-              gap: { xs: 3, md: 4 },
-            }}
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: "-40px" }}
           >
-            {trustPillars.map((pillar, i) => (
-              <motion.div
-                key={pillar.title}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.06 * i, ease }}
-              >
-                <Stack gap={1.5} sx={{
-                      alignItems: "center",
-                      alignContent: "center",
-                      justifyContent: "center",}}>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" },
+              }}
+            >
+              {trustPillars.map((pillar, i) => (
+                <motion.div key={pillar.title} variants={staggerItem}>
                   <Box
                     sx={(theme) => ({
-                      width: 48,
-                      height: 48,
-                      borderRadius: 2.5,
+                      px: { xs: 2, md: 3 },
+                      py: { xs: 2.5, md: 3 },
                       display: "flex",
                       alignItems: "center",
-                      alignContent: "center",
-                      justifyContent: "center",
-                      bgcolor: alpha(theme.palette[pillar.color].main, 0.12),
-                      color: `${pillar.color}.main`,
-                      "& svg": { fontSize: 24 },
+                      gap: 1.75,
+                      height: "100%",
+                      borderRight: {
+                        xs: i % 2 === 0 ? "1px solid" : "none",
+                        md: i < 3 ? "1px solid" : "none",
+                      },
+                      borderBottom: { xs: i < 2 ? "1px solid" : "none", md: "none" },
+                      borderColor: theme.palette.divider,
                     })}
                   >
-                    {pillar.icon}
+                    <Box
+                      sx={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 2,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: alpha(pillar.color, 0.12),
+                        color: pillar.color,
+                      }}
+                    >
+                      {pillar.icon}
+                    </Box>
+                    <Box>
+                      <Typography variant="body2" fontWeight={700} color="text.primary" lineHeight={1.3}>
+                        {pillar.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" lineHeight={1.5} sx={{ display: "block", mt: 0.25 }}>
+                        {pillar.desc}
+                      </Typography>
+                    </Box>
                   </Box>
-                  <Typography variant="subtitle1" fontWeight={800} color="text.primary">
-                    {pillar.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" lineHeight={1.6} textAlign="center">
-                    {pillar.desc}
-                  </Typography>
-                </Stack>
-              </motion.div>
-            ))}
-          </Box>
+                </motion.div>
+              ))}
+            </Box>
+          </motion.div>
         </Container>
       </Box>
 
-      {/* ── CATEGORIES ────────────────────────────────────────────── */}
+      {/* ── CATEGORIES ───────────────────────────────── */}
       {homeFeed.categories.length > 0 && (
         <Box sx={{ py: { xs: 6, md: 8 } }}>
           <Container maxWidth="lg">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease }}
-            >
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="flex-end"
-                mb={3.5}
-              >
+            <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
                 <Box>
-                  <Typography
-                    variant="overline"
-                    color="primary.main"
-                    fontWeight={700}
-                    letterSpacing={2}
-                  >
-                    Browse
-                  </Typography>
-                  <Typography variant="h3" fontWeight={900} lineHeight={1}>
-                    Shop by category
-                  </Typography>
+                  <Typography variant="overline" color="primary.main" fontWeight={700}>Browse</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Shop by category</Typography>
                 </Box>
-                <Button
-                  component={Link}
-                  href="/products"
-                  endIcon={<ArrowForwardRounded />}
-                  sx={{ textTransform: "none", fontWeight: 700 }}
-                >
+                <Button component={Link} href="/products" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 700 }}>
                   All products
                 </Button>
               </Stack>
             </motion.div>
 
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-60px" }}
+            >
             <Box
               sx={{
                 display: "grid",
-                gap: 2,
+                gap: 1.5,
                 gridTemplateColumns: {
                   xs: "repeat(2, 1fr)",
                   sm: "repeat(3, 1fr)",
                   md: "repeat(4, 1fr)",
-                  lg: "repeat(auto-fill, minmax(148px, 1fr))",
+                  lg: "repeat(auto-fill, minmax(140px, 1fr))",
                 },
               }}
             >
-              {homeFeed.categories.map((category, i) => (
-                <motion.div
-                  key={category.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.35, delay: 0.04 * Math.min(i, 6), ease }}
-                >
+              {homeFeed.categories.map((category) => (
+                <motion.div key={category.id} variants={scaleItem}>
                   <Paper
                     component={Link}
                     href={`/products?category=${encodeURIComponent(category.name)}`}
-                    elevation={0}
                     sx={(theme) => ({
                       p: 2,
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
-                      gap: 1.5,
+                      gap: 1.25,
                       color: "text.primary",
                       textDecoration: "none",
                       borderRadius: 3,
-                      border: "1px solid",
-                      borderColor: "divider",
-                      transition:
-                        "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
+                      border: "1.5px solid",
+                      borderColor: theme.palette.divider,
+                      transition: "transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease",
                       "&:hover": {
                         transform: "translateY(-4px)",
                         borderColor: "primary.main",
-                        boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.14)}`,
+                        boxShadow: `0 10px 28px ${alpha(theme.palette.primary.main, 0.14)}`,
                       },
                     })}
                   >
-                    <Box sx={{ position: "relative", width: 56, height: 56 }}>
-                      <Image
-                        src={category.image}
-                        alt={category.name}
-                        fill
-                        sizes="56px"
-                        style={{ objectFit: "contain" }}
-                      />
+                    <Box sx={{ position: "relative", width: 52, height: 52 }}>
+                      <Image src={category.image} alt={category.name} fill sizes="52px" style={{ objectFit: "contain" }} />
                     </Box>
-                    <Typography
-                      variant="body2"
-                      fontWeight={700}
-                      textAlign="center"
-                      lineHeight={1.3}
-                    >
+                    <Typography variant="body2" fontWeight={700} textAlign="center" lineHeight={1.3} fontSize="0.8rem">
                       {category.name}
                     </Typography>
-                    <Chip
-                      label={`${category.itemCount}`}
-                      size="small"
-                      sx={{ height: 20, fontSize: "0.7rem" }}
-                    />
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                      {category.itemCount} items
+                    </Typography>
                   </Paper>
                 </motion.div>
               ))}
             </Box>
+            </motion.div>
           </Container>
         </Box>
       )}
 
-      {/* ── FEATURED PRODUCTS ─────────────────────────────────────── */}
+      {/* ── FEATURED PRODUCTS ────────────────────────── */}
       <Box
         sx={{
           py: { xs: 6, md: 8 },
@@ -523,57 +519,36 @@ export function LandingPage({
         }}
       >
         <Container maxWidth="lg">
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="flex-end"
-            mb={3.5}
-          >
-            <Box>
-              <Typography
-                variant="overline"
-                color="primary.main"
-                fontWeight={700}
-                letterSpacing={2}
-              >
-                Handpicked
-              </Typography>
-              <Typography variant="h3" fontWeight={900} lineHeight={1} color="text.primary">
-                Featured now
-              </Typography>
-            </Box>
-            <Button
-              component={Link}
-              href="/products"
-              endIcon={<ArrowForwardRounded />}
-              sx={{ textTransform: "none", fontWeight: 700 }}
-            >
-              See all
-            </Button>
-          </Stack>
+          <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+              <Box>
+                <Typography variant="overline" color="primary.main" fontWeight={700}>Handpicked</Typography>
+                <Typography variant="h3" fontWeight={800} lineHeight={1} color="text.primary">Featured now</Typography>
+              </Box>
+              <Button component={Link} href="/products" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 700 }}>
+                See all
+              </Button>
+            </Stack>
+          </motion.div>
 
           {featuredProducts.length > 0 ? (
+            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
             <Box
               sx={{
                 display: "grid",
                 gap: 2,
-                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 210px), 1fr))",
               }}
             >
-              {featuredProducts.map((product, i) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 5), ease }}
-                >
+              {featuredProducts.map((product) => (
+                <motion.div key={product.id} variants={staggerItem}>
                   <ProductCard product={product} size="compact" />
                 </motion.div>
               ))}
             </Box>
+            </motion.div>
           ) : (
             <Paper
-              elevation={0}
               sx={{
                 p: 4,
                 borderRadius: 3,
@@ -582,163 +557,224 @@ export function LandingPage({
                 textAlign: "center",
               }}
             >
-              <Typography variant="h6" fontWeight={700} mb={1}>
-                Coming soon
-              </Typography>
+              <Typography variant="h6" fontWeight={700} mb={0.5}>Coming soon</Typography>
               <Typography variant="body2" color="text.secondary">
-                Featured products will appear here as sellers list their items.
+                Featured products will appear here as sellers list items.
               </Typography>
             </Paper>
           )}
         </Container>
       </Box>
 
-      {/* ── WHY SPREE ─────────────────────────────────────────────── */}
-      <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: "background.paper" }}>
-        <Container maxWidth="lg">
-          <Box  sx={{ textAlign: "center", mb: 5 }}>
-            <motion.div
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease }}
-            >
-              <Typography
-                variant="overline"
-                color="primary.main"
-                fontWeight={700}
-                letterSpacing={2}
-              >
-                Why Spree
-              </Typography>
-              <Typography variant="h3" fontWeight={900} lineHeight={1.1} mt={0.5} color="text.primary">
-                Built for Ghana. Built for trust.
-              </Typography>
-              <Typography
-                variant="body1"
-                color="text.secondary"
-                mt={1.5}
-                sx={{ maxWidth: 560, mx: "auto", lineHeight: 1.65 }}
-              >
-                Online shopping in Ghana comes with uncertainty. Spree eliminates that — with
-                escrow payments, verified seller identities, and full order tracking from day one.
-              </Typography>
-            </motion.div>
-          </Box>
+      {/* ── WHY SPREE / HOW IT WORKS ─────────────────── */}
+      <Box
+        sx={(theme) => ({
+          py: { xs: 7, md: 10 },
+          position: "relative",
+          overflow: "hidden",
+          background:
+            theme.palette.mode === "dark"
+              ? "linear-gradient(160deg, #1c1535 0%, #0e0d1a 45%, #091018 100%)"
+              : `linear-gradient(160deg, ${alpha(theme.palette.primary.main, 0.07)} 0%, ${alpha(theme.palette.primary.main, 0.03)} 55%, ${alpha(theme.palette.info.main, 0.04)} 100%), ${theme.palette.background.default}`,
+        })}
+      >
+        {/* Decorative glow blobs */}
+        <Box sx={(theme) => ({ position: "absolute", top: -100, right: -60, width: 500, height: 500, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#655AFF", theme.palette.mode === "dark" ? 0.18 : 0.1)} 0%, transparent 65%)`, pointerEvents: "none" })} />
+        <Box sx={(theme) => ({ position: "absolute", bottom: -80, left: "15%", width: 380, height: 380, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#22C55E", theme.palette.mode === "dark" ? 0.11 : 0.07)} 0%, transparent 65%)`, pointerEvents: "none" })} />
+        <Box sx={(theme) => ({ position: "absolute", top: "45%", left: -80, width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#0EA5E9", theme.palette.mode === "dark" ? 0.09 : 0.05)} 0%, transparent 65%)`, pointerEvents: "none" })} />
 
+        <Container maxWidth="lg" sx={{ position: "relative" }}>
+
+          {/* Section header */}
+          <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
+          <Box sx={{ textAlign: "center", mb: { xs: 5, md: 7 } }}>
+            <Chip
+              label="Why Spree"
+              size="small"
+              sx={(theme) => ({
+                borderRadius: 999,
+                fontWeight: 700,
+                fontSize: "0.72rem",
+                height: 26,
+                background: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.2 : 0.1),
+                color: theme.palette.mode === "dark" ? "#a89fff" : theme.palette.primary.main,
+                border: "1px solid",
+                borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.38 : 0.25),
+                "& .MuiChip-label": { px: 1.25 },
+                mb: 2.5,
+              })}
+            />
+            <Typography variant="h3" fontWeight={800} lineHeight={1.1} color="text.primary">
+              Built for Ghana.<br />Built for trust.
+            </Typography>
+            <Typography
+              variant="body1"
+              color="text.secondary"
+              mt={1.75}
+              sx={{ maxWidth: 500, mx: "auto", lineHeight: 1.75 }}
+            >
+              Online shopping in Ghana comes with uncertainty. Spree eliminates that —
+              with escrow payments, verified sellers, and real-time tracking.
+            </Typography>
+          </Box>
+          </motion.div>
+
+          {/* Step cards */}
           <Box
             sx={{
               display: "grid",
               gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" },
-              gap: 2.5,
+              gap: { xs: 2, md: 2.5 },
             }}
           >
             {escrowSteps.map((item, i) => (
               <motion.div
                 key={item.step}
                 initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, delay: 0.08 * i, ease }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.45, delay: 0.1 * i, ease }}
+                style={{ height: "100%" }}
               >
-                <Paper sx={{ bgcolor: "white", borderRadius: 3, border: 0 }}>
-                  <Paper
-                    elevation={0}
+                <Box
+                  sx={(theme) => ({
+                    p: { xs: 3, md: 3.5 },
+                    height: "100%",
+                    borderRadius: 3,
+                    position: "relative",
+                    overflow: "hidden",
+                    background:
+                      theme.palette.mode === "dark"
+                        ? alpha("#fff", 0.04)
+                        : theme.palette.background.paper,
+                    backdropFilter: theme.palette.mode === "dark" ? "blur(12px)" : "none",
+                    border: "1px solid",
+                    borderColor:
+                      theme.palette.mode === "dark"
+                        ? alpha("#fff", 0.08)
+                        : theme.palette.divider,
+                    borderTop: `2.5px solid ${item.accent}`,
+                    boxShadow:
+                      theme.palette.mode === "light"
+                        ? `0 2px 16px ${alpha(theme.palette.primary.main, 0.06)}`
+                        : "none",
+                    transition: "background 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease",
+                    "&:hover": {
+                      background:
+                        theme.palette.mode === "dark"
+                          ? alpha("#fff", 0.075)
+                          : alpha(item.accent, 0.03),
+                      transform: "translateY(-5px)",
+                      boxShadow: `0 24px 52px ${alpha(item.accent, theme.palette.mode === "dark" ? 0.22 : 0.14)}`,
+                    },
+                  })}
+                >
+                  {/* Ghost step number */}
+                  <Typography
                     sx={(theme) => ({
-                      p: 3.5,
-                      height: "100%",
-                      borderRadius: 3,
-                      border: "1px solid",
-                      borderColor: "divider",
-                      background: `linear-gradient(145deg, ${alpha(theme.palette[item.color].main, theme.palette.mode === "dark" ? 0.1 : 0.1)}, white)`,
+                      position: "absolute",
+                      top: -10,
+                      right: 14,
+                      fontSize: "7.5rem",
+                      fontWeight: 900,
+                      color: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.04 : 0.06),
+                      lineHeight: 1,
+                      userSelect: "none",
+                      fontFamily: '"Rubik", sans-serif',
+                      letterSpacing: "-0.04em",
                     })}
                   >
-                    <Typography
-                      variant="h2"
-                      fontWeight={900}
-                      sx={(theme) => ({
-                        color: alpha(theme.palette[item.color].main, theme.palette.mode === "dark" ? 0.4 : 0.2),
-                        lineHeight: 1,
-                        mb: 2.5,
-                        fontSize: "3.5rem",
-                      })}
-                    >
-                      {item.step}
-                    </Typography>
-                    <Typography variant="h6" fontWeight={800} mb={1.25} color="black">
-                      {item.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>
-                      {item.body}
-                    </Typography>
-                  </Paper>
-                </Paper>
+                    {item.step}
+                  </Typography>
+
+                  {/* Icon */}
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 2.5,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: alpha(item.accent, 0.14),
+                      border: "1px solid",
+                      borderColor: alpha(item.accent, 0.28),
+                      color: item.accent,
+                      mb: 2.5,
+                      boxShadow: `0 0 18px ${alpha(item.accent, 0.24)}`,
+                    }}
+                  >
+                    {item.icon}
+                  </Box>
+
+                  {/* Step label */}
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: item.accent,
+                      fontWeight: 700,
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                      fontSize: "0.65rem",
+                      display: "block",
+                      mb: 0.75,
+                    }}
+                  >
+                    Step {item.step}
+                  </Typography>
+
+                  <Typography variant="h6" fontWeight={700} mb={1.25} color="text.primary" sx={{ lineHeight: 1.3 }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.75 }}>
+                    {item.body}
+                  </Typography>
+                </Box>
               </motion.div>
             ))}
           </Box>
         </Container>
       </Box>
 
-      {/* ── NEW ARRIVALS ──────────────────────────────────────────── */}
+      {/* ── NEW ARRIVALS ─────────────────────────────── */}
       {newArrivals.length > 0 && (
         <Box
-          sx={(theme) => ({
+          sx={{
             py: { xs: 6, md: 8 },
             borderTop: "1px solid",
             borderColor: "divider",
-            background: `radial-gradient(ellipse 60% 50% at 50% 100%, ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.1 : 0.06)}, transparent), ${theme.palette.background.paper}`,
-          })}
+            bgcolor: "background.paper",
+          }}
         >
           <Container maxWidth="lg">
-            <Stack
-              direction="row"
-              justifyContent="space-between"
-              alignItems="flex-end"
-              mb={3.5}
-            >
-              <Box>
-                <Typography
-                  variant="overline"
-                  color="primary.main"
-                  fontWeight={700}
-                  letterSpacing={2}
-                >
-                  Just in
-                </Typography>
-                <Typography variant="h3" fontWeight={900} lineHeight={1}>
-                  Fresh arrivals
-                </Typography>
-              </Box>
-              <Button
-                component={Link}
-                href="/products?sort=newest"
-                endIcon={<ArrowForwardRounded />}
-                sx={{ textTransform: "none", fontWeight: 700 }}
-              >
-                All new
-              </Button>
-            </Stack>
+            <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+                <Box>
+                  <Typography variant="overline" color="primary.main" fontWeight={700}>Just in</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Fresh arrivals</Typography>
+                </Box>
+                <Button component={Link} href="/products?sort=newest" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 700 }}>
+                  All new
+                </Button>
+              </Stack>
+            </motion.div>
 
+            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
             <Box
               sx={{
                 display: "grid",
-                gap: 2,
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  sm: "repeat(2, 1fr)",
-                  lg: "repeat(3, 1fr)",
-                },
+                gap: 1.5,
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
               }}
             >
-              {newArrivals.map((product, i) => (
+              {newArrivals.map((product) => (
                 <motion.div
                   key={product.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 4), ease }}
+                  variants={staggerItem}
                 >
                   <Paper
                     component={Link}
                     href={`/products/${product.slug}`}
-                    elevation={0}
                     sx={(theme) => ({
                       display: "flex",
                       gap: 2,
@@ -747,59 +783,48 @@ export function LandingPage({
                       color: "text.primary",
                       textDecoration: "none",
                       borderRadius: 3,
-                      border: "1px solid",
-                      borderColor: "divider",
-                      transition:
-                        "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
+                      border: "1.5px solid",
+                      borderColor: theme.palette.divider,
+                      transition: "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
                       "&:hover": {
                         transform: "translateY(-3px)",
                         borderColor: "primary.main",
-                        boxShadow: `0 6px 20px ${alpha(theme.palette.primary.main, 0.12)}`,
+                        boxShadow: `0 8px 24px ${alpha(theme.palette.primary.main, 0.12)}`,
                       },
                     })}
                   >
                     <Box
-                      sx={{
+                      sx={(theme) => ({
                         position: "relative",
-                        width: 88,
-                        height: 88,
+                        width: 80,
+                        height: 80,
                         borderRadius: 2,
                         overflow: "hidden",
                         flexShrink: 0,
-                        bgcolor: "action.hover",
+                        bgcolor: alpha(theme.palette.primary.main, 0.06),
                         border: "1px solid",
                         borderColor: "divider",
-                      }}
+                      })}
                     >
                       <Image
                         src={product.image}
                         alt={product.name}
                         fill
-                        sizes="88px"
+                        sizes="80px"
                         style={{ objectFit: "contain", padding: 8 }}
                       />
                     </Box>
-                    <Stack gap={0.25} minWidth={0}>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        fontWeight={600}
-                        letterSpacing={0.8}
-                      >
-                        {product.brand.toUpperCase()}
+                    <Stack gap={0.3} minWidth={0}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>
+                        {product.brand}
                       </Typography>
-                      <Typography variant="body1" fontWeight={700} lineHeight={1.25} noWrap>
+                      <Typography variant="subtitle2" fontWeight={700} lineHeight={1.25} noWrap>
                         {product.name}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" noWrap>
+                      <Typography variant="caption" color="text.secondary" noWrap>
                         {product.description}
                       </Typography>
-                      <Typography
-                        variant="body1"
-                        fontWeight={900}
-                        mt={0.5}
-                        color="primary.main"
-                      >
+                      <Typography variant="subtitle2" fontWeight={800} mt={0.5} color="primary.main">
                         {formatPrice(product.price)}
                       </Typography>
                     </Stack>
@@ -807,133 +832,94 @@ export function LandingPage({
                 </motion.div>
               ))}
             </Box>
+            </motion.div>
           </Container>
         </Box>
       )}
 
-      {/* ── COLLECTIONS ───────────────────────────────────────────── */}
+      {/* ── COLLECTIONS ──────────────────────────────── */}
       {homeFeed.collections.length > 0 && (
-        <Box
-          sx={{ py: { xs: 6, md: 8 }, borderTop: "1px solid", borderColor: "divider" }}
-        >
+        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: "1px solid", borderColor: "divider" }}>
           <Container maxWidth="lg">
-            <Stack
-              direction="row"
-              justifyContent="space-between"
-              alignItems="flex-end"
-              mb={3.5}
-            >
-              <Box>
-                <Typography
-                  variant="overline"
-                  color="primary.main"
-                  fontWeight={700}
-                  letterSpacing={2}
-                >
-                  Curated
-                </Typography>
-                <Typography variant="h3" fontWeight={900} lineHeight={1}>
-                  Collections
-                </Typography>
-              </Box>
-            </Stack>
+            <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+                <Box>
+                  <Typography variant="overline" color="primary.main" fontWeight={700}>Curated</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Collections</Typography>
+                </Box>
+              </Stack>
+            </motion.div>
 
+            <motion.div variants={staggerContainer} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
             <Box
               sx={{
                 display: "grid",
                 gap: 2,
-                gridTemplateColumns: {
-                  xs: "1fr",
-                  sm: "repeat(2, 1fr)",
-                  lg: "repeat(3, 1fr)",
-                },
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
               }}
             >
               {homeFeed.collections.map((collection, i) => (
-                <motion.div
-                  key={collection.id}
-                  initial={{ opacity: 0, scale: 0.97 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.35, delay: 0.05 * Math.min(i, 4), ease }}
-                >
+                <motion.div key={collection.id} variants={scaleItem}>
                   <Paper
                     component={Link}
                     href="/products"
-                    elevation={0}
                     sx={(theme) => ({
                       p: 3,
                       display: "block",
                       color: "text.primary",
                       textDecoration: "none",
                       borderRadius: 3,
-                      border: "1px solid",
-                      borderColor: "divider",
-                      transition: "transform 0.2s ease, border-color 0.2s ease",
+                      border: "1.5px solid",
+                      borderColor: theme.palette.divider,
+                      transition: "transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease",
                       "&:hover": {
                         transform: "translateY(-4px)",
                         borderColor: "primary.main",
+                        boxShadow: `0 10px 28px ${alpha(theme.palette.primary.main, 0.12)}`,
                       },
-                      background: `linear-gradient(150deg, ${alpha(
-                        [
-                          theme.palette.primary.main,
-                          theme.palette.info.main,
-                          theme.palette.secondary.main,
-                        ][i % 3],
-                        theme.palette.mode === "dark" ? 0.18 : 0.08
-                      )}, ${theme.palette.background.paper} 70%)`,
+                      background:
+                        theme.palette.mode === "dark"
+                          ? `linear-gradient(150deg, ${alpha([theme.palette.primary.main, theme.palette.info.main, theme.palette.secondary.main][i % 3], 0.16)}, ${theme.palette.background.paper} 70%)`
+                          : `linear-gradient(150deg, ${alpha([theme.palette.primary.main, theme.palette.info.main, theme.palette.secondary.main][i % 3], 0.07)}, ${theme.palette.background.paper} 70%)`,
                     })}
                   >
                     <Stack gap={2}>
-                      <Box sx={{ position: "relative", width: 56, height: 56 }}>
-                        <Image
-                          src={collection.image}
-                          alt={collection.name}
-                          fill
-                          sizes="56px"
-                          style={{ objectFit: "contain" }}
-                        />
+                      <Box sx={{ position: "relative", width: 52, height: 52 }}>
+                        <Image src={collection.image} alt={collection.name} fill sizes="52px" style={{ objectFit: "contain" }} />
                       </Box>
                       <Box>
-                        <Typography variant="h6" fontWeight={800}>
-                          {collection.name}
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          mt={0.5}
-                          lineHeight={1.6}
-                        >
+                        <Typography variant="h6" fontWeight={700}>{collection.name}</Typography>
+                        <Typography variant="body2" color="text.secondary" mt={0.5} lineHeight={1.6}>
                           {collection.description}
                         </Typography>
                       </Box>
                       <Divider />
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}>
                           {collection.productCount} products
                         </Typography>
-                        <Typography variant="body2" fontWeight={700} color="primary.main">
-                          Browse →
-                        </Typography>
+                        <Typography variant="body2" fontWeight={700} color="primary.main">Browse →</Typography>
                       </Stack>
                     </Stack>
                   </Paper>
                 </motion.div>
               ))}
             </Box>
+            </motion.div>
           </Container>
         </Box>
       )}
 
-      {/* ── SELL ON SPREE ─────────────────────────────────────────── */}
+      {/* ── SELL ON SPREE ────────────────────────────── */}
       <Box
         sx={(theme) => ({
           py: { xs: 7, md: 9 },
           borderTop: "1px solid",
           borderColor: "divider",
-          background: `linear-gradient(135deg,
-            ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.09)},
-            ${alpha(theme.palette.secondary.main, theme.palette.mode === "dark" ? 0.12 : 0.06)}),
-            ${theme.palette.background.paper}`,
+          background:
+            theme.palette.mode === "dark"
+              ? `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.16)}, ${alpha(theme.palette.secondary.main, 0.1)}), ${theme.palette.background.paper}`
+              : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.07)}, ${alpha(theme.palette.secondary.main, 0.05)}), ${theme.palette.background.paper}`,
         })}
       >
         <Container maxWidth="lg">
@@ -945,168 +931,142 @@ export function LandingPage({
               alignItems: "center",
             }}
           >
-            <Box>
-              <Typography
-                variant="overline"
-                color="primary.main"
-                fontWeight={700}
-                letterSpacing={2}
-              >
-                For sellers
+            <motion.div
+              initial={{ opacity: 0, x: -24 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.5, ease }}
+            >
+              <Typography variant="overline" color="primary.main" fontWeight={700}>For sellers</Typography>
+              <Typography variant="h3" fontWeight={800} lineHeight={1.05} mt={0.5} color="text.primary">
+                Sell across Ghana.<br />Get paid instantly.
               </Typography>
-              <Typography
-                variant="h3"
-                fontWeight={900}
-                lineHeight={1.05}
-                mt={0.5}
-                color="text.primary"
-              >
-                Sell across Ghana.
-                <br />
-                Get paid instantly.
-              </Typography>
-              <Typography
-                variant="body1"
-                color="text.secondary"
-                mt={1.5}
-                lineHeight={1.65}
-                sx={{ maxWidth: 520 }}
-              >
-                List your products, reach buyers nationwide, and receive your payout via Mobile
-                Money the moment delivery is confirmed — no delays, no middlemen, no stress.
+              <Typography variant="body1" color="text.secondary" mt={1.5} lineHeight={1.7} sx={{ maxWidth: 480 }}>
+                List your products, reach buyers nationwide, and receive your payout via Mobile Money the
+                moment delivery is confirmed — no delays, no middlemen.
               </Typography>
               <Stack direction={{ xs: "column", sm: "row" }} gap={1.5} mt={3}>
-                <Button
-                  component={Link}
-                  href="/profile"
-                  variant="contained"
-                  size="large"
-                  endIcon={<ArrowForwardRounded />}
-                  sx={{
-                    borderRadius: 999,
-                    px: 3.5,
-                    textTransform: "none",
-                    fontWeight: 800,
-                  }}
-                >
+                <Button component={Link} href="/profile" variant="contained" size="large" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 800 }}>
                   Start selling
                 </Button>
-                <Button
-                  component={Link}
-                  href="/products"
-                  variant="outlined"
-                  size="large"
-                  sx={{
-                    borderRadius: 999,
-                    px: 3.5,
-                    textTransform: "none",
-                    fontWeight: 800,
-                  }}
-                >
+                <Button component={Link} href="/products" variant="outlined" size="large" sx={{ fontWeight: 700 }}>
                   Browse marketplace
                 </Button>
               </Stack>
-            </Box>
+            </motion.div>
 
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 1.5,
-                flexShrink: 0,
-              }}
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-60px" }}
             >
-              {[
-                { icon: <SecurityRounded />, label: "Escrow payout", color: "primary" as const },
-                { icon: <VerifiedRounded />, label: "ID verified", color: "success" as const },
-                { icon: <PhoneAndroidRounded />, label: "Mobile money", color: "info" as const },
-                {
-                  icon: <LocalShippingRounded />,
-                  label: "Fast delivery",
-                  color: "warning" as const,
-                },
-              ].map((item) => (
-                <Paper
-                  key={item.label}
-                  elevation={0}
-                  sx={(theme) => ({
-                    p: 2,
-                    borderRadius: 2.5,
-                    border: "1px solid",
-                    borderColor: "divider",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 1,
-                    bgcolor: "background.paper",
-                    minWidth: 110,
-                  })}
-                >
-                  <Box
-                    sx={(theme) => ({
-                      color: `${item.color}.main`,
-                      "& svg": { fontSize: 28 },
-                    })}
-                  >
-                    {item.icon}
-                  </Box>
-                  <Typography variant="caption" fontWeight={700} textAlign="center">
-                    {item.label}
-                  </Typography>
-                </Paper>
-              ))}
-            </Box>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5, flexShrink: 0 }}>
+                {[
+                  { icon: <SecurityRounded />, label: "Escrow payout", color: "#655AFF" },
+                  { icon: <VerifiedRounded />, label: "ID verified", color: "#22C55E" },
+                  { icon: <PhoneAndroidRounded />, label: "Mobile money", color: "#0EA5E9" },
+                  { icon: <LocalShippingRounded />, label: "Fast delivery", color: "#F59E0B" },
+                ].map((item) => (
+                  <motion.div key={item.label} variants={scaleItem}>
+                    <Paper
+                      sx={{
+                        p: 2,
+                        borderRadius: 2.5,
+                        border: "1.5px solid",
+                        borderColor: "divider",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 1,
+                        bgcolor: "background.paper",
+                        minWidth: 110,
+                      }}
+                    >
+                      <Box sx={{ color: item.color, bgcolor: alpha(item.color, 0.1), borderRadius: 2, p: 0.75, "& svg": { fontSize: 22 } }}>
+                        {item.icon}
+                      </Box>
+                      <Typography variant="caption" fontWeight={700} textAlign="center" color="text.primary">
+                        {item.label}
+                      </Typography>
+                    </Paper>
+                  </motion.div>
+                ))}
+              </Box>
+            </motion.div>
           </Box>
         </Container>
       </Box>
 
-      {/* ── FINAL CTA ─────────────────────────────────────────────── */}
+      {/* ── FINAL CTA ────────────────────────────────── */}
       <Box
-        sx={{
-          py: { xs: 7, md: 9 },
-          borderTop: "1px solid",
-          borderColor: "divider",
+        sx={(theme) => ({
+          py: { xs: 8, md: 11 },
+          position: "relative",
+          overflow: "hidden",
           textAlign: "center",
-        }}
+          background:
+            theme.palette.mode === "dark"
+              ? "linear-gradient(160deg, #1c1535 0%, #0e0d1a 50%, #091018 100%)"
+              : `linear-gradient(135deg, ${theme.palette.primary.main} 0%, #7c3aed 55%, #4f46e5 100%)`,
+        })}
       >
-        <Container maxWidth="sm">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease }}
-          >
-            <Typography variant="h3" fontWeight={900} lineHeight={1.05} mb={1.5}>
+        {/* Decorative glows */}
+        <Box sx={(theme) => ({ position: "absolute", top: -80, left: "50%", transform: "translateX(-50%)", width: 560, height: 400, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#a78bfa", theme.palette.mode === "dark" ? 0.22 : 0.3)} 0%, transparent 65%)`, pointerEvents: "none" })} />
+        <Box sx={(theme) => ({ position: "absolute", bottom: -80, right: -40, width: 340, height: 340, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#F97316", theme.palette.mode === "dark" ? 0.13 : 0.2)} 0%, transparent 65%)`, pointerEvents: "none" })} />
+        <Box sx={(theme) => ({ position: "absolute", bottom: -60, left: -40, width: 280, height: 280, borderRadius: "50%", background: `radial-gradient(circle, ${alpha("#22C55E", theme.palette.mode === "dark" ? 0.1 : 0.15)} 0%, transparent 65%)`, pointerEvents: "none" })} />
+
+        <Container maxWidth="sm" sx={{ position: "relative" }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.45, ease }}>
+
+            {/* Logo icon */}
+            <Box
+              sx={{
+                position: "relative",
+                width: 64,
+                height: 64,
+                borderRadius: 3,
+                mx: "auto",
+                mb: 3.5,
+                border: "1px solid",
+                borderColor: alpha("#fff", 0.22),
+                background: alpha("#fff", 0.12),
+                backdropFilter: "blur(10px)",
+                overflow: "hidden",
+              }}
+            >
+              <Image src="/spreelogo.png" alt="Spree" fill sizes="64px" style={{ objectFit: "contain", padding: 10 }} />
+            </Box>
+
+            <Typography variant="h2" fontWeight={800} lineHeight={1.08} mb={2} sx={{ color: "#fff" }}>
               {hasProducts ? "Ready to start shopping?" : "Coming soon to Ghana."}
             </Typography>
             <Typography
               variant="body1"
-              color="text.secondary"
-              mb={3.5}
-              lineHeight={1.65}
+              mb={4.5}
+              lineHeight={1.75}
+              sx={{ color: alpha("#fff", 0.72), maxWidth: 440, mx: "auto" }}
             >
               {hasProducts
-                ? `${totalProducts.toLocaleString()} products from verified Ghanaian sellers — with escrow protection on every single order.`
+                ? `${totalProducts.toLocaleString()} products from verified Ghanaian sellers — escrow protection on every order.`
                 : "We're setting up the store. Check back soon for the first arrivals."}
             </Typography>
-            <Stack
-              direction={{ xs: "column", sm: "row" }}
-              gap={1.5}
-              justifyContent="center"
-            >
+
+            <Stack direction={{ xs: "column", sm: "row" }} gap={1.5} justifyContent="center" mb={4.5}>
               <Button
                 component={Link}
                 href="/products"
                 variant="contained"
                 size="large"
                 endIcon={<ArrowForwardRounded />}
-                sx={{
-                  borderRadius: 999,
-                  px: 4,
-                  py: 1.5,
-                  textTransform: "none",
+                sx={(theme) => ({
                   fontWeight: 800,
-                  fontSize: "1rem",
-                }}
+                  background: "#fff",
+                  color: theme.palette.primary.main,
+                  borderRadius: 999,
+                  px: 3.5,
+                  "&:hover": { background: alpha("#fff", 0.9) },
+                })}
               >
                 Shop now
               </Button>
@@ -1116,17 +1076,37 @@ export function LandingPage({
                 variant="outlined"
                 size="large"
                 sx={{
+                  fontWeight: 700,
                   borderRadius: 999,
-                  px: 4,
-                  py: 1.5,
-                  textTransform: "none",
-                  fontWeight: 800,
-                  fontSize: "1rem",
+                  px: 3,
+                  borderColor: alpha("#fff", 0.4),
+                  color: "#fff",
+                  "&:hover": {
+                    borderColor: "#fff",
+                    background: alpha("#fff", 0.1),
+                  },
                 }}
               >
                 View cart
               </Button>
             </Stack>
+
+            {/* Trust signals */}
+            <Stack direction="row" gap={{ xs: 2, sm: 3.5 }} justifyContent="center" flexWrap="wrap">
+              {[
+                { icon: <SecurityRounded sx={{ fontSize: 14 }} />, label: "Escrow protected" },
+                { icon: <VerifiedRounded sx={{ fontSize: 14 }} />, label: "Verified sellers" },
+                { icon: <PhoneAndroidRounded sx={{ fontSize: 14 }} />, label: "Mobile Money" },
+              ].map((item) => (
+                <Stack key={item.label} direction="row" alignItems="center" gap={0.7}>
+                  <Box sx={{ color: alpha("#fff", 0.65), display: "flex" }}>{item.icon}</Box>
+                  <Typography variant="caption" sx={{ color: alpha("#fff", 0.65), fontWeight: 600, fontSize: "0.72rem" }}>
+                    {item.label}
+                  </Typography>
+                </Stack>
+              ))}
+            </Stack>
+
           </motion.div>
         </Container>
       </Box>
