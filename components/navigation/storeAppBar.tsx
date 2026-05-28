@@ -250,10 +250,7 @@ export function StoreAppBar() {
             aria-label="search"
             component={Link}
             href="/products"
-            sx={{
-              display: { xs: "flex", sm: "none" },
-              ...getNavButtonSx(false)(theme as Theme),
-            }}
+            sx={getNavButtonSx(false)}
           >
             <SearchRounded />
           </IconButton>
