@@ -52,7 +52,7 @@ export default async function RootLayout({
               <FavoritesProvider>
                 <CartProvider initialCart={initialCart}>
                   <StoreAppBar />
-
+                  <Analytics />
                   <main style={{ flex: 1, paddingTop: "72px" }}>
                     {children}
                   </main>
