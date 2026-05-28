@@ -24,6 +24,7 @@
     "@playwright/test": "^1.60.0",
     "@prisma/client": "^7.5.0",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "@vitest/coverage-v8": "^4.1.7",
     "axios": "^1.13.6",
     "motion": "^12.38.0",
