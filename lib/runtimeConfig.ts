@@ -31,26 +31,15 @@ const requireEnvOrFallback = (name: string, fallback: string) => {
 };
 
 export const getBackendApiBaseUrl = () => {
-  const directApiUrl = getEnvValue("BACKEND_API_URL");
+  // Accept either var; BACKEND_API_URL takes priority.
+  // Both are normalised the same way: ensure they end with /api/v1.
+  const raw = getEnvValue("BACKEND_API_URL") ?? getEnvValue("BACKEND_URL");
 
-  if (directApiUrl) {
-    const url = normalizeUrl(directApiUrl);
+  if (raw) {
+    const url = normalizeUrl(raw);
     if (isProductionLikeDeployment && isLocalhostUrl(url)) {
       throw new Error(
-        `BACKEND_API_URL is set to a localhost address ("${url}") which is unreachable from Vercel. ` +
-        `Set BACKEND_API_URL to your deployed backend URL (e.g. https://api.yourdomain.com/api/v1).`
-      );
-    }
-    return url;
-  }
-
-  const backendUrl = getEnvValue("BACKEND_URL");
-
-  if (backendUrl) {
-    const url = normalizeUrl(backendUrl);
-    if (isProductionLikeDeployment && isLocalhostUrl(url)) {
-      throw new Error(
-        `BACKEND_URL is set to a localhost address ("${url}") which is unreachable from Vercel. ` +
+        `Backend URL is set to a localhost address ("${url}") which is unreachable from Vercel. ` +
         `Set BACKEND_URL to your deployed backend origin (e.g. https://api.yourdomain.com).`
       );
     }
