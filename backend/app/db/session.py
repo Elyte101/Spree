@@ -28,14 +28,23 @@ def _build_engine():
         return None, None
 
     try:
+        # Log scheme+host only — never log credentials.
+        from urllib.parse import urlparse
+        parsed = urlparse(settings.database_url)
+        logger.info("[db] Connecting: %s://%s%s", parsed.scheme, parsed.hostname, parsed.path)
+
         # NullPool: no persistent connection pool between serverless invocations.
         # Each request opens and closes its own connection — correct for Vercel.
         eng = create_engine(settings.database_url, poolclass=NullPool, future=True)
         sess = sessionmaker(bind=eng, autoflush=False, autocommit=False, expire_on_commit=False)
-        logger.info("[db] Engine initialised (host redacted).")
+        logger.info("[db] Engine initialised.")
         return eng, sess
     except Exception as exc:
-        _engine_init_error = f"Failed to create database engine: {exc}"
+        _engine_init_error = (
+            f"Failed to create database engine: {exc}. "
+            "Ensure DATABASE_URL is a valid non-pooling PostgreSQL URL "
+            "(e.g. postgres://user:pass@host:5432/dbname?sslmode=require)."
+        )
         logger.error("[db] %s", _engine_init_error)
         return None, None
 

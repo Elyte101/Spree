@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     seed_admin_password: str = "ChangeMe123!"
 
     # Must match the BACKEND_INTERNAL_API_KEY used by the Next.js frontend
-    backend_internal_api_key: str = "spree-internal-dev-key"
+    backend_internal_api_key: str = "2de75f671a37aaddae2b209a9a8d3844ae1c58a0"
 
     auto_initialize_database: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -65,10 +65,33 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, value: str | None) -> str | None:
         if not value:
             return None
+
+        # Reject non-postgres URLs early with a clear message.
+        if not (value.startswith("postgres://") or value.startswith("postgresql")):
+            raise ValueError(
+                f"DATABASE_URL must start with postgres:// or postgresql://. "
+                f"Got scheme: '{value.split('://')[0]}://...'. "
+                "Use the non-pooling PostgreSQL connection string from your Supabase project, "
+                "NOT the Supabase HTTPS URL or a Prisma/pgBouncer URL."
+            )
+
+        # Normalise to the psycopg3 dialect SQLAlchemy requires.
         if value.startswith("postgres://"):
-            return value.replace("postgres://", "postgresql+psycopg://", 1)
-        if value.startswith("postgresql://") and "+psycopg" not in value:
-            return value.replace("postgresql://", "postgresql+psycopg://", 1)
+            value = value.replace("postgres://", "postgresql+psycopg://", 1)
+        elif value.startswith("postgresql://") and "+psycopg" not in value:
+            value = value.replace("postgresql://", "postgresql+psycopg://", 1)
+
+        # Strip params that are Supabase/Prisma-specific and unknown to SQLAlchemy.
+        # pgbouncer=true  — PgBouncer flag; breaks prepared statements in SQLAlchemy
+        # supa=*          — Supabase internal routing param
+        from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+        parsed = urlparse(value)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        params.pop("pgbouncer", None)
+        params.pop("supa", None)
+        clean_query = urlencode({k: v[0] for k, v in params.items()})
+        value = urlunparse(parsed._replace(query=clean_query))
+
         return value
 
     @computed_field
