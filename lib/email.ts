@@ -1,10 +1,15 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.EMAIL_FROM ?? "Spree <noreply@spree.market>";
-const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-
 export async function sendVerificationEmail(email: string, token: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn("[email] RESEND_API_KEY not set — skipping verification email");
+    return;
+  }
+
+  const resend = new Resend(apiKey);
+  const FROM = process.env.EMAIL_FROM ?? "Spree <noreply@spree.market>";
+  const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
   const verifyUrl = `${APP_URL}/auth/verify-email?token=${encodeURIComponent(token)}`;
 
   return resend.emails.send({

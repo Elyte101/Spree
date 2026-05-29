@@ -5,6 +5,7 @@ import { sendVerificationEmail } from "@/lib/email";
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -35,7 +36,9 @@ export async function POST(request: NextRequest) {
     await sendVerificationEmail(session.user.email, token);
 
     return NextResponse.json({ detail: "Verification email sent" });
-  } catch {
-    return NextResponse.json({ detail: "Failed to send verification email" }, { status: 500 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Failed to send verification email";
+    const isConfig = msg.includes("RESEND_API_KEY");
+    return NextResponse.json({ detail: isConfig ? "Email service not configured" : msg }, { status: 500 });
   }
 }
