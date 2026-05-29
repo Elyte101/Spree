@@ -5,7 +5,7 @@ import { Stack } from "@mui/material";
 import { ProductCreateForm } from "@/components/admin/productCreateForm";
 import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
-import { getBrands, getCategories, getCollections, getUserProfile } from "@/lib/serverApi";
+import { getBrands, getCategories, getCollections, getUserProfile } from "@/lib/serverApi"; // getUserProfile used for non-admin sellers
 
 export const metadata: Metadata = {
   title: "Create Product | Spree",
@@ -24,20 +24,25 @@ export default async function AdminProductCreatePage() {
     redirect(`/auth/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=seller`);
   }
 
-  const [profile, categories, brands, collections] = await Promise.all([
-    getUserProfile(session.user.id, {
+  const isAdmin = session.user.role === "admin";
+
+  // Admin is always allowed — skip profile fetch and sellerStatus check
+  if (!isAdmin) {
+    const profile = await getUserProfile(session.user.id, {
       name: session.user.name ?? undefined,
       email: session.user.email ?? undefined,
       role: session.user.role,
-    }),
+    });
+    if (profile.sellerStatus !== "active") {
+      redirect("/profile");
+    }
+  }
+
+  const [categories, brands, collections] = await Promise.all([
     getCategories(),
     getBrands(),
     getCollections(),
   ]);
-
-  if (session.user.role !== "admin" && profile.sellerStatus !== "active") {
-    redirect("/profile");
-  }
 
   return (
     <Stack spacing={3}>

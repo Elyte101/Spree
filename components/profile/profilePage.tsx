@@ -45,6 +45,7 @@ import {
 
 import { api, ApiClientError } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
+import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
 import { GHANA_ID_TYPES, COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
@@ -412,10 +413,11 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     onChange={updateProfileField("email")}
                     required
                   />
-                  <TextField
+                  <PhoneInput
                     label="Phone"
                     value={profile.phone}
-                    onChange={updateProfileField("phone")}
+                    onChange={(val) => setProfile((c) => ({ ...c, phone: val }))}
+                    autoComplete="tel"
                   />
                   <TextField
                     label="Account type"
@@ -621,17 +623,23 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       onChange={updateSellerContactField("businessEmail")}
                       disabled={!sellerSwitchChecked && !isAdmin}
                     />
-                    <TextField
+                    <PhoneInput
                       label="Business phone"
                       value={profile.sellerContact.businessPhone}
-                      onChange={updateSellerContactField("businessPhone")}
+                      onChange={(val) => setProfile((c) => ({
+                        ...c,
+                        sellerContact: { ...c.sellerContact, businessPhone: val },
+                      }))}
                       disabled={!sellerSwitchChecked && !isAdmin}
                       required={sellerMode && !profile.phone}
                     />
-                    <TextField
+                    <PhoneInput
                       label="WhatsApp"
                       value={profile.sellerContact.whatsapp}
-                      onChange={updateSellerContactField("whatsapp")}
+                      onChange={(val) => setProfile((c) => ({
+                        ...c,
+                        sellerContact: { ...c.sellerContact, whatsapp: val },
+                      }))}
                       disabled={!sellerSwitchChecked && !isAdmin}
                     />
                     <TextField

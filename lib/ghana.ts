@@ -182,6 +182,31 @@ export function getRegionLabel(country: string): string {
   return labels[country] ?? "State / Region";
 }
 
+/** Dialling codes, Ghana first, then ECOWAS, then global. Used by PhoneInput. */
+export const COUNTRY_PHONE_CODES: { code: string; label: string }[] = [
+  { code: "+233", label: "+233 Ghana" },
+  { code: "+234", label: "+234 Nigeria" },
+  { code: "+225", label: "+225 Côte d'Ivoire" },
+  { code: "+228", label: "+228 Togo" },
+  { code: "+229", label: "+229 Benin" },
+  { code: "+226", label: "+226 Burkina Faso" },
+  { code: "+221", label: "+221 Senegal" },
+  { code: "+232", label: "+232 Sierra Leone" },
+  { code: "+231", label: "+231 Liberia" },
+  { code: "+224", label: "+224 Guinea" },
+  { code: "+237", label: "+237 Cameroon" },
+  { code: "+254", label: "+254 Kenya" },
+  { code: "+27",  label: "+27 South Africa" },
+  { code: "+44",  label: "+44 United Kingdom" },
+  { code: "+1",   label: "+1 US / Canada" },
+  { code: "+49",  label: "+49 Germany" },
+  { code: "+33",  label: "+33 France" },
+  { code: "+31",  label: "+31 Netherlands" },
+  { code: "+86",  label: "+86 China" },
+  { code: "+91",  label: "+91 India" },
+  { code: "+971", label: "+971 UAE" },
+];
+
 export const GHANA_ID_TYPES: { value: string; label: string }[] = [
   { value: "ghana-card", label: "Ghana Card (NIA)" },
   { value: "voters-id", label: "Voter's ID" },

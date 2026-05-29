@@ -29,6 +29,7 @@ import {
 } from "@mui/material";
 
 import { useCart } from "@/components/providers/cartProvider";
+import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
 import { formatPrice, COUNTRY_LIST, DEFAULT_COUNTRY, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
@@ -332,13 +333,11 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       autoComplete="email"
                       required
                     />
-                    <TextField
+                    <PhoneInput
                       label="Phone"
-                      type="tel"
                       value={form.phone}
-                      onChange={setField("phone")}
+                      onChange={(val) => setForm((prev) => ({ ...prev, phone: val }))}
                       autoComplete="tel"
-                      placeholder="+233 XX XXX XXXX"
                     />
                     <TextField
                       label="Address"
