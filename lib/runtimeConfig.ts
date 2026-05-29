@@ -8,6 +8,9 @@ const isProductionLikeDeployment =
 
 const normalizeUrl = (value: string) => value.replace(/\/$/, "");
 
+const isLocalhostUrl = (url: string) =>
+  /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(url);
+
 const getEnvValue = (name: string) => {
   const value = process.env[name]?.trim();
   return value && value.length > 0 ? value : undefined;
@@ -31,16 +34,27 @@ export const getBackendApiBaseUrl = () => {
   const directApiUrl = getEnvValue("BACKEND_API_URL");
 
   if (directApiUrl) {
-    return normalizeUrl(directApiUrl);
+    const url = normalizeUrl(directApiUrl);
+    if (isProductionLikeDeployment && isLocalhostUrl(url)) {
+      throw new Error(
+        `BACKEND_API_URL is set to a localhost address ("${url}") which is unreachable from Vercel. ` +
+        `Set BACKEND_API_URL to your deployed backend URL (e.g. https://api.yourdomain.com/api/v1).`
+      );
+    }
+    return url;
   }
 
   const backendUrl = getEnvValue("BACKEND_URL");
 
   if (backendUrl) {
-    const normalizedBackendUrl = normalizeUrl(backendUrl);
-    return normalizedBackendUrl.endsWith("/api/v1")
-      ? normalizedBackendUrl
-      : `${normalizedBackendUrl}/api/v1`;
+    const url = normalizeUrl(backendUrl);
+    if (isProductionLikeDeployment && isLocalhostUrl(url)) {
+      throw new Error(
+        `BACKEND_URL is set to a localhost address ("${url}") which is unreachable from Vercel. ` +
+        `Set BACKEND_URL to your deployed backend origin (e.g. https://api.yourdomain.com).`
+      );
+    }
+    return url.endsWith("/api/v1") ? url : `${url}/api/v1`;
   }
 
   return normalizeUrl(requireEnvOrFallback("BACKEND_API_URL", DEFAULT_BACKEND_API_URL));
