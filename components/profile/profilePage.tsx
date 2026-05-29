@@ -46,7 +46,7 @@ import {
 import { api, ApiClientError } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
 import { UserProfile } from "@/types/types";
-import { GHANA_ID_TYPES, COUNTRY_LIST } from "@/lib/ghana";
+import { GHANA_ID_TYPES, COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -280,7 +280,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const canUploadDocs = sellerMode || isAdmin;
+  const canUploadDocs = sellerMode && !isAdmin;
 
   return (
     <Box
@@ -549,19 +549,44 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       disabled={!sellerSwitchChecked && !isAdmin}
                       required={sellerMode}
                     />
-                    <TextField
-                      label="State / Region"
-                      value={profile.storeLocation.state}
-                      onChange={updateStoreLocationField("state")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      required={sellerMode}
-                    />
+                    {(() => {
+                      const country = profile.storeLocation.country || "Ghana";
+                      const regions = getRegionsForCountry(country);
+                      const label = getRegionLabel(country);
+                      const disabled = !sellerSwitchChecked && !isAdmin;
+                      return regions ? (
+                        <FormControl required={sellerMode} disabled={disabled}>
+                          <InputLabel>{label}</InputLabel>
+                          <Select
+                            label={label}
+                            value={profile.storeLocation.state}
+                            onChange={(e) => setProfile((current) => ({
+                              ...current,
+                              storeLocation: { ...current.storeLocation, state: e.target.value },
+                            }))}
+                          >
+                            {regions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <TextField
+                          label={label}
+                          value={profile.storeLocation.state}
+                          onChange={updateStoreLocationField("state")}
+                          disabled={disabled}
+                          required={sellerMode}
+                        />
+                      );
+                    })()}
                     <FormControl required={sellerMode} disabled={!sellerSwitchChecked && !isAdmin}>
                       <InputLabel>Country</InputLabel>
                       <Select
                         label="Country"
                         value={profile.storeLocation.country || "Ghana"}
-                        onChange={(e) => updateStoreLocationField("country")({ target: { value: e.target.value } } as React.ChangeEvent<HTMLInputElement>)}
+                        onChange={(e) => setProfile((current) => ({
+                          ...current,
+                          storeLocation: { ...current.storeLocation, country: e.target.value, state: "" },
+                        }))}
                       >
                         {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                       </Select>
@@ -707,11 +732,32 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     value={profile.shippingAddress.city}
                     onChange={updateShippingField("city")}
                   />
-                  <TextField
-                    label="State / Region"
-                    value={profile.shippingAddress.state}
-                    onChange={updateShippingField("state")}
-                  />
+                  {(() => {
+                    const country = profile.shippingAddress.country || "Ghana";
+                    const regions = getRegionsForCountry(country);
+                    const label = getRegionLabel(country);
+                    return regions ? (
+                      <FormControl>
+                        <InputLabel>{label}</InputLabel>
+                        <Select
+                          label={label}
+                          value={profile.shippingAddress.state}
+                          onChange={(e) => setProfile((current) => ({
+                            ...current,
+                            shippingAddress: { ...current.shippingAddress, state: e.target.value },
+                          }))}
+                        >
+                          {regions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                    ) : (
+                      <TextField
+                        label={label}
+                        value={profile.shippingAddress.state}
+                        onChange={updateShippingField("state")}
+                      />
+                    );
+                  })()}
                   <TextField
                     label="Postal code"
                     value={profile.shippingAddress.postalCode}
@@ -722,7 +768,10 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     <Select
                       label="Country"
                       value={profile.shippingAddress.country || "Ghana"}
-                      onChange={(e) => updateShippingField("country")({ target: { value: e.target.value } } as React.ChangeEvent<HTMLInputElement>)}
+                      onChange={(e) => setProfile((current) => ({
+                        ...current,
+                        shippingAddress: { ...current.shippingAddress, country: e.target.value, state: "" },
+                      }))}
                     >
                       {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                     </Select>

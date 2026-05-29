@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 
@@ -36,6 +37,8 @@ def initialize_database() -> None:
                     password_hash=hash_password(settings.seed_admin_password),
                     role="admin",
                     seller_status="active",
+                    government_id_verified=True,
+                    seller_started_at=datetime.now(timezone.utc),
                 )
             )
             session.commit()

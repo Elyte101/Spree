@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 
 import { authConfig } from "./auth.config";
+import { canCreateProductsRole } from "./lib/roles";
 
 // Use the edge-safe config (no Node.js deps) so this runs without issues
 // in the middleware / proxy runtime.
@@ -33,7 +34,7 @@ export const proxy = auth((req) => {
 
   if (
     nextUrl.pathname.startsWith("/dashboard/products/new") &&
-    req.auth?.user?.role !== "admin"
+    !canCreateProductsRole(req.auth?.user?.role)
   ) {
     return NextResponse.redirect(new URL("/", req.url));
   }

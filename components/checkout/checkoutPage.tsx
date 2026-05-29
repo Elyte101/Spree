@@ -30,7 +30,7 @@ import {
 
 import { useCart } from "@/components/providers/cartProvider";
 import { UserProfile } from "@/types/types";
-import { formatPrice, GHANA_REGIONS, COUNTRY_LIST, DEFAULT_COUNTRY } from "@/lib/ghana";
+import { formatPrice, COUNTRY_LIST, DEFAULT_COUNTRY, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -362,29 +362,33 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       autoComplete="address-level2"
                       required
                     />
-                    {form.country === "Ghana" ? (
-                      <FormControl required>
-                        <InputLabel>Region</InputLabel>
-                        <Select
-                          label="Region"
+                    {(() => {
+                      const regions = getRegionsForCountry(form.country);
+                      const label = getRegionLabel(form.country);
+                      return regions ? (
+                        <FormControl required>
+                          <InputLabel>{label}</InputLabel>
+                          <Select
+                            label={label}
+                            value={form.state}
+                            onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))}
+                            autoComplete="address-level1"
+                          >
+                            {regions.map((r) => (
+                              <MenuItem key={r} value={r}>{r}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <TextField
+                          label={label}
                           value={form.state}
-                          onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))}
+                          onChange={setField("state")}
                           autoComplete="address-level1"
-                        >
-                          {GHANA_REGIONS.map((r) => (
-                            <MenuItem key={r} value={r}>{r}</MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    ) : (
-                      <TextField
-                        label="State / Province"
-                        value={form.state}
-                        onChange={setField("state")}
-                        autoComplete="address-level1"
-                        required
-                      />
-                    )}
+                          required
+                        />
+                      );
+                    })()}
                     <TextField
                       label="Postal / Digital Address"
                       value={form.postalCode}
