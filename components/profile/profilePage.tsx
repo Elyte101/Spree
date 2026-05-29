@@ -31,9 +31,12 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
   FormControlLabel,
+  InputLabel,
   MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -43,6 +46,7 @@ import {
 import { api, ApiClientError } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
 import { UserProfile } from "@/types/types";
+import { GHANA_ID_TYPES, COUNTRY_LIST } from "@/lib/ghana";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -552,13 +556,16 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       disabled={!sellerSwitchChecked && !isAdmin}
                       required={sellerMode}
                     />
-                    <TextField
-                      label="Country"
-                      value={profile.storeLocation.country}
-                      onChange={updateStoreLocationField("country")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      required={sellerMode}
-                    />
+                    <FormControl required={sellerMode} disabled={!sellerSwitchChecked && !isAdmin}>
+                      <InputLabel>Country</InputLabel>
+                      <Select
+                        label="Country"
+                        value={profile.storeLocation.country || "Ghana"}
+                        onChange={(e) => updateStoreLocationField("country")({ target: { value: e.target.value } } as React.ChangeEvent<HTMLInputElement>)}
+                      >
+                        {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                      </Select>
+                    </FormControl>
                     <TextField
                       label="Postal code"
                       value={profile.storeLocation.postalCode}
@@ -632,9 +639,9 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       onChange={updateSellerIdentityField("governmentIdType")}
                       disabled={!sellerSwitchChecked && !isAdmin}
                     >
-                      <MenuItem value="ghana-card">Ghana Card</MenuItem>
-                      <MenuItem value="passport">Passport</MenuItem>
-                      <MenuItem value="drivers-license">Driver&apos;s License</MenuItem>
+                      {GHANA_ID_TYPES.map((id) => (
+                        <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>
+                      ))}
                     </TextField>
                     <TextField
                       label="ID number"
@@ -710,11 +717,16 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     value={profile.shippingAddress.postalCode}
                     onChange={updateShippingField("postalCode")}
                   />
-                  <TextField
-                    label="Country"
-                    value={profile.shippingAddress.country}
-                    onChange={updateShippingField("country")}
-                  />
+                  <FormControl>
+                    <InputLabel>Country</InputLabel>
+                    <Select
+                      label="Country"
+                      value={profile.shippingAddress.country || "Ghana"}
+                      onChange={(e) => updateShippingField("country")({ target: { value: e.target.value } } as React.ChangeEvent<HTMLInputElement>)}
+                    >
+                      {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                    </Select>
+                  </FormControl>
                 </Box>
               </Stack>
             </Paper>

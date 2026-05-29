@@ -9,7 +9,13 @@ export type UserRole = "customer" | "seller" | "admin";
 export type PaymentMethod = "card" | "paypal" | "bank-transfer";
 export type SellerStatus = "buyer" | "pending" | "active" | "suspended" | "removed";
 export type SellerType = "retail" | "wholesale";
-export type GovernmentIdType = "ghana-card" | "passport" | "drivers-license";
+export type GovernmentIdType =
+  | "ghana-card"
+  | "voters-id"
+  | "drivers-license"
+  | "passport"
+  | "ecowas-card"
+  | "ssnit";
 
 export interface ProductVariant {
   id: string;

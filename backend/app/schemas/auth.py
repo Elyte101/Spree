@@ -60,8 +60,11 @@ class PaymentInfo(BaseModel):
     billingPostalCode: str = Field(default="", max_length=40)
 
 
+GhanaIdType = Literal["ghana-card", "voters-id", "drivers-license", "passport", "ecowas-card", "ssnit"]
+
+
 class SellerIdentityInfo(BaseModel):
-    governmentIdType: Literal["ghana-card", "passport", "drivers-license"] = "ghana-card"
+    governmentIdType: GhanaIdType = "ghana-card"
     governmentIdNumber: str = Field(default="", max_length=64)
     storeTagline: str = Field(default="", max_length=160)
 
@@ -126,7 +129,7 @@ class UserProfileOut(BaseModel):
     averageDeliveryDays: float | None = None
     sellerNotice: str = ""
     adminNote: str = ""
-    governmentIdType: str = "ghana-card"
+    governmentIdType: GhanaIdType = "ghana-card"
     governmentIdNumber: str = ""
     governmentIdVerified: bool = False
     sellerStartedAt: datetime | None = None

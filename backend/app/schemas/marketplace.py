@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.schemas.auth import PaymentInfo, SellerContact, ShippingAddress, StoreLocation
+from app.schemas.auth import GhanaIdType, PaymentInfo, SellerContact, ShippingAddress, StoreLocation
 from app.schemas.catalog import ProductOut
 
 SellerType = Literal["retail", "wholesale"]
@@ -28,7 +28,7 @@ class SellerSummaryOut(BaseModel):
     completedDeliveries: int = 0
     averageDeliveryDays: float | None = None
     sellerNotice: str = ""
-    governmentIdType: str = "ghana-card"
+    governmentIdType: GhanaIdType = "ghana-card"
     governmentIdVerified: bool = False
     followerCount: int
     productCount: int

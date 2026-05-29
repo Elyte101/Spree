@@ -27,17 +27,12 @@ import {
 import { useCart } from "@/components/providers/cartProvider";
 import { Product } from "@/types/types";
 import { ProductCard } from "@/components/product/productCard";
+import { formatPrice } from "@/lib/ghana";
 
 interface ProductDetailsPageProps {
   product: Product;
   relatedProducts: Product[];
 }
-
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
 
 const formatLabel = (value: string) =>
   value

@@ -20,6 +20,7 @@ import {
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
 import { Brand, Category, Collection } from "@/types/types";
+import { formatPrice } from "@/lib/ghana";
 
 interface ProductCreateFormProps {
   categories: Category[];
@@ -465,11 +466,11 @@ export function ProductCreateForm({
                       Price
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                      {previewPrice > 0 ? `$${previewPrice.toFixed(2)}` : "Not set yet"}
+                      {previewPrice > 0 ? formatPrice(previewPrice) : "Not set yet"}
                     </Typography>
                     {compareAtPrice ? (
                       <Typography variant="body2" color="text.secondary">
-                        Compare at ${compareAtPrice.toFixed(2)}
+                        Compare at {formatPrice(compareAtPrice)}
                       </Typography>
                     ) : null}
                   </Box>

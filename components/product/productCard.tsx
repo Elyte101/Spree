@@ -18,14 +18,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { useCart } from "@/components/providers/cartProvider";
 import { useFavorites } from "@/components/providers/favoritesProvider";
 import { Product } from "@/types/types";
+import { formatPrice } from "@/lib/ghana";
 
 interface ProductCardProps {
   product: Product;
   size?: "default" | "compact";
 }
-
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 
 export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const { addToCart } = useCart();

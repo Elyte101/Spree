@@ -7,6 +7,7 @@ import {
   GroupRounded,
   ReportRounded,
   StorefrontRounded,
+  VerifiedRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -165,6 +166,15 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
               </Typography>
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                 <Chip label={sellerTypeLabels[seller.sellerType]} variant="outlined" />
+                {seller.governmentIdVerified && (
+                  <Chip
+                    icon={<VerifiedRounded sx={{ fontSize: 15 }} />}
+                    label="Verified Seller"
+                    color="success"
+                    size="small"
+                    sx={{ fontWeight: 700 }}
+                  />
+                )}
                 {seller.sellerBadge ? (
                   <Chip label={seller.sellerBadge} color="success" variant="outlined" />
                 ) : null}

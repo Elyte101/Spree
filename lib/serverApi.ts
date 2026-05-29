@@ -77,7 +77,7 @@ const createFallbackCart = (): CartSummary => ({
   standardShipping: DEFAULT_STANDARD_SHIPPING,
   tax: 0,
   total: 0,
-  currency: "USD",
+  currency: "GHS",
 });
 
 const createFallbackSearchResponse = (query: string): SearchResponse => ({

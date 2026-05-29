@@ -17,8 +17,12 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
   Radio,
+  Select,
   Stack,
   TextField,
   Typography,
@@ -26,9 +30,7 @@ import {
 
 import { useCart } from "@/components/providers/cartProvider";
 import { UserProfile } from "@/types/types";
-
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
+import { formatPrice, GHANA_REGIONS, COUNTRY_LIST, DEFAULT_COUNTRY } from "@/lib/ghana";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -107,7 +109,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
       city: addr?.city || "",
       state: addr?.state || "",
       postalCode: addr?.postalCode || "",
-      country: addr?.country || "",
+      country: addr?.country || DEFAULT_COUNTRY,
     };
   });
 
@@ -336,6 +338,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       value={form.phone}
                       onChange={setField("phone")}
                       autoComplete="tel"
+                      placeholder="+233 XX XXX XXXX"
                     />
                     <TextField
                       label="Address"
@@ -359,27 +362,50 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       autoComplete="address-level2"
                       required
                     />
+                    {form.country === "Ghana" ? (
+                      <FormControl required>
+                        <InputLabel>Region</InputLabel>
+                        <Select
+                          label="Region"
+                          value={form.state}
+                          onChange={(e) => setForm((p) => ({ ...p, state: e.target.value }))}
+                          autoComplete="address-level1"
+                        >
+                          {GHANA_REGIONS.map((r) => (
+                            <MenuItem key={r} value={r}>{r}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    ) : (
+                      <TextField
+                        label="State / Province"
+                        value={form.state}
+                        onChange={setField("state")}
+                        autoComplete="address-level1"
+                        required
+                      />
+                    )}
                     <TextField
-                      label="State / Province"
-                      value={form.state}
-                      onChange={setField("state")}
-                      autoComplete="address-level1"
-                      required
-                    />
-                    <TextField
-                      label="Postal code"
+                      label="Postal / Digital Address"
                       value={form.postalCode}
                       onChange={setField("postalCode")}
                       autoComplete="postal-code"
+                      placeholder={form.country === "Ghana" ? "e.g. GA-123-4567" : ""}
                       required
                     />
-                    <TextField
-                      label="Country"
-                      value={form.country}
-                      onChange={setField("country")}
-                      autoComplete="country-name"
-                      required
-                    />
+                    <FormControl required>
+                      <InputLabel>Country</InputLabel>
+                      <Select
+                        label="Country"
+                        value={form.country}
+                        onChange={(e) => setForm((p) => ({ ...p, country: e.target.value, state: "" }))}
+                        autoComplete="country-name"
+                      >
+                        {COUNTRY_LIST.map((c) => (
+                          <MenuItem key={c} value={c}>{c}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                   </Box>
                 </Stack>
               </Paper>

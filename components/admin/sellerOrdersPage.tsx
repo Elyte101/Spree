@@ -21,6 +21,7 @@ import {
 } from "@mui/material";
 
 import type { OrderListItem, OrderStatus } from "@/types/types";
+import { formatPrice } from "@/lib/ghana";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -59,11 +60,8 @@ const statusMeta: Record<
   },
 };
 
-const formatPrice = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
-
 const formatDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("en-US", {
+  new Date(iso).toLocaleDateString("en-GH", {
     year: "numeric",
     month: "short",
     day: "numeric",

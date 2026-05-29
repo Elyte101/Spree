@@ -227,7 +227,7 @@ class Cart(Base):
     __tablename__ = "carts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    currency: Mapped[str] = mapped_column(String(8), default="USD")
+    currency: Mapped[str] = mapped_column(String(8), default="GHS")
     standard_shipping: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
     items: Mapped[list["CartItem"]] = relationship(
@@ -282,7 +282,7 @@ class Order(Base):
     shipping_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     tax: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    currency: Mapped[str] = mapped_column(String(8), default="USD")
+    currency: Mapped[str] = mapped_column(String(8), default="GHS")
 
     tracking_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     tracking_carrier: Mapped[str | None] = mapped_column(String(80), nullable=True)

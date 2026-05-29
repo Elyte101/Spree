@@ -71,7 +71,7 @@ export interface UpdateProfilePayload {
   storeLocation: StoreLocation;
   sellerContact: SellerContact;
   sellerIdentity: {
-    governmentIdType: "ghana-card" | "passport" | "drivers-license";
+    governmentIdType: "ghana-card" | "voters-id" | "drivers-license" | "passport" | "ecowas-card" | "ssnit";
     governmentIdNumber: string;
     storeTagline: string;
   };

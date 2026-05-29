@@ -39,6 +39,7 @@ import {
   Collection,
   HomeFeed,
 } from "@/types/types";
+import { formatPrice } from "@/lib/ghana";
 
 interface ProductListingPageProps {
   initialCatalog: CatalogResponse;
@@ -57,13 +58,6 @@ const sortOptions: Array<{ value: CatalogSort; label: string }> = [
 
 const PRODUCTS_PER_PAGE = 12;
 const ALL_FILTER_VALUE = "";
-
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(price);
 
 export function ProductListingPage({
   initialCatalog,

@@ -25,6 +25,7 @@ import {
 
 import { ProductCard } from "@/components/product/productCard";
 import { HomeFeed, Product } from "@/types/types";
+import { formatPrice } from "@/lib/ghana";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -52,9 +53,6 @@ interface LandingPageProps {
   totalProducts: number;
   averageRating: number;
 }
-
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
 
 const trustPillars = [
   {
