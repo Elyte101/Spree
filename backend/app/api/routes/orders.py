@@ -22,7 +22,17 @@ router = APIRouter()
 
 
 @router.post("/orders", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
-def orders_create(payload: OrderCreateIn, db: DBSession, _: InternalAPIKey):
+def orders_create(
+    payload: OrderCreateIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+):
+    if actor_role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create paid orders directly. Use /payments/initialize instead.",
+        )
     return create_order(db, payload)
 
 

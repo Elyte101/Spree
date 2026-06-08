@@ -1,5 +1,7 @@
 import type { NextAuthConfig } from "next-auth";
 
+import { canCreateProductsRole } from "./lib/roles";
+
 export const authConfig: NextAuthConfig = {
   secret:
     process.env.NEXTAUTH_SECRET ??
@@ -16,6 +18,16 @@ export const authConfig: NextAuthConfig = {
   providers: [],
 
   callbacks: {
+    // Populate session.user.id and session.user.role from the JWT token so that
+    // proxy.ts (the Next.js 16 middleware layer) can read req.auth.user.role.
+    session({ session, token }) {
+      if (session.user) {
+        if (token.id) session.user.id = token.id as string;
+        if (token.role) session.user.role = token.role as "customer" | "seller" | "admin";
+      }
+      return session;
+    },
+
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
       const { pathname } = nextUrl;
@@ -28,7 +40,7 @@ export const authConfig: NextAuthConfig = {
 
         if (
           pathname.startsWith("/dashboard/products/new") &&
-          auth?.user?.role !== "admin"
+          !canCreateProductsRole(auth?.user?.role)
         ) {
           return Response.redirect(new URL("/", nextUrl.origin));
         }

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -36,20 +38,25 @@ def get_cart_summary(db: Session) -> dict:
         for item in cart.items
     ]
 
-    subtotal = round(sum(item["price"] * item["quantity"] for item in items), 2)
-    shipping = 0.0 if not items or subtotal >= settings.free_shipping_threshold else float(cart.standard_shipping)
-    tax = 0.0 if not items else round(subtotal * 0.08, 2)
-    total = round(subtotal + shipping + tax, 2)
+    _q = Decimal("0.01")
+    subtotal = sum(
+        Decimal(str(item["price"])) * item["quantity"] for item in items
+    ).quantize(_q)
+    free_threshold = Decimal(str(settings.free_shipping_threshold))
+    std_shipping = Decimal(str(float(cart.standard_shipping)))
+    shipping = Decimal("0") if not items or subtotal >= free_threshold else std_shipping
+    tax = Decimal("0") if not items else (subtotal * Decimal("0.08")).quantize(_q)
+    total = (subtotal + shipping + tax).quantize(_q)
 
     return {
         "id": cart.id,
         "items": items,
         "itemCount": sum(item["quantity"] for item in items),
-        "subtotal": subtotal,
-        "shipping": shipping,
+        "subtotal": float(subtotal),
+        "shipping": float(shipping),
         "standardShipping": float(cart.standard_shipping),
-        "tax": tax,
-        "total": total,
+        "tax": float(tax),
+        "total": float(total),
         "currency": cart.currency,
     }
 

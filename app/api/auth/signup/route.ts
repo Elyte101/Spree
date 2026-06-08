@@ -32,11 +32,15 @@ export async function POST(request: NextRequest) {
     return parsed.response;
   }
 
-  const response = await proxyBackend("/auth/signup", {
-    method: "POST",
-    body: JSON.stringify(parsed.data),
-    headers: { "Content-Type": "application/json" },
-  });
+  const response = await proxyBackend(
+    "/auth/signup",
+    {
+      method: "POST",
+      body: JSON.stringify(parsed.data),
+      headers: { "Content-Type": "application/json" },
+    },
+    { internal: true },
+  );
 
   if (!response.ok) {
     recordFailedAttempt(`signup:${ip}`);

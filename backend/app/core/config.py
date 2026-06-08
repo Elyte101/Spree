@@ -30,14 +30,17 @@ class Settings(BaseSettings):
     trusted_hosts: list[str] = ["*"]
 
     default_shipping_rate: float = 12.0
+    express_shipping_rate: float = 18.0
     free_shipping_threshold: float = 200.0
 
     seed_admin_name: str = "Spree Admin"
     seed_admin_email: str = "admin@spree.local"
     seed_admin_password: str = "ChangeMe123!"
 
-    # Must match the BACKEND_INTERNAL_API_KEY used by the Next.js frontend
-    backend_internal_api_key: str = "2de75f671a37aaddae2b209a9a8d3844ae1c58a0"
+    # Must match the BACKEND_INTERNAL_API_KEY used by the Next.js frontend.
+    # Default matches the Next.js runtimeConfig.ts dev fallback so local dev
+    # works without setting the env var on either side.
+    backend_internal_api_key: str = "spree-internal-dev-key"
 
     auto_initialize_database: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -47,6 +50,30 @@ class Settings(BaseSettings):
 
     # Override the uploads storage directory (defaults to /tmp/uploads on Vercel)
     uploads_dir: str = ""
+
+    @field_validator("backend_internal_api_key", mode="after")
+    @classmethod
+    def warn_default_api_key(cls, value: str) -> str:
+        if value == "2de75f671a37aaddae2b209a9a8d3844ae1c58a0":
+            import warnings
+            warnings.warn(
+                "BACKEND_INTERNAL_API_KEY is using the hardcoded default. "
+                "Set a strong random value in your environment before going to production.",
+                stacklevel=2,
+            )
+        return value
+
+    @field_validator("seed_admin_password", mode="after")
+    @classmethod
+    def warn_default_seed_password(cls, value: str) -> str:
+        if value in ("ChangeMe123!", "password", "admin"):
+            import warnings
+            warnings.warn(
+                "SEED_ADMIN_PASSWORD is using a weak default. "
+                "Set a strong password in your environment.",
+                stacklevel=2,
+            )
+        return value
 
     @field_validator("cors_origins", "trusted_hosts", mode="before")
     @classmethod

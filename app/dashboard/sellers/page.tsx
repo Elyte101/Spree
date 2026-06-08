@@ -12,9 +12,15 @@ import {
   Typography,
 } from "@mui/material";
 
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { getAdminSellers } from "@/lib/serverApi";
 import { SellerType } from "@/types/types";
+
+export const metadata: Metadata = {
+  title: "Sellers | Dashboard | Spree",
+  description: "Manage seller accounts",
+};
 
 const formatDate = (value?: string | null) =>
   value

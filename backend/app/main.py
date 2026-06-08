@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import Response
@@ -56,10 +57,31 @@ def readiness_check():
 
 
 @app.get("/uploads/{path:path}")
-def serve_upload(path: str):
-    """Serve uploaded identity documents. On Vercel these live in /tmp and are
-    ephemeral — replace with cloud storage (S3/Cloudinary) for production."""
+def serve_upload(
+    path: str,
+    x_internal_api_key: Annotated[str | None, Header(alias="X-Internal-Api-Key")] = None,
+    x_actor_user_id: Annotated[str | None, Header(alias="X-Actor-User-Id")] = None,
+    x_actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
+):
+    """Serve uploaded identity documents.
+    Restricted to the owning user or admins — requires the internal API key.
+    On Vercel files live in /tmp and are ephemeral; replace with cloud storage
+    (S3/Cloudinary) for production persistence.
+    """
+    import secrets as _secrets
     from app.services.uploads import _uploads_root
+
+    # Enforce internal key so this endpoint is only reachable through the
+    # Next.js proxy, not directly from the public internet.
+    if x_internal_api_key is None or not _secrets.compare_digest(
+        x_internal_api_key, settings.backend_internal_api_key
+    ):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # path starts with "{user_id}/…"; the first segment is the owner.
+    owner_id = path.split("/")[0] if "/" in path else path
+    if x_actor_role != "admin" and x_actor_user_id != owner_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     uploads_root = _uploads_root()
     file_path = (uploads_root / path).resolve()

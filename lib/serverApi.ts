@@ -430,12 +430,22 @@ export const searchStorefront = (query: string) =>
 
 export const getUserProfile = (
   userId: string,
-  fallback?: Partial<Pick<UserProfile, "name" | "email" | "role">>
+  fallback?: Partial<Pick<UserProfile, "name" | "email" | "role">>,
+  actorRole?: string
 ) =>
-  getJson<UserProfile>(`/auth/profile/${userId}`, undefined, {
-    internal: true,
-    fallback: () => createFallbackUserProfile(userId, fallback),
-  });
+  getJson<UserProfile>(
+    `/auth/profile/${userId}`,
+    {
+      headers: {
+        "X-Actor-User-Id": userId,
+        ...(actorRole ? { "X-Actor-Role": actorRole } : {}),
+      },
+    },
+    {
+      internal: true,
+      fallback: () => createFallbackUserProfile(userId, fallback),
+    }
+  );
 
 export const getOrders = (userId: string, role: string) =>
   getJson<import("@/types/types").OrderListItem[]>(

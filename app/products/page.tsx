@@ -9,12 +9,18 @@ export const metadata: Metadata = {
 
 const PRODUCTS_PER_PAGE = 12;
 
-export default async function ProductsPage() {
+interface PageProps {
+  searchParams: Promise<{ search?: string }>;
+}
+
+export default async function ProductsPage({ searchParams }: PageProps) {
+  const { search = "" } = await searchParams;
+
   const [homeFeed, brands, collections, initialCatalog] = await Promise.all([
     getHomeFeed(),
     getBrands(),
     getCollections(),
-    getProducts({ limit: PRODUCTS_PER_PAGE }),
+    getProducts({ limit: PRODUCTS_PER_PAGE, ...(search ? { search } : {}) }),
   ]);
 
   return (
@@ -23,6 +29,7 @@ export default async function ProductsPage() {
       homeFeed={homeFeed}
       brands={brands}
       collections={collections}
+      initialSearch={search}
     />
   );
 }

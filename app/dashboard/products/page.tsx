@@ -15,6 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 import {
@@ -23,12 +24,12 @@ import {
   getProducts,
   getUserProfile,
 } from "@/lib/serverApi";
+import { formatPrice } from "@/lib/ghana";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+export const metadata: Metadata = {
+  title: "Products | Dashboard | Spree",
+  description: "Manage your product listings",
+};
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("en-US", {

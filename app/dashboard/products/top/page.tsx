@@ -13,14 +13,15 @@ import {
   Typography,
 } from "@mui/material";
 
+import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { getAdminTopProducts } from "@/lib/serverApi";
+import { formatPrice } from "@/lib/ghana";
 
-const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(price);
+export const metadata: Metadata = {
+  title: "Top Products | Dashboard | Spree",
+  description: "Best performing products by sales",
+};
 
 interface TopProductsPageProps {
   searchParams: Promise<{ page?: string }>;

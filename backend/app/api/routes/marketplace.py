@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import DBSession, InternalAPIKey
+from app.api.deps import ActorRole, DBSession, InternalAPIKey
 from app.schemas.marketplace import (
     AdminSellerDetailOut,
     AdminSellerStatusUpdateRequest,
@@ -53,12 +53,16 @@ def seller_report(seller_id: str, payload: ReportSellerRequest, db: DBSession, _
 
 
 @router.get("/admin/sellers", response_model=list[AdminSellerSummaryOut])
-def admin_sellers(db: DBSession, _: InternalAPIKey):
+def admin_sellers(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return list_admin_sellers(db)
 
 
 @router.get("/admin/sellers/{seller_id}", response_model=AdminSellerDetailOut)
-def admin_seller_detail(seller_id: str, db: DBSession, _: InternalAPIKey):
+def admin_seller_detail(seller_id: str, db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return get_admin_seller_detail(db, seller_id)
 
 
@@ -68,7 +72,10 @@ def admin_seller_status_update(
     payload: AdminSellerStatusUpdateRequest,
     db: DBSession,
     _: InternalAPIKey,
+    actor_role: ActorRole,
 ):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return update_admin_seller_status(
         db,
         seller_id,
@@ -86,7 +93,10 @@ def admin_seller_status_update(
 def admin_top_products(
     db: DBSession,
     _: InternalAPIKey,
+    actor_role: ActorRole,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=100, ge=1, le=100),
 ):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return list_top_products(db, page, limit)

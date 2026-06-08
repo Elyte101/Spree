@@ -13,7 +13,16 @@ export async function GET() {
     );
   }
 
-  return proxyBackend(`/auth/profile/${session.user.id}`, undefined, { internal: true });
+  return proxyBackend(
+    `/auth/profile/${session.user.id}`,
+    {
+      headers: {
+        "X-Actor-User-Id": session.user.id,
+        "X-Actor-Role": session.user.role,
+      },
+    },
+    { internal: true }
+  );
 }
 
 export async function PUT(request: Request) {
@@ -33,6 +42,8 @@ export async function PUT(request: Request) {
       body: await request.text(),
       headers: {
         "Content-Type": "application/json",
+        "X-Actor-User-Id": session.user.id,
+        "X-Actor-Role": session.user.role,
       },
     },
     { internal: true }

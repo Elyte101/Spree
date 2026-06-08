@@ -37,6 +37,7 @@ def payment_verify(
 async def paystack_webhook(
     request: Request,
     db: DBSession,
+    _: InternalAPIKey,
     x_paystack_signature: str = Header(default=""),
 ):
     body = await request.body()
@@ -49,6 +50,11 @@ async def paystack_webhook(
         ).hexdigest()
         if not hmac.compare_digest(computed, x_paystack_signature):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    else:
+        logger.warning(
+            "paystack_webhook_unverified: PAYSTACK_SECRET_KEY is not set — "
+            "skipping signature check. Set the key before going to production."
+        )
 
     import json
     try:

@@ -17,6 +17,7 @@ import {
   FormControlLabel,
   MenuItem,
   Paper,
+  Snackbar,
   Stack,
   Switch,
   TextField,
@@ -25,13 +26,21 @@ import {
 import { ThemeToggle } from "@/components/ui/themeToggle";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { useThemeContext } from "@/theme/themeContext";
+import { useSettingsStore } from "@/lib/stores/settingsStore";
 
 export function SettingsPage() {
   const { mode } = useThemeContext();
-  const [marketingEmails, setMarketingEmails] = React.useState(true);
-  const [orderUpdates, setOrderUpdates] = React.useState(true);
-  const [restockAlerts, setRestockAlerts] = React.useState(true);
-  const [compactCards, setCompactCards] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const {
+    currency, setCurrency,
+    region, setRegion,
+    defaultSort, setDefaultSort,
+    layoutDensity, setLayoutDensity,
+    compactCards, setCompactCards,
+    marketingEmails, setMarketingEmails,
+    orderUpdates, setOrderUpdates,
+    restockAlerts, setRestockAlerts,
+  } = useSettingsStore();
 
   return (
     <Box
@@ -89,23 +98,25 @@ export function SettingsPage() {
                     gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
                   }}
                 >
-                  <TextField select label="Currency" defaultValue="USD">
-                    <MenuItem value="USD">USD</MenuItem>
-                    <MenuItem value="EUR">EUR</MenuItem>
-                    <MenuItem value="GBP">GBP</MenuItem>
+                  <TextField select label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                    <MenuItem value="GHS">GHS — Ghanaian Cedi</MenuItem>
+                    <MenuItem value="USD">USD — US Dollar</MenuItem>
+                    <MenuItem value="EUR">EUR — Euro</MenuItem>
+                    <MenuItem value="GBP">GBP — British Pound</MenuItem>
                   </TextField>
-                  <TextField select label="Region" defaultValue="NA">
-                    <MenuItem value="NA">North America</MenuItem>
-                    <MenuItem value="EU">Europe</MenuItem>
+                  <TextField select label="Region" value={region} onChange={(e) => setRegion(e.target.value)}>
+                    <MenuItem value="GH">Ghana</MenuItem>
+                    <MenuItem value="NG">Nigeria</MenuItem>
+                    <MenuItem value="KE">Kenya</MenuItem>
                     <MenuItem value="GLOBAL">Global</MenuItem>
                   </TextField>
-                  <TextField select label="Default sort order" defaultValue="featured">
+                  <TextField select label="Default sort order" value={defaultSort} onChange={(e) => setDefaultSort(e.target.value)}>
                     <MenuItem value="featured">Featured</MenuItem>
                     <MenuItem value="newest">Newest</MenuItem>
                     <MenuItem value="rating">Top rated</MenuItem>
                     <MenuItem value="price-asc">Price low to high</MenuItem>
                   </TextField>
-                  <TextField select label="Layout density" defaultValue="comfortable">
+                  <TextField select label="Layout density" value={layoutDensity} onChange={(e) => setLayoutDensity(e.target.value)}>
                     <MenuItem value="comfortable">Comfortable</MenuItem>
                     <MenuItem value="compact">Compact</MenuItem>
                   </TextField>
@@ -224,6 +235,7 @@ export function SettingsPage() {
                 <Button
                   startIcon={<SaveRounded />}
                   variant="contained"
+                  onClick={() => setSaved(true)}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Save preferences
@@ -233,6 +245,14 @@ export function SettingsPage() {
           </Stack>
         </Box>
       </Stack>
+
+      <Snackbar
+        open={saved}
+        autoHideDuration={2500}
+        onClose={() => setSaved(false)}
+        message="Preferences saved"
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      />
     </Box>
   );
 }

@@ -46,6 +46,7 @@ interface ProductListingPageProps {
   homeFeed: HomeFeed;
   brands: Brand[];
   collections: Collection[];
+  initialSearch?: string;
 }
 
 const sortOptions: Array<{ value: CatalogSort; label: string }> = [
@@ -64,6 +65,7 @@ export function ProductListingPage({
   homeFeed,
   brands,
   collections,
+  initialSearch,
 }: ProductListingPageProps) {
   const selectedCategory = useCatalogFiltersStore((state) => state.category);
   const selectedBrand = useCatalogFiltersStore((state) => state.brand);
@@ -80,7 +82,19 @@ export function ProductListingPage({
   const setInStockOnly = useCatalogFiltersStore((state) => state.setInStockOnly);
   const setSearch = useCatalogFiltersStore((state) => state.setSearch);
   const resetCatalogFilters = useCatalogFiltersStore((state) => state.reset);
-  const [searchInput, setSearchInput] = React.useState(search);
+  // Seed the store from a URL ?search= param on first render so the header
+  // search bar navigates correctly to /products?search=term.
+  const initialSearchRef = React.useRef(initialSearch ?? "");
+  React.useEffect(() => {
+    if (initialSearchRef.current) {
+      setSearch(initialSearchRef.current);
+      setSearchInput(initialSearchRef.current);
+    }
+  // setSearch is a stable Zustand action — running once on mount is intentional.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const [searchInput, setSearchInput] = React.useState(initialSearch ?? search);
   const deferredSearch = React.useDeferredValue(searchInput.trim());
 
   React.useEffect(() => {

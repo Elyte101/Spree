@@ -293,6 +293,7 @@ class Order(Base):
     payout_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paystack_reference: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     paystack_tx_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     estimated_delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     estimated_delivery_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

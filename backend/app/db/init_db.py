@@ -19,6 +19,16 @@ def initialize_database() -> None:
         logger.warning("DATABASE_URL not set — skipping database initialization.")
         return
 
+    if settings.is_deployed:
+        # create_all runs on every cold start on Vercel — it adds latency and
+        # can mask schema drift.  Set AUTO_INITIALIZE_DATABASE=false in
+        # production and use a proper migration (alembic / one-time script).
+        logger.warning(
+            "auto_initialize_database is True in a deployed environment. "
+            "Consider setting AUTO_INITIALIZE_DATABASE=false and running "
+            "migrations via a one-time script instead."
+        )
+
     Base.metadata.create_all(bind=engine)
     logger.info("Database schema ready.")
 

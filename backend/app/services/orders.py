@@ -4,7 +4,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -17,6 +17,105 @@ logger = logging.getLogger(__name__)
 
 # Buyers pay seller_price * 1.10; seller receives seller_price back on delivery.
 _MARKUP = Decimal("1.10")
+_TAX_RATE = Decimal("0.08")
+_TOTAL_TOLERANCE = Decimal("0.50")  # max allowed GHS difference between client and server total
+
+
+def _server_totals(
+    db: Session,
+    items: list,
+    shipping_method: str,
+) -> tuple[Decimal, Decimal, Decimal, Decimal, list[tuple]]:
+    """
+    Recompute (subtotal, shipping_cost, tax, total, item_prices) entirely from DB.
+
+    item_prices is a list of (product_id, listed_price) so callers can store
+    the authoritative price rather than the client-supplied one.
+
+    Raises HTTP 404 if any productId doesn't exist in the DB.
+    """
+    standard_rate = Decimal(str(settings.default_shipping_rate))
+    express_rate = Decimal(str(settings.express_shipping_rate))
+    free_threshold = Decimal(str(settings.free_shipping_threshold))
+
+    subtotal = Decimal("0")
+    item_prices: list[tuple] = []
+    for item in items:
+        if item.productId:
+            product = db.get(Product, item.productId)
+            if product is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Product '{item.productId}' not found",
+                )
+            listed_price = (Decimal(str(product.price)) * _MARKUP).quantize(Decimal("0.01"))
+        else:
+            # Guest / external item with no productId — accept client price
+            listed_price = Decimal(str(item.price)).quantize(Decimal("0.01"))
+        item_prices.append((item.productId, listed_price))
+        subtotal += listed_price * item.quantity
+
+    subtotal = subtotal.quantize(Decimal("0.01"))
+
+    if not items or subtotal >= free_threshold:
+        shipping_cost = Decimal("0")
+    elif shipping_method == "express":
+        shipping_cost = express_rate
+    else:
+        shipping_cost = standard_rate
+
+    tax = (subtotal * _TAX_RATE).quantize(Decimal("0.01"))
+    total = (subtotal + shipping_cost + tax).quantize(Decimal("0.01"))
+    return subtotal, shipping_cost, tax, total, item_prices
+
+
+def _check_stock(db: Session, items: list) -> None:
+    """
+    Verify every item has sufficient stock BEFORE creating the Paystack transaction.
+    Raises 409 Conflict on the first item that is out of stock or insufficient.
+    """
+    for item in items:
+        if not item.productId:
+            continue
+        product = db.get(Product, item.productId)
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Product '{item.productId}' not found",
+            )
+        if product.stock < item.quantity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"'{product.name}' only has {product.stock} unit(s) available "
+                    f"(requested {item.quantity})"
+                ),
+            )
+
+
+def _decrement_stock(db: Session, order: Order) -> None:
+    """
+    Atomically decrement stock for every order item using a conditional UPDATE.
+    The WHERE stock >= quantity guard prevents the column going negative if two
+    concurrent payments arrive for the same last unit.  An oversell is logged
+    as a warning for manual review rather than blocking the already-taken payment.
+    """
+    for item in order.items:
+        if not item.product_id or item.quantity <= 0:
+            continue
+        result = db.execute(
+            sa_update(Product)
+            .where(Product.id == item.product_id, Product.stock >= item.quantity)
+            .values(stock=Product.stock - item.quantity)
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount == 0:
+            logger.warning(
+                "oversell: order=%s product=%s qty=%d — stock exhausted at payment confirmation",
+                order.id,
+                item.product_id,
+                item.quantity,
+            )
 
 
 def _order_to_dict(order: Order) -> dict:
@@ -83,8 +182,22 @@ def _order_to_list_dict(order: Order) -> dict:
     }
 
 
-def _build_pending_order(db: Session, payload: OrderCreateIn, order_id: str) -> Order:
-    """Create order items and the Order row in status='pending'. Does not commit."""
+def _build_pending_order(
+    db: Session,
+    payload: OrderCreateIn,
+    order_id: str,
+    *,
+    subtotal: Decimal,
+    shipping_cost: Decimal,
+    tax: Decimal,
+    total: Decimal,
+    item_prices: list[tuple],
+) -> Order:
+    """Create order items and the Order row in status='pending'. Does not commit.
+
+    Monetary totals and item prices MUST be the server-computed values from
+    _server_totals(), never the client-supplied floats from payload.
+    """
     order = Order(
         id=order_id,
         user_id=payload.userId,
@@ -100,15 +213,15 @@ def _build_pending_order(db: Session, payload: OrderCreateIn, order_id: str) -> 
         country=payload.country.strip(),
         shipping_method=payload.shippingMethod,
         payment_method=payload.paymentMethod,
-        subtotal=Decimal(str(payload.subtotal)),
-        shipping_cost=Decimal(str(payload.shippingCost)),
-        tax=Decimal(str(payload.tax)),
-        total=Decimal(str(payload.total)),
+        subtotal=subtotal,
+        shipping_cost=shipping_cost,
+        tax=tax,
+        total=total,
         currency=payload.currency,
     )
     db.add(order)
 
-    for idx, item in enumerate(payload.items):
+    for idx, (item, (product_id, listed_price)) in enumerate(zip(payload.items, item_prices)):
         seller_id: str | None = None
         if item.productId:
             product = db.get(Product, item.productId)
@@ -122,7 +235,7 @@ def _build_pending_order(db: Session, payload: OrderCreateIn, order_id: str) -> 
                 seller_id=seller_id,
                 name=item.name,
                 image=item.image,
-                price=Decimal(str(item.price)),
+                price=listed_price,   # server-authoritative price, never client price
                 quantity=item.quantity,
                 color=item.color,
                 size=item.size,
@@ -135,12 +248,55 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
     """
     Create a pending order and return a Paystack authorization URL.
     The order stays 'pending' until the webhook/verify confirms payment.
+
+    Totals are recomputed server-side from the database; the client-supplied
+    total is only checked for a reasonable match (within _TOTAL_TOLERANCE) so
+    that UI rounding differences don't block legitimate orders, but a manipulated
+    total (e.g. client sends 0.01) is rejected before Paystack is called.
     """
+    # 0. Idempotency: return existing pending order if the same key was already used
+    if payload.idempotencyKey:
+        existing = db.scalar(
+            select(Order).where(Order.idempotency_key == payload.idempotencyKey)
+        )
+        if existing:
+            return {
+                "orderId": existing.id,
+                "reference": existing.paystack_reference or "",
+                "authorizationUrl": "",
+            }
+
+    # 1. Recompute totals and verify stock before touching Paystack
+    server_subtotal, server_shipping, server_tax, server_total, item_prices = _server_totals(
+        db, payload.items, payload.shippingMethod
+    )
+    _check_stock(db, payload.items)
+
+    # 2. Reject if the client total is suspiciously far from the server total
+    client_total = Decimal(str(payload.total)).quantize(Decimal("0.01"))
+    if abs(server_total - client_total) > _TOTAL_TOLERANCE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Order total mismatch: server computed {server_total}, "
+                f"client sent {client_total}. Please refresh your cart and retry."
+            ),
+        )
+
     order_id = f"order-{uuid4().hex[:16]}"
     reference = f"spree-{order_id}-{uuid4().hex[:8]}"
 
-    order = _build_pending_order(db, payload, order_id)
+    order = _build_pending_order(
+        db, payload, order_id,
+        subtotal=server_subtotal,
+        shipping_cost=server_shipping,
+        tax=server_tax,
+        total=server_total,
+        item_prices=item_prices,
+    )
     order.paystack_reference = reference
+    if payload.idempotencyKey:
+        order.idempotency_key = payload.idempotencyKey
     db.commit()
     db.refresh(order)
 
@@ -152,8 +308,8 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
             "authorizationUrl": f"{callback_url}?reference={reference}&mock=1",
         }
 
-    # Paystack expects amount in smallest currency unit (pesewas / cents)
-    amount_minor = int(Decimal(str(payload.total)) * 100)
+    # 3. Charge the server-computed total in pesewas (never the client value)
+    amount_minor = int(server_total * 100)
     try:
         ps_data = paystack_svc.initialize_transaction(
             amount_minor=amount_minor,
@@ -176,12 +332,14 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
 
 
 def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
-    """Transition order to paid and notify sellers."""
+    """Transition order to paid, decrement stock, and notify sellers."""
     now = datetime.now(timezone.utc)
     order.status = "paid"
     order.paid_at = now
     if tx_id:
         order.paystack_tx_id = tx_id
+
+    _decrement_stock(db, order)
 
     seller_ids_notified: set[str] = set()
     for item in order.items:
@@ -206,7 +364,9 @@ def verify_payment(db: Session, reference: str) -> dict:
     Called from the Paystack redirect callback page.
     Verifies with Paystack API, marks order paid if confirmed.
     """
-    order = db.scalar(select(Order).where(Order.paystack_reference == reference))
+    order = db.scalar(
+        select(Order).where(Order.paystack_reference == reference).with_for_update()
+    )
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found for this reference")
 
@@ -247,7 +407,11 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
         reference = data.get("reference", "")
         if not reference:
             return
-        order = db.scalar(select(Order).where(Order.paystack_reference == reference))
+        order = db.scalar(
+            select(Order)
+            .where(Order.paystack_reference == reference)
+            .with_for_update(skip_locked=True)
+        )
         if order and order.status == "pending":
             _mark_order_paid(db, order, tx_id=str(data.get("id", "")))
             logger.info("Webhook: marked order %s as paid (ref=%s)", order.id, reference)
@@ -378,7 +542,9 @@ def list_admin_orders(db: Session, page: int = 1, limit: int = 50) -> list[dict]
 def add_tracking(
     db: Session, order_id: str, payload: OrderTrackingIn, seller_id: str
 ) -> dict:
-    order = db.get(Order, order_id)
+    order = db.scalar(
+        select(Order).where(Order.id == order_id).with_for_update()
+    )
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -427,7 +593,11 @@ def add_tracking(
 
 
 def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
-    order = db.get(Order, order_id)
+    # Use FOR UPDATE so two concurrent confirm-delivery calls can't both pass
+    # the status check and double-release the seller payout.
+    order = db.scalar(
+        select(Order).where(Order.id == order_id).with_for_update()
+    )
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 

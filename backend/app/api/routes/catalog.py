@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
-from app.api.deps import DBSession, InternalAPIKey
+from app.api.deps import ActorRole, DBSession, InternalAPIKey
 from app.schemas.catalog import (
     AdminOverviewOut,
     BrandOut,
@@ -128,5 +128,7 @@ def search(db: DBSession, query: str = Query(default="")):
 
 
 @router.get("/admin/overview", response_model=AdminOverviewOut)
-def admin_overview(db: DBSession, _: InternalAPIKey):
+def admin_overview(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return get_admin_overview(db)

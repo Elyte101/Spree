@@ -16,6 +16,7 @@ class OrderItemIn(BaseModel):
 
 class OrderCreateIn(BaseModel):
     userId: str | None = None
+    idempotencyKey: str | None = Field(default=None, max_length=128)
 
     fullName: str = Field(min_length=2, max_length=120)
     email: str = Field(min_length=5, max_length=255)
@@ -29,7 +30,7 @@ class OrderCreateIn(BaseModel):
     country: str = Field(min_length=1, max_length=120)
 
     shippingMethod: Literal["standard", "express"] = "standard"
-    paymentMethod: Literal["card", "paypal", "wallet"] = "card"
+    paymentMethod: Literal["paystack", "card", "paypal", "wallet"] = "paystack"
 
     subtotal: float = Field(ge=0)
     shippingCost: float = Field(ge=0)

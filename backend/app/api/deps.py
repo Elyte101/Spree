@@ -1,3 +1,4 @@
+import logging
 import secrets
 from typing import Annotated
 
@@ -9,13 +10,27 @@ from app.db.session import get_db
 
 DBSession = Annotated[Session, Depends(get_db)]
 
+logger = logging.getLogger(__name__)
+
 
 def require_internal_api_key(
     x_internal_api_key: Annotated[str | None, Header(alias="X-Internal-Api-Key")] = None,
 ) -> None:
-    if x_internal_api_key is None or not secrets.compare_digest(
-        x_internal_api_key, settings.backend_internal_api_key
-    ):
+    if x_internal_api_key is None:
+        logger.warning(
+            "internal_key_missing: request arrived without X-Internal-Api-Key header. "
+            "Check that BACKEND_INTERNAL_API_KEY is set on the frontend Vercel project "
+            "and that all proxyBackend() calls pass { internal: true }."
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Internal API key is required",
+        )
+    if not secrets.compare_digest(x_internal_api_key, settings.backend_internal_api_key):
+        logger.warning(
+            "internal_key_mismatch: received key does not match BACKEND_INTERNAL_API_KEY. "
+            "Set the SAME secret value on both the frontend and backend Vercel projects."
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid internal API key",
