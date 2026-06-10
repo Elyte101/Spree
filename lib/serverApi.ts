@@ -243,7 +243,11 @@ async function fetchBackend(
   }
 
   if (options?.internal) {
-    headers.set("X-Internal-Api-Key", getBackendInternalApiKey());
+    try {
+      headers.set("X-Internal-Api-Key", getBackendInternalApiKey());
+    } catch (err) {
+      throw new BackendUnavailableError(err);
+    }
   }
 
   try {
