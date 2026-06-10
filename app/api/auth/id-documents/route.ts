@@ -14,7 +14,10 @@ export async function POST(request: Request) {
 
   const response = await fetch(backendUrl, {
     method: "POST",
-    headers: { "X-Internal-Api-Key": getBackendInternalApiKey() },
+    headers: {
+      "X-Internal-Api-Key": getBackendInternalApiKey(),
+      "X-Actor-User-Id": session.user.id,
+    },
     body: formData,
   });
 

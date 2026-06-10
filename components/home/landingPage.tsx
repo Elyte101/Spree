@@ -230,7 +230,7 @@ export function LandingPage({
                   </Button>
                   <Button
                     component={Link}
-                    href="/profile"
+                    href="/auth/sign-in?callbackUrl=%2Fprofile"
                     variant="outlined"
                     size="large"
                     startIcon={<StorefrontOutlined />}

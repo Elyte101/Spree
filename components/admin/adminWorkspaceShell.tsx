@@ -355,21 +355,24 @@ export function AdminWorkspaceShell({
             open={workspaceMenuOpen}
             onClose={() => setWorkspaceMenuOpen(false)}
             ModalProps={{ keepMounted: true }}
-            sx={(theme) => ({
-              display: { xs: "block", lg: "none" },
-              "& .MuiDrawer-paper": {
-                width: "min(86vw, 320px)",
-                p: 2,
-                boxSizing: "border-box",
-                borderRight: "1px solid",
-                borderColor: alpha(theme.palette.common.white, theme.palette.mode === "dark" ? 0.12 : 0.52),
-                backgroundColor: alpha(
-                  theme.palette.background.paper,
-                  theme.palette.mode === "dark" ? 0.72 : 0.78
-                ),
-                backdropFilter: "blur(22px) saturate(150%)",
+            sx={{ display: { xs: "block", lg: "none" } }}
+            slotProps={{
+              paper: {
+                sx: (theme) => ({
+                  width: "min(86vw, 320px)",
+                  p: 2,
+                  boxSizing: "border-box",
+                  borderRight: "1px solid",
+                  borderColor: alpha(theme.palette.common.white, theme.palette.mode === "dark" ? 0.12 : 0.52),
+                  backgroundColor: alpha(
+                    theme.palette.background.paper,
+                    theme.palette.mode === "dark" ? 0.72 : 0.78
+                  ),
+                  backdropFilter: "blur(22px) saturate(150%)",
+                  WebkitBackdropFilter: "blur(22px) saturate(150%)",
+                }),
               },
-            })}
+            }}
           >
             <Stack spacing={2}>
               <Stack direction="row" alignItems="center" justifyContent="space-between">

@@ -11,7 +11,14 @@ export async function PUT(request: Request) {
   const body = await request.json();
   return proxyBackend(
     `/auth/profile/${session.user.id}/payout-info`,
-    { method: "PUT", body: JSON.stringify(body), headers: { "Content-Type": "application/json" } },
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Actor-User-Id": session.user.id,
+      },
+    },
     { internal: true }
   );
 }

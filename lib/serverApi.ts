@@ -272,6 +272,14 @@ async function getJson<T>(
     const response = await fetchBackend(path, init, options);
 
     if (!response.ok) {
+      // 5xx errors indicate a backend fault — degrade gracefully when a fallback is provided
+      // rather than propagating a throw that crashes the SSR page.
+      if (response.status >= 500 && options?.fallback) {
+        console.warn(
+          JSON.stringify({ event: "backend_5xx_fallback", url: buildBackendUrl(path), status: response.status })
+        );
+        return options.fallback();
+      }
       throw new Error(`Backend request failed with status ${response.status}`);
     }
 

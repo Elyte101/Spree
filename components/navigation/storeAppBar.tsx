@@ -9,10 +9,12 @@ import {
   AccountCircleOutlined,
   Brightness4Rounded,
   Brightness7Rounded,
+  CloseRounded,
   DashboardRounded,
   FavoriteBorderOutlined,
   LoginRounded,
   LogoutRounded,
+  MenuRounded,
   NotificationsOutlined,
   ReceiptLongOutlined,
   SearchRounded,
@@ -24,9 +26,12 @@ import {
   Badge,
   Box,
   Divider,
+  Drawer,
   IconButton,
   InputAdornment,
   InputBase,
+  List,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -60,6 +65,7 @@ export function StoreAppBar() {
   const [profileAnchorEl, setProfileAnchorEl] = React.useState<HTMLElement | null>(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = React.useState<HTMLElement | null>(null);
   const [searchValue, setSearchValue] = React.useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isAuthenticated = status === "authenticated";
   const isCartRoute = pathname === "/cart" || pathname === "/checkout" || pathname.startsWith("/checkout/");
@@ -249,7 +255,7 @@ export function StoreAppBar() {
             aria-label="search"
             component={Link}
             href="/products"
-            sx={getNavButtonSx(false)}
+            sx={{ ...getNavButtonSx(false), display: { xs: "inline-flex", sm: "none" } }}
           >
             <SearchRounded />
           </IconButton>
@@ -257,7 +263,7 @@ export function StoreAppBar() {
 
         <Box sx={{ flexGrow: { xs: 1, sm: 0 } }} />
 
-        {/* Nav icons */}
+        {/* Nav icons — collapsed on mobile */}
         <Stack
           direction="row"
           spacing={0}
@@ -271,26 +277,53 @@ export function StoreAppBar() {
             },
           }}
         >
-          {navItems.map((item) => (
-            <Tooltip key={item.ariaLabel} title={item.label}>
-              <IconButton
-                aria-label={item.ariaLabel}
-                color="inherit"
-                component={Link}
-                href={item.href}
-                sx={getNavButtonSx(item.active)}
-              >
-                {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
-                  <Badge badgeContent={item.badge} color="primary" max={99}>
-                    {item.icon}
-                  </Badge>
-                ) : (
-                  item.icon
-                )}
-              </IconButton>
-            </Tooltip>
-          ))}
+          {/* Secondary items: hidden on mobile, shown on md+ */}
+          {navItems
+            .filter((item) => item.ariaLabel !== "cart")
+            .map((item) => (
+              <Tooltip key={item.ariaLabel} title={item.label}>
+                <IconButton
+                  aria-label={item.ariaLabel}
+                  color="inherit"
+                  component={Link}
+                  href={item.href}
+                  sx={{ ...getNavButtonSx(item.active), display: { xs: "none", md: "inline-flex" } }}
+                >
+                  {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+                    <Badge badgeContent={item.badge} color="primary" max={99}>
+                      {item.icon}
+                    </Badge>
+                  ) : (
+                    item.icon
+                  )}
+                </IconButton>
+              </Tooltip>
+            ))}
 
+          {/* Cart — always visible */}
+          {navItems
+            .filter((item) => item.ariaLabel === "cart")
+            .map((item) => (
+              <Tooltip key={item.ariaLabel} title={item.label}>
+                <IconButton
+                  aria-label={item.ariaLabel}
+                  color="inherit"
+                  component={Link}
+                  href={item.href}
+                  sx={getNavButtonSx(item.active)}
+                >
+                  {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+                    <Badge badgeContent={item.badge} color="primary" max={99}>
+                      {item.icon}
+                    </Badge>
+                  ) : (
+                    item.icon
+                  )}
+                </IconButton>
+              </Tooltip>
+            ))}
+
+          {/* Profile — always visible */}
           <Tooltip title="Profile">
             <IconButton
               aria-label="profile"
@@ -302,18 +335,123 @@ export function StoreAppBar() {
             </IconButton>
           </Tooltip>
 
+          {/* Settings — desktop only */}
           <Tooltip title="Settings">
             <IconButton
               aria-label="settings"
               color="inherit"
               onClick={(event) => setSettingsAnchorEl(event.currentTarget)}
-              sx={getNavButtonSx(isSettingsRoute || settingsMenuOpen)}
+              sx={{ ...getNavButtonSx(isSettingsRoute || settingsMenuOpen), display: { xs: "none", md: "inline-flex" } }}
             >
               <SettingsOutlined />
             </IconButton>
           </Tooltip>
+
+          {/* Hamburger — mobile only */}
+          <Tooltip title="Menu">
+            <IconButton
+              aria-label="open navigation menu"
+              color="inherit"
+              onClick={() => setMobileMenuOpen(true)}
+              sx={{ ...getNavButtonSx(mobileMenuOpen), display: { xs: "inline-flex", md: "none" } }}
+            >
+              <MenuRounded />
+            </IconButton>
+          </Tooltip>
         </Stack>
       </Toolbar>
+
+      {/* Mobile navigation drawer */}
+      <Drawer
+        anchor="right"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        sx={{ display: { xs: "block", md: "none" } }}
+        slotProps={{
+          paper: {
+            sx: (theme) => ({
+              width: "min(80vw, 280px)",
+              pt: 1,
+              boxSizing: "border-box",
+              backgroundColor: theme.palette.background.paper,
+              borderLeft: "1px solid",
+              borderColor: theme.palette.divider,
+            }),
+          },
+        }}
+      >
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 2, py: 1.5 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+            Navigation
+          </Typography>
+          <IconButton aria-label="Close menu" size="small" onClick={() => setMobileMenuOpen(false)}>
+            <CloseRounded fontSize="small" />
+          </IconButton>
+        </Stack>
+        <Divider />
+        <List disablePadding>
+          {navItems.map((item) => (
+            <ListItemButton
+              key={item.ariaLabel}
+              component={Link}
+              href={item.href}
+              selected={item.active}
+              onClick={() => setMobileMenuOpen(false)}
+              sx={{ py: 1.25, px: 2 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+                  <Badge badgeContent={item.badge} color="primary" max={99}>
+                    {item.icon}
+                  </Badge>
+                ) : (
+                  item.icon
+                )}
+              </ListItemIcon>
+              <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: item.active ? 800 : 500 }} />
+            </ListItemButton>
+          ))}
+          <Divider sx={{ my: 0.5 }} />
+          <ListItemButton
+            onClick={() => { setMobileMenuOpen(false); setSettingsAnchorEl(null); toggleMode(); }}
+            sx={{ py: 1.25, px: 2 }}
+          >
+            <ListItemIcon sx={{ minWidth: 36 }}>
+              {theme.palette.mode === "dark" ? <Brightness7Rounded /> : <Brightness4Rounded />}
+            </ListItemIcon>
+            <ListItemText primary={theme.palette.mode === "dark" ? "Light mode" : "Dark mode"} primaryTypographyProps={{ fontWeight: 500 }} />
+          </ListItemButton>
+          <ListItemButton
+            component={Link}
+            href={settingsHref}
+            onClick={() => setMobileMenuOpen(false)}
+            sx={{ py: 1.25, px: 2 }}
+          >
+            <ListItemIcon sx={{ minWidth: 36 }}><SettingsOutlined /></ListItemIcon>
+            <ListItemText primary="Settings" primaryTypographyProps={{ fontWeight: 500 }} />
+          </ListItemButton>
+          <Divider sx={{ my: 0.5 }} />
+          {isAuthenticated ? (
+            <ListItemButton
+              onClick={() => { setMobileMenuOpen(false); void signOut({ callbackUrl: "/" }); }}
+              sx={{ py: 1.25, px: 2 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}><LogoutRounded /></ListItemIcon>
+              <ListItemText primary="Sign out" primaryTypographyProps={{ fontWeight: 500 }} />
+            </ListItemButton>
+          ) : (
+            <ListItemButton
+              component={Link}
+              href="/auth/sign-in?callbackUrl=%2Fprofile"
+              onClick={() => setMobileMenuOpen(false)}
+              sx={{ py: 1.25, px: 2 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}><LoginRounded /></ListItemIcon>
+              <ListItemText primary="Sign in" primaryTypographyProps={{ fontWeight: 500 }} />
+            </ListItemButton>
+          )}
+        </List>
+      </Drawer>
 
       {/* Profile menu */}
       <Menu
