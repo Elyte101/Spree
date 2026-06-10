@@ -48,7 +48,11 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "spree-settings",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? localStorage
+          : { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+      ),
       onRehydrateStorage: () => (state) => {
         state?.markHydrated();
       },

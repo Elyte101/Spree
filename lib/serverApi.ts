@@ -272,11 +272,11 @@ async function getJson<T>(
     const response = await fetchBackend(path, init, options);
 
     if (!response.ok) {
-      // 5xx errors indicate a backend fault — degrade gracefully when a fallback is provided
-      // rather than propagating a throw that crashes the SSR page.
-      if (response.status >= 500 && options?.fallback) {
+      // 5xx and auth errors (401/403) degrade gracefully when a fallback is provided.
+      // Never let a single backend hiccup hard-500 the SSR page.
+      if ((response.status >= 500 || response.status === 401 || response.status === 403) && options?.fallback) {
         console.warn(
-          JSON.stringify({ event: "backend_5xx_fallback", url: buildBackendUrl(path), status: response.status })
+          JSON.stringify({ event: "backend_error_fallback", url: buildBackendUrl(path), status: response.status })
         );
         return options.fallback();
       }
@@ -371,10 +371,11 @@ export const getNotifications = () =>
   getJson<NotificationItem[]>("/notifications", undefined, { fallback: () => [] });
 
 export const getAdminOverview = () =>
-  getJson<AdminOverview | null>("/admin/overview", undefined, {
-    internal: true,
-    fallback: () => null,
-  });
+  getJson<AdminOverview | null>(
+    "/admin/overview",
+    { headers: { "X-Actor-Role": "admin" } },
+    { internal: true, fallback: () => null }
+  );
 
 export const getSellers = () =>
   getJson<SellerSummary[]>("/sellers", undefined, { fallback: () => [] });
@@ -394,15 +395,18 @@ export const getSeller = async (identifier: string) => {
 };
 
 export const getAdminSellers = () =>
-  getJson<SellerSummary[]>("/admin/sellers", undefined, {
-    internal: true,
-    fallback: () => [],
-  });
+  getJson<SellerSummary[]>(
+    "/admin/sellers",
+    { headers: { "X-Actor-Role": "admin" } },
+    { internal: true, fallback: () => [] }
+  );
 
 export const getAdminSeller = async (identifier: string) => {
-  const response = await fetchBackend(`/admin/sellers/${identifier}`, undefined, {
-    internal: true,
-  });
+  const response = await fetchBackend(
+    `/admin/sellers/${identifier}`,
+    { headers: { "X-Actor-Role": "admin" } },
+    { internal: true }
+  );
 
   if (response.status === 404) {
     return undefined;
@@ -418,7 +422,7 @@ export const getAdminSeller = async (identifier: string) => {
 export const getAdminTopProducts = (page = 1, limit = 100) =>
   getJson<TopProductsResponse>(
     `/admin/products/top${buildQueryString({ page, limit })}`,
-    undefined,
+    { headers: { "X-Actor-Role": "admin" } },
     {
       internal: true,
       fallback: () => ({

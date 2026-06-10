@@ -209,8 +209,14 @@ export const useCartStore = create<CartStoreState>()(
       // localStorage safety: persists only product IDs, names, images, prices,
       // quantities, and variant selections (color/size). No auth tokens, user IDs,
       // addresses, or payment data are stored here.
+      // SSR guard: Next.js renders client components on the server too; returning a
+      // no-op storage prevents the "storage currently unavailable" warning.
       name: "spree-cart",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? localStorage
+          : { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+      ),
       partialize: (state) => ({ cart: state.cart }),
       onRehydrateStorage: () => (state) => {
         state?.markHydrated();

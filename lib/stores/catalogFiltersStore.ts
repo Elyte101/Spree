@@ -51,7 +51,11 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
       // category, brand, collection, sort order, page, inStockOnly toggle).
       // No auth tokens, user IDs, addresses, or payment data are stored here.
       name: "spree-catalog-filters",
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof window !== "undefined"
+          ? localStorage
+          : { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }
+      ),
     }
   )
 );
