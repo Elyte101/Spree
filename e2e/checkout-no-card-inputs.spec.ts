@@ -23,7 +23,7 @@ const SEEDED_CART = JSON.stringify({
       standardShipping: 12,
       tax: 2.4,
       total: 44.39,
-      currency: "USD",
+      currency: "GHS",
     },
   },
   version: 0,
