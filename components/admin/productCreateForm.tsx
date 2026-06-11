@@ -8,8 +8,10 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   FormControlLabel,
+  IconButton,
   Paper,
   Stack,
   Switch,
@@ -27,6 +29,17 @@ interface ProductCreateFormProps {
   brands: Brand[];
   collections: Collection[];
 }
+
+interface ImageEntry {
+  id: string;
+  preview: string;
+  url: string | null;
+  status: "uploading" | "done" | "error";
+  error?: string;
+}
+
+const ACCEPTED_MIME = ["image/jpeg", "image/png", "image/webp"];
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const splitList = (value: string) =>
   value
@@ -61,7 +74,9 @@ export function ProductCreateForm({
   const [brandName, setBrandName] = React.useState("");
   const [collectionName, setCollectionName] = React.useState("");
   const [badge, setBadge] = React.useState("");
-  const [images, setImages] = React.useState("");
+  const [imageEntries, setImageEntries] = React.useState<ImageEntry[]>([]);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [colors, setColors] = React.useState("");
   const [sizes, setSizes] = React.useState("");
   const [tags, setTags] = React.useState("");
@@ -73,7 +88,7 @@ export function ProductCreateForm({
   const collectionSuggestions = buildSuggestions(
     collections.map((collection) => collection.name)
   );
-  const mediaEntries = splitList(images);
+  const uploadedImages = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
   const colorOptions = splitList(colors);
   const sizeOptions = splitList(sizes);
   const customTags = splitList(tags);
@@ -102,8 +117,49 @@ export function ProductCreateForm({
       stock.trim() !== "" &&
       categoryName.trim() &&
       brandName.trim() &&
-      mediaEntries.length
+      uploadedImages.length
   );
+
+  const uploadFile = React.useCallback(async (file: File) => {
+    const id = crypto.randomUUID();
+    const preview = URL.createObjectURL(file);
+    setImageEntries((prev) => [...prev, { id, preview, url: null, status: "uploading" }]);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/products/images", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setImageEntries((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, url: data.url, status: "done" } : e))
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err.message : "Upload failed";
+      setImageEntries((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, status: "error", error } : e))
+      );
+    }
+  }, []);
+
+  const handleFiles = React.useCallback(
+    (files: FileList | null) => {
+      if (!files) return;
+      Array.from(files).forEach((file) => {
+        if (ACCEPTED_MIME.includes(file.type) && file.size <= MAX_FILE_BYTES) {
+          uploadFile(file);
+        }
+      });
+    },
+    [uploadFile]
+  );
+
+  const removeImage = React.useCallback((id: string) => {
+    setImageEntries((prev) => {
+      const entry = prev.find((e) => e.id === id);
+      if (entry) URL.revokeObjectURL(entry.preview);
+      return prev.filter((e) => e.id !== id);
+    });
+  }, []);
 
   const createProductMutation = useMutation(api.createProduct, {
     onSuccess: () => {
@@ -121,7 +177,7 @@ export function ProductCreateForm({
       description,
       price: Number(price),
       discount: Number(discount),
-      images: mediaEntries,
+      images: uploadedImages,
       categoryName: categoryName.trim(),
       brandName: brandName.trim(),
       collectionName: collectionName.trim() || undefined,
@@ -213,18 +269,157 @@ export function ProductCreateForm({
                     Media
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Add one or more image URLs. The first image becomes the lead visual across the shop.
+                    Add one or more photos. The first image becomes the lead visual across the shop.
                   </Typography>
                 </Box>
-                <TextField
-                  label="Images"
-                  helperText="Add image links separated by commas or new lines"
-                  value={images}
-                  onChange={(event) => setImages(event.target.value)}
-                  multiline
-                  minRows={4}
-                  required
+
+                {/* Hidden file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) => handleFiles(e.target.files)}
                 />
+
+                {/* Drop zone */}
+                <Box
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
+                  sx={{
+                    border: "2px dashed",
+                    borderColor: isDragging ? "primary.main" : "divider",
+                    borderRadius: 2,
+                    p: 4,
+                    textAlign: "center",
+                    cursor: "pointer",
+                    transition: "border-color 150ms, background-color 150ms",
+                    bgcolor: isDragging ? "action.hover" : "transparent",
+                    "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
+                  }}
+                >
+                  <Box sx={{ mb: 1.5, color: "text.disabled" }}>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  </Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    Click to browse or drag and drop
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    JPEG · PNG · WebP · max 5 MB per file
+                  </Typography>
+                </Box>
+
+                {/* Thumbnail grid */}
+                {imageEntries.length > 0 && (
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 1.5,
+                      gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))",
+                    }}
+                  >
+                    {imageEntries.map((entry, index) => (
+                      <Box
+                        key={entry.id}
+                        sx={{
+                          position: "relative",
+                          aspectRatio: "1",
+                          borderRadius: 1.5,
+                          overflow: "hidden",
+                          border: "1px solid",
+                          borderColor:
+                            entry.status === "error" ? "error.main" : "divider",
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src={entry.preview}
+                          alt={`Product image ${index + 1}`}
+                          sx={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                            opacity: entry.status === "uploading" ? 0.4 : 1,
+                            transition: "opacity 200ms",
+                          }}
+                        />
+                        {entry.status === "uploading" && (
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <CircularProgress size={20} />
+                          </Box>
+                        )}
+                        {entry.status === "error" && (
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              bgcolor: "rgba(0,0,0,0.5)",
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ color: "error.light", textAlign: "center", px: 0.5 }}>
+                              {entry.error ?? "Failed"}
+                            </Typography>
+                          </Box>
+                        )}
+                        {index === 0 && entry.status === "done" && (
+                          <Chip
+                            label="Lead"
+                            size="small"
+                            color="primary"
+                            sx={{
+                              position: "absolute",
+                              bottom: 4,
+                              left: 4,
+                              height: 18,
+                              fontSize: 10,
+                              borderRadius: 999,
+                              "& .MuiChip-label": { px: 0.75 },
+                            }}
+                          />
+                        )}
+                        <IconButton
+                          size="small"
+                          onClick={() => removeImage(entry.id)}
+                          aria-label="Remove image"
+                          sx={{
+                            position: "absolute",
+                            top: 2,
+                            right: 2,
+                            width: 20,
+                            height: 20,
+                            bgcolor: "rgba(0,0,0,0.55)",
+                            color: "common.white",
+                            "&:hover": { bgcolor: "rgba(0,0,0,0.8)" },
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </IconButton>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
               </Stack>
             </Paper>
 
@@ -489,7 +684,8 @@ export function ProductCreateForm({
                       Media
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                      {mediaEntries.length} asset{mediaEntries.length === 1 ? "" : "s"}
+                      {uploadedImages.length} image{uploadedImages.length === 1 ? "" : "s"}
+                      {imageEntries.some((e) => e.status === "uploading") ? " (uploading…)" : ""}
                     </Typography>
                   </Box>
                 </Stack>

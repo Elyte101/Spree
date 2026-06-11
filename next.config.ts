@@ -63,6 +63,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "picsum.photos" },
       { protocol: "https", hostname: "placehold.co" },
       { protocol: "https", hostname: "placeimg.com" },
+      { protocol: "https", hostname: "*.supabase.co" },
     ],
   },
 
