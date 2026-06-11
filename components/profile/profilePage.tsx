@@ -84,7 +84,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     bankCode: profile.payoutInfo?.bankCode ?? "",
     mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? "",
     mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
-    currency: profile.payoutInfo?.currency ?? "GH₵",
+    currency: profile.payoutInfo?.currency ?? "$",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
   const [savingPayout, setSavingPayout] = React.useState(false);
@@ -1179,7 +1179,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       size="small"
                       sx={{ width: 120 }}
                     >
-                      {["GH₵", "USD"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                      {["$", "USD"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                     </TextField>
                     <Button
                       variant="contained"

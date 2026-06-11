@@ -2,7 +2,7 @@
 Paystack API wrapper using stdlib urllib only — no extra deps.
 
 All amounts are in the smallest currency unit:
-  GH₵ → pesewas (1 GH₵ = 100 pesewas)
+  $ → pesewas (1 $ = 100 pesewas)
   USD → cents    (1 USD = 100 cents)
 """
 
@@ -51,7 +51,7 @@ def initialize_transaction(
     amount_minor: int,
     email: str,
     reference: str,
-    currency: str = "GH₵",
+    currency: str = "$",
     callback_url: str = "",
 ) -> dict:
     """Create a Paystack transaction. Returns {"authorization_url", "access_code", "reference"}."""
@@ -78,7 +78,7 @@ def create_transfer_recipient(
     account_number: str,
     bank_code: str = "",
     mobile_money_network: str = "",
-    currency: str = "GH₵",
+    currency: str = "$",
 ) -> str:
     """Create a Paystack transfer recipient. Returns the recipient_code."""
     if mobile_money_network:
@@ -91,7 +91,7 @@ def create_transfer_recipient(
         }
     else:
         payload = {
-            "type": "ghipss" if currency == "GH₵" else "nuban",
+            "type": "ghipss" if currency == "$" else "nuban",
             "name": name,
             "account_number": account_number,
             "bank_code": bank_code,

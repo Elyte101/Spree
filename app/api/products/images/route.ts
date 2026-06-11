@@ -16,7 +16,7 @@ const EXT: Record<string, string> = {
 function supabaseUrl(): string {
   const url = process.env.DATABASE_SUPABASE_URL;
   if (!url) throw new Error("DATABASE_SUPABASE_URL not set");
-  return url.replace(/\/GH₵/, "");
+  return url.replace(/\/$/, "");
 }
 
 function serviceRoleKey(): string {

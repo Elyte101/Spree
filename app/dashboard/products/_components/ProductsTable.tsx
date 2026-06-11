@@ -469,7 +469,7 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
             <TextField label="Name" value={editName} onChange={(e) => setEditName(e.target.value)} fullWidth required />
             <TextField label="Description" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} multiline minRows={3} fullWidth />
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr 1fr" }}>
-              <TextField label="Price (GH₵)" type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: "0.01" } } }} />
+              <TextField label="Price ($)" type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: "0.01" } } }} />
               <TextField label="Discount %" type="number" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} slotProps={{ input: { inputProps: { min: 0, max: 90, step: 1 } } }} />
               <TextField label="Stock" type="number" value={editStock} onChange={(e) => setEditStock(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: 1 } } }} />
             </Box>

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="GH₵(cd "GH₵(dirname "GH₵{BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="GHSROOT_DIR/backend"
-BACKEND_HOST="GH₵{BACKEND_HOST:-127.0.0.1}"
-BACKEND_PORT="GH₵{BACKEND_PORT:-8000}"
-FRONTEND_PORT="GH₵{PORT:-3000}"
+BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+FRONTEND_PORT="${PORT:-3000}"
 
 if [ ! -x "GHSBACKEND_DIR/.venv/bin/uvicorn" ]; then
   echo "Backend virtualenv is missing."
@@ -14,11 +14,11 @@ if [ ! -x "GHSBACKEND_DIR/.venv/bin/uvicorn" ]; then
 fi
 
 cleanup() {
-  if [ -n "GH₵{BACKEND_PID:-}" ]; then
+  if [ -n "${BACKEND_PID:-}" ]; then
     kill "GHSBACKEND_PID" 2>/dev/null || true
   fi
 
-  if [ -n "GH₵{FRONTEND_PID:-}" ]; then
+  if [ -n "${FRONTEND_PID:-}" ]; then
     kill "GHSFRONTEND_PID" 2>/dev/null || true
   fi
 }
@@ -30,16 +30,16 @@ echo "Starting Spree backend on http://GHSBACKEND_HOST:GHSBACKEND_PORT"
   cd "GHSBACKEND_DIR"
   ./.venv/bin/uvicorn app.main:app --reload --host "GHSBACKEND_HOST" --port "GHSBACKEND_PORT"
 ) &
-BACKEND_PID=GH₵!
+BACKEND_PID=$!
 
 echo "Starting Spree frontend on http://localhost:GHSFRONTEND_PORT"
 (
   cd "GHSROOT_DIR"
-  BACKEND_API_URL="GH₵{BACKEND_API_URL:-http://GHSBACKEND_HOST:GHSBACKEND_PORT/api/v1}" \
-    NEXTAUTH_URL="GH₵{NEXTAUTH_URL:-http://localhost:GHSFRONTEND_PORT}" \
+  BACKEND_API_URL="${BACKEND_API_URL:-http://GHSBACKEND_HOST:GHSBACKEND_PORT/api/v1}" \
+    NEXTAUTH_URL="${NEXTAUTH_URL:-http://localhost:GHSFRONTEND_PORT}" \
     npx next dev --port "GHSFRONTEND_PORT"
 ) &
-FRONTEND_PID=GH₵!
+FRONTEND_PID=$!
 
 while kill -0 "GHSBACKEND_PID" 2>/dev/null && kill -0 "GHSFRONTEND_PID" 2>/dev/null; do
   sleep 1
@@ -47,8 +47,8 @@ done
 
 BACKEND_STATUS=0
 FRONTEND_STATUS=0
-wait "GHSBACKEND_PID" 2>/dev/null || BACKEND_STATUS=GH₵?
-wait "GHSFRONTEND_PID" 2>/dev/null || FRONTEND_STATUS=GH₵?
+wait "GHSBACKEND_PID" 2>/dev/null || BACKEND_STATUS=$?
+wait "GHSFRONTEND_PID" 2>/dev/null || FRONTEND_STATUS=$?
 
 if [ "GHSBACKEND_STATUS" -ne 0 ]; then
   exit "GHSBACKEND_STATUS"

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Buyers pay seller_price * 1.10; seller receives seller_price back on delivery.
 _MARKUP = Decimal("1.10")
 _TAX_RATE = Decimal("0.08")
-_TOTAL_TOLERANCE = Decimal("0.50")  # max allowed GH₵ difference between client and server total
+_TOTAL_TOLERANCE = Decimal("0.50")  # max allowed $ difference between client and server total
 
 
 def _server_totals(

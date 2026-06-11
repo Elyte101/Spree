@@ -6,7 +6,7 @@ const isVercelDeployment = process.env.VERCEL === "1";
 const isProductionLikeDeployment =
   isVercelDeployment || process.env.APP_ENV === "production";
 
-const normalizeUrl = (value: string) => value.replace(/\/GH₵/, "");
+const normalizeUrl = (value: string) => value.replace(/\/$/, "");
 
 const isLocalhostUrl = (url: string) =>
   /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(url);
