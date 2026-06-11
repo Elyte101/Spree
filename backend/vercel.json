@@ -1,5 +1,5 @@
 {
-  "GHSschema": "https://openapi.vercel.sh/vercel.json",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
     "api/index.py": {
       "includeFiles": "app/**"
