@@ -93,7 +93,11 @@ class Settings(BaseSettings):
         if not value:
             return None
 
-        # Reject non-postgres URLs early with a clear message.
+        # SQLite is accepted for local development and testing; skip all Postgres normalisation.
+        if value.startswith("sqlite://"):
+            return value
+
+        # Reject non-postgres URLs for everything else.
         if not (value.startswith("postgres://") or value.startswith("postgresql")):
             raise ValueError(
                 f"DATABASE_URL must start with postgres:// or postgresql://. "

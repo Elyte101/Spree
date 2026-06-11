@@ -8,7 +8,7 @@ FastAPI backend for the Spree storefront. It ships with a SQLite database for lo
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
@@ -18,7 +18,7 @@ The API starts at `http://127.0.0.1:8000` and exposes the storefront endpoints u
 
 Copy `backend/.env.example` to `backend/.env` to override defaults.
 
-For Vercel deployments, [`server.py`](/Users/lyte/Spree/spree/backend/server.py) exports the FastAPI application directly and [`pyproject.toml`](/Users/lyte/Spree/spree/backend/pyproject.toml) points Vercel at that app.
+For Vercel deployments the entry point is `api/index.py`, which re-exports the FastAPI app. Dependencies are installed from `requirements.txt`.
 
 The local development seed also creates an admin account:
 

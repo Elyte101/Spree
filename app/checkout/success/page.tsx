@@ -39,7 +39,7 @@ export default function CheckoutSuccessPage() {
             Your order has been placed.
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 520 }}>
-            You'll receive a confirmation once your order is processed. Check your notifications
+            You&apos;ll receive a confirmation once your order is processed. Check your notifications
             for delivery updates.
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>

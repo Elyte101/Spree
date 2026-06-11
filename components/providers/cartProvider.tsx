@@ -13,12 +13,9 @@ export function CartProvider({
   initialCart: CartSummary;
 }) {
   const initialize = useCartStore((state) => state.initialize);
-  const initialized = React.useRef(false);
 
-  if (!initialized.current) {
-    initialized.current = true;
-    initialize(initialCart);
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  React.useEffect(() => { initialize(initialCart); }, []);
 
   return <>{children}</>;
 }

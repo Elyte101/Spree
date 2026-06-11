@@ -4,6 +4,10 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 
+INTERNAL_KEY = "spree-internal-dev-key"
+INTERNAL_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY}
+ADMIN_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY, "X-Actor-Role": "admin"}
+
 
 def _create_product_payload() -> dict:
     suffix = uuid4().hex[:8]
@@ -116,6 +120,7 @@ def test_login_endpoint_accepts_seeded_admin():
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/auth/login",
+            headers=INTERNAL_HEADERS,
             json={
                 "email": "admin@spree.local",
                 "password": "ChangeMe123!",
@@ -133,6 +138,7 @@ def test_signup_endpoint_creates_customer_account():
         email = f"taylor-{uuid4().hex[:8]}@example.com"
         response = client.post(
             "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
             json={
                 "name": "Taylor Shopper",
                 "email": email,
@@ -151,6 +157,7 @@ def test_profile_endpoint_updates_customer_to_seller():
         email = f"seller-{uuid4().hex[:8]}@example.com"
         signup_response = client.post(
             "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
             json={
                 "name": "Jamie Merchant",
                 "email": email,
@@ -164,7 +171,7 @@ def test_profile_endpoint_updates_customer_to_seller():
 
         profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
             json=_seller_profile_payload(email, store_name=store_name),
         )
 
@@ -186,6 +193,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
         email = f"paused-seller-{uuid4().hex[:8]}@example.com"
         signup_response = client.post(
             "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
             json={
                 "name": "Jamie Merchant",
                 "email": email,
@@ -197,7 +205,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
             json=_seller_profile_payload(email, store_name=f"Paused Select {uuid4().hex[:6]}"),
         )
         assert profile_response.status_code == 200
@@ -205,7 +213,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         accept_response = client.put(
             f"/api/v1/admin/sellers/{created_user['id']}/status",
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers=ADMIN_HEADERS,
             json={
                 "status": "active",
                 "sellerNotice": "",
@@ -223,7 +231,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         suspend_response = client.put(
             f"/api/v1/admin/sellers/{created_user['id']}/status",
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers=ADMIN_HEADERS,
             json={
                 "status": "suspended",
                 "sellerNotice": "Identity review needed",
@@ -239,7 +247,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         updated_profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={"X-Internal-Api-Key": "spree-internal-dev-key"},
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
             json=_seller_profile_payload(email, store_name=suspend_response.json()["storeName"]),
         )
 
