@@ -53,7 +53,7 @@ export const getBackendInternalApiKey = () =>
   requireEnvOrFallback("BACKEND_INTERNAL_API_KEY", DEFAULT_BACKEND_INTERNAL_API_KEY);
 
 export const getBackendStaticBaseUrl = () =>
-  getBackendApiBaseUrl().replace(/\/api\/v1GHS/, "");
+  getBackendApiBaseUrl().replace(/\/api\/v1$/, "");
 
 export const getNextAuthSecret = () =>
   requireEnvOrFallback("NEXTAUTH_SECRET", DEFAULT_NEXTAUTH_SECRET);

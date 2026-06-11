@@ -1179,7 +1179,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       size="small"
                       sx={{ width: 120 }}
                     >
-                      {["$", "USD"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                      {["₵", "GHS"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
                     </TextField>
                     <Button
                       variant="contained"

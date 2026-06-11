@@ -82,7 +82,7 @@ const stepOrder: Record<OrderStatus, number> = {
 };
 
 const formatPrice = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(n);
 
 const formatDate = (iso: string | null | undefined) => {
   if (!iso) return null;

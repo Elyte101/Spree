@@ -61,7 +61,7 @@ const statusMeta: Record<
 };
 
 const formatPrice = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(n);
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", {

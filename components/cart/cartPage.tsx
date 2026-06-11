@@ -35,7 +35,7 @@ interface CartPageProps {
 }
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(price);
+  new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(price);
 
 const FREE_SHIPPING_THRESHOLD = 200;
 const ease = [0.22, 1, 0.36, 1] as const;

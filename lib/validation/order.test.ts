@@ -57,7 +57,7 @@ describe("CreateOrderSchema", () => {
   });
 
   it("rejects currency that is not 3 characters", () => {
-    const result = CreateOrderSchema.safeParse({ ...validOrder, currency: "GHSI" });
+    const result = CreateOrderSchema.safeParse({ ...validOrder, currency: "$I" });
     expect(result.success).toBe(false);
   });
 

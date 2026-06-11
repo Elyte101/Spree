@@ -2,7 +2,7 @@
 // All currency formatting, phone prefixes, regions, and ID types for the app
 // are defined here. Import from this file — never hardcode USD or en-US.
 
-export const DEFAULT_CURRENCY = "$";
+export const DEFAULT_CURRENCY = "GH₵";
 export const DEFAULT_CURRENCY_SYMBOL = "₵";
 export const DEFAULT_COUNTRY = "Ghana";
 export const GHANA_PHONE_PREFIX = "+233";
@@ -224,9 +224,11 @@ export function formatPrice(
   amount: number,
   currency: string = DEFAULT_CURRENCY
 ): string {
+  // Intl.NumberFormat requires ISO 4217 codes; "GH₵" is a display symbol — map it to the code
+  const isoCode = currency === "GH₵" ? "GHS" : currency;
   return new Intl.NumberFormat("en-GH", {
     style: "currency",
-    currency,
+    currency: isoCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
