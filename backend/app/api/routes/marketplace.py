@@ -7,12 +7,14 @@ from app.schemas.marketplace import (
     AdminSellerSummaryOut,
     FollowSellerRequest,
     ReportSellerRequest,
+    SellerBlacklistIn,
     SellerDetailOut,
     SellerSummaryOut,
     TopProductsResponseOut,
     UnfollowSellerRequest,
 )
 from app.services.marketplace import (
+    delete_seller,
     follow_seller,
     get_admin_seller_detail,
     get_seller_detail,
@@ -20,6 +22,7 @@ from app.services.marketplace import (
     list_public_sellers,
     list_top_products,
     report_seller,
+    toggle_seller_blacklist,
     unfollow_seller,
     update_admin_seller_status,
 )
@@ -53,10 +56,15 @@ def seller_report(seller_id: str, payload: ReportSellerRequest, db: DBSession, _
 
 
 @router.get("/admin/sellers", response_model=list[AdminSellerSummaryOut])
-def admin_sellers(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+def admin_sellers(
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+    filter: str = Query(default="all"),
+):
     if actor_role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
-    return list_admin_sellers(db)
+    return list_admin_sellers(db, filter_type=filter)
 
 
 @router.get("/admin/sellers/{seller_id}", response_model=AdminSellerDetailOut)
@@ -87,6 +95,26 @@ def admin_seller_status_update(
         payload.averageDeliveryDays,
         payload.governmentIdVerified,
     )
+
+
+@router.delete("/admin/sellers/{seller_id}", status_code=status.HTTP_204_NO_CONTENT)
+def admin_seller_delete(seller_id: str, db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    delete_seller(db, seller_id)
+
+
+@router.patch("/admin/sellers/{seller_id}/blacklist", response_model=AdminSellerDetailOut)
+def admin_seller_blacklist(
+    seller_id: str,
+    payload: SellerBlacklistIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return toggle_seller_blacklist(db, seller_id, payload.blacklisted)
 
 
 @router.get("/admin/products/top", response_model=TopProductsResponseOut)

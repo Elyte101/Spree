@@ -14,8 +14,12 @@ def hash_password(password: str) -> str:
         p=1,
     )
 
-    return "scrypt$16384$8$1$" + "$".join(
+    return "$".join(
         [
+            "scrypt",
+            "16384",
+            "8",
+            "1",
             base64.b64encode(salt).decode("utf-8"),
             base64.b64encode(derived_key).decode("utf-8"),
         ]

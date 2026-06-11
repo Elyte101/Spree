@@ -23,6 +23,7 @@ import {
   ProductQueryParams,
   ReportSellerPayload,
   SignUpPayload,
+  UpdateProductPayload,
   UpdateSellerStatusPayload,
   UpdateProfilePayload,
 } from "@/lib/api/types";
@@ -33,6 +34,7 @@ export type {
   ProductVariantPayload,
   ReportSellerPayload,
   SignUpPayload,
+  UpdateProductPayload,
   UpdateSellerStatusPayload,
   UpdateProfilePayload,
 } from "@/lib/api/types";
@@ -201,8 +203,10 @@ export const api = {
   getAdminOverview: () =>
     requestJson<AdminOverview>("/api/admin/overview"),
 
-  getAdminSellers: () =>
-    requestJson<SellerSummary[]>("/api/admin/sellers"),
+  getAdminSellers: (filter?: "all" | "blacklisted" | "inactive") =>
+    requestJson<SellerSummary[]>(
+      `/api/admin/sellers${buildQueryString(filter && filter !== "all" ? { filter } : {})}`
+    ),
 
   getAdminSeller: (id: string) =>
     requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}`),
@@ -215,6 +219,15 @@ export const api = {
         body: JSON.stringify(payload),
       }
     ),
+
+  deleteAdminSeller: (id: string) =>
+    requestJson<void>(`/api/admin/sellers/${id}`, { method: "DELETE" }),
+
+  blacklistAdminSeller: (id: string, blacklisted: boolean) =>
+    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/blacklist`, {
+      method: "PATCH",
+      body: JSON.stringify({ blacklisted }),
+    }),
 
   getAdminTopProducts: (page = 1, limit = 100) =>
     requestJson<TopProductsResponse>(
@@ -234,5 +247,20 @@ export const api = {
     requestJson<Product>("/api/products", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  updateProduct: (id: string, payload: UpdateProductPayload) =>
+    requestJson<Product>(`/api/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteProduct: (id: string) =>
+    requestJson<void>(`/api/products/${id}`, { method: "DELETE" }),
+
+  blacklistProduct: (id: string, blacklisted: boolean) =>
+    requestJson<Product>(`/api/products/${id}/blacklist`, {
+      method: "PATCH",
+      body: JSON.stringify({ blacklisted }),
     }),
 };

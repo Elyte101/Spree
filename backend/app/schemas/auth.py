@@ -91,7 +91,7 @@ class PayoutInfoRequest(BaseModel):
     bankCode: str = Field(default="", max_length=20)
     mobileMoneyNetwork: str = Field(default="", max_length=20)
     mobileMoneyNumber: str = Field(default="", max_length=20)
-    currency: str = Field(default="GHS", max_length=8)
+    currency: str = Field(default="GH₵", max_length=8)
     accountName: str = Field(default="", max_length=120)
 
 

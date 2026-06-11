@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from math import ceil
 from uuid import uuid4
 
@@ -144,6 +145,8 @@ def _serialize_seller_summary(seller: User, metrics: dict) -> dict:
         "sellerNotice": seller.seller_notice or "",
         "governmentIdType": seller.government_id_type or "ghana-card",
         "governmentIdVerified": bool(seller.government_id_verified),
+        "isBlacklisted": bool(seller.is_blacklisted),
+        "lastLoginAt": seller.last_login_at,
         "followerCount": metrics["followerCount"],
         "productCount": metrics["productCount"],
         "purchaseCount": metrics["purchaseCount"],
@@ -281,10 +284,21 @@ def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, de
     return _serialize_seller_summary(seller, metrics[seller.id])
 
 
-def list_admin_sellers(db: Session) -> list[dict]:
-    sellers = db.scalars(
-        _seller_query(include_inactive=True).order_by(User.seller_started_at.desc(), User.created_at.desc())
-    ).all()
+def list_admin_sellers(db: Session, filter_type: str = "all") -> list[dict]:
+    base = _seller_query(include_inactive=True).order_by(User.seller_started_at.desc(), User.created_at.desc())
+
+    if filter_type == "blacklisted":
+        base = base.where(User.is_blacklisted == True)  # noqa: E712
+    elif filter_type == "inactive":
+        cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+        base = base.where(
+            or_(
+                User.last_login_at.is_(None),
+                User.last_login_at < cutoff,
+            )
+        )
+
+    sellers = db.scalars(base).all()
     seller_ids = [s.id for s in sellers]
     metrics = _batch_seller_metrics(db, seller_ids)
     return [_serialize_admin_seller_summary(seller, metrics[seller.id]) for seller in sellers]
@@ -369,6 +383,34 @@ def update_admin_seller_status(
     db.commit()
     db.refresh(seller)
 
+    return get_admin_seller_detail(db, seller.id)
+
+
+def delete_seller(db: Session, seller_id: str) -> None:
+    seller = _resolve_seller(db, seller_id, include_inactive=True)
+    if seller.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Admin accounts cannot be deleted via the seller console",
+        )
+    db.delete(seller)
+    db.commit()
+
+
+def toggle_seller_blacklist(db: Session, seller_id: str, blacklisted: bool) -> dict:
+    seller = _resolve_seller(db, seller_id, include_inactive=True)
+    if seller.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Admin accounts cannot be blacklisted",
+        )
+    seller.is_blacklisted = blacklisted
+    # Cascade blacklist state to all seller products
+    products = db.scalars(select(Product).where(Product.seller_id == seller.id)).all()
+    for product in products:
+        product.is_blacklisted = blacklisted
+    db.commit()
+    db.refresh(seller)
     return get_admin_seller_detail(db, seller.id)
 
 

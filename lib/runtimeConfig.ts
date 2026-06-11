@@ -6,7 +6,7 @@ const isVercelDeployment = process.env.VERCEL === "1";
 const isProductionLikeDeployment =
   isVercelDeployment || process.env.APP_ENV === "production";
 
-const normalizeUrl = (value: string) => value.replace(/\/$/, "");
+const normalizeUrl = (value: string) => value.replace(/\/GH₵/, "");
 
 const isLocalhostUrl = (url: string) =>
   /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/.test(url);
@@ -53,7 +53,7 @@ export const getBackendInternalApiKey = () =>
   requireEnvOrFallback("BACKEND_INTERNAL_API_KEY", DEFAULT_BACKEND_INTERNAL_API_KEY);
 
 export const getBackendStaticBaseUrl = () =>
-  getBackendApiBaseUrl().replace(/\/api\/v1$/, "");
+  getBackendApiBaseUrl().replace(/\/api\/v1GHS/, "");
 
 export const getNextAuthSecret = () =>
   requireEnvOrFallback("NEXTAUTH_SECRET", DEFAULT_NEXTAUTH_SECRET);

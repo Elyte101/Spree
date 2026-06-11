@@ -50,12 +50,34 @@ class ProductCreateIn(BaseModel):
         return self
 
 
+class ProductUpdateIn(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=255)
+    description: str | None = Field(default=None, min_length=8)
+    price: float | None = Field(default=None, gt=0, le=999_999)
+    discount: float | None = Field(default=None, ge=0, le=90)
+    images: list[str] | None = None
+    categoryId: str | None = None
+    categoryName: str | None = Field(default=None, max_length=120)
+    brandId: str | None = None
+    brandName: str | None = Field(default=None, max_length=120)
+    collectionId: str | None = None
+    collectionName: str | None = Field(default=None, max_length=120)
+    stock: int | None = Field(default=None, ge=0)
+    badge: str | None = Field(default=None, max_length=120)
+    tags: list[str] | None = None
+
+
+class ProductBlacklistIn(BaseModel):
+    blacklisted: bool
+
+
 class ProductOut(BaseModel):
     id: str
     slug: str
     name: str
     description: str
     price: float
+    sellerPrice: float | None = None
     discount: float
     images: list[str]
     image: str
@@ -86,6 +108,7 @@ class ProductOut(BaseModel):
     colors: list[str]
     sizes: list[str]
     tags: list[str]
+    isBlacklisted: bool = False
 
 
 class CategoryOut(BaseModel):

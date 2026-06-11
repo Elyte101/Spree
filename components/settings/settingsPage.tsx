@@ -99,7 +99,7 @@ export function SettingsPage() {
                   }}
                 >
                   <TextField select label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                    <MenuItem value="GHS">GHS — Ghanaian Cedi</MenuItem>
+                    <MenuItem value="GH₵">GH₵ — Ghanaian Cedi</MenuItem>
                     <MenuItem value="USD">USD — US Dollar</MenuItem>
                     <MenuItem value="EUR">EUR — Euro</MenuItem>
                     <MenuItem value="GBP">GBP — British Pound</MenuItem>

@@ -27,7 +27,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      currency: "GHS",
+      currency: "GH₵",
       region: "GH",
       defaultSort: "featured",
       layoutDensity: "comfortable",

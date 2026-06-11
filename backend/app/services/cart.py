@@ -20,7 +20,7 @@ def get_cart_summary(db: Session) -> dict:
             "standardShipping": settings.default_shipping_rate,
             "tax": 0.0,
             "total": 0.0,
-            "currency": "GHS",
+            "currency": "GH₵",
         }
 
     items = [

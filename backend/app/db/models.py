@@ -96,6 +96,7 @@ class Product(Base):
     tags: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_new_arrival: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    is_blacklisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -159,6 +160,8 @@ class User(Base):
     payout_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     paystack_recipient_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_blacklisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     oauth_provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     id_front_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -227,7 +230,7 @@ class Cart(Base):
     __tablename__ = "carts"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    currency: Mapped[str] = mapped_column(String(8), default="GHS")
+    currency: Mapped[str] = mapped_column(String(8), default="GH₵")
     standard_shipping: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
     items: Mapped[list["CartItem"]] = relationship(
@@ -282,7 +285,7 @@ class Order(Base):
     shipping_cost: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     tax: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2))
-    currency: Mapped[str] = mapped_column(String(8), default="GHS")
+    currency: Mapped[str] = mapped_column(String(8), default="GH₵")
 
     tracking_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     tracking_carrier: Mapped[str | None] = mapped_column(String(80), nullable=True)

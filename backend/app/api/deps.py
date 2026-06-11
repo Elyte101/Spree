@@ -49,6 +49,15 @@ def _get_actor_role(
     return x_actor_role or "customer"
 
 
+def check_optional_internal_key(
+    x_internal_api_key: Annotated[str | None, Header(alias="X-Internal-Api-Key")] = None,
+) -> bool:
+    if x_internal_api_key is None:
+        return False
+    return secrets.compare_digest(x_internal_api_key, settings.backend_internal_api_key)
+
+
 InternalAPIKey = Annotated[None, Depends(require_internal_api_key)]
+OptionalInternalKey = Annotated[bool, Depends(check_optional_internal_key)]
 ActorUserId = Annotated[str | None, Depends(_get_actor_user_id)]
 ActorRole = Annotated[str, Depends(_get_actor_role)]

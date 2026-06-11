@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("orders", "idempotency_key", "VARCHAR(128)", "TEXT"),
     ("orders", "paystack_tx_id", "VARCHAR(128)", "TEXT"),
+    ("products", "is_blacklisted", "BOOLEAN NOT NULL DEFAULT FALSE", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "is_blacklisted", "BOOLEAN NOT NULL DEFAULT FALSE", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "last_login_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
 ]
 
 

@@ -1,57 +1,57 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BACKEND_DIR="$ROOT_DIR/backend"
-BACKEND_HOST="${BACKEND_HOST:-127.0.0.1}"
-BACKEND_PORT="${BACKEND_PORT:-8000}"
-FRONTEND_PORT="${PORT:-3000}"
+ROOT_DIR="GH₵(cd "GH₵(dirname "GH₵{BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="GHSROOT_DIR/backend"
+BACKEND_HOST="GH₵{BACKEND_HOST:-127.0.0.1}"
+BACKEND_PORT="GH₵{BACKEND_PORT:-8000}"
+FRONTEND_PORT="GH₵{PORT:-3000}"
 
-if [ ! -x "$BACKEND_DIR/.venv/bin/uvicorn" ]; then
+if [ ! -x "GHSBACKEND_DIR/.venv/bin/uvicorn" ]; then
   echo "Backend virtualenv is missing."
   echo "Run: cd backend && python3 -m venv .venv && source .venv/bin/activate && pip install -e '.[dev]'"
   exit 1
 fi
 
 cleanup() {
-  if [ -n "${BACKEND_PID:-}" ]; then
-    kill "$BACKEND_PID" 2>/dev/null || true
+  if [ -n "GH₵{BACKEND_PID:-}" ]; then
+    kill "GHSBACKEND_PID" 2>/dev/null || true
   fi
 
-  if [ -n "${FRONTEND_PID:-}" ]; then
-    kill "$FRONTEND_PID" 2>/dev/null || true
+  if [ -n "GH₵{FRONTEND_PID:-}" ]; then
+    kill "GHSFRONTEND_PID" 2>/dev/null || true
   fi
 }
 
 trap cleanup EXIT INT TERM
 
-echo "Starting Spree backend on http://$BACKEND_HOST:$BACKEND_PORT"
+echo "Starting Spree backend on http://GHSBACKEND_HOST:GHSBACKEND_PORT"
 (
-  cd "$BACKEND_DIR"
-  ./.venv/bin/uvicorn app.main:app --reload --host "$BACKEND_HOST" --port "$BACKEND_PORT"
+  cd "GHSBACKEND_DIR"
+  ./.venv/bin/uvicorn app.main:app --reload --host "GHSBACKEND_HOST" --port "GHSBACKEND_PORT"
 ) &
-BACKEND_PID=$!
+BACKEND_PID=GH₵!
 
-echo "Starting Spree frontend on http://localhost:$FRONTEND_PORT"
+echo "Starting Spree frontend on http://localhost:GHSFRONTEND_PORT"
 (
-  cd "$ROOT_DIR"
-  BACKEND_API_URL="${BACKEND_API_URL:-http://$BACKEND_HOST:$BACKEND_PORT/api/v1}" \
-    NEXTAUTH_URL="${NEXTAUTH_URL:-http://localhost:$FRONTEND_PORT}" \
-    npx next dev --port "$FRONTEND_PORT"
+  cd "GHSROOT_DIR"
+  BACKEND_API_URL="GH₵{BACKEND_API_URL:-http://GHSBACKEND_HOST:GHSBACKEND_PORT/api/v1}" \
+    NEXTAUTH_URL="GH₵{NEXTAUTH_URL:-http://localhost:GHSFRONTEND_PORT}" \
+    npx next dev --port "GHSFRONTEND_PORT"
 ) &
-FRONTEND_PID=$!
+FRONTEND_PID=GH₵!
 
-while kill -0 "$BACKEND_PID" 2>/dev/null && kill -0 "$FRONTEND_PID" 2>/dev/null; do
+while kill -0 "GHSBACKEND_PID" 2>/dev/null && kill -0 "GHSFRONTEND_PID" 2>/dev/null; do
   sleep 1
 done
 
 BACKEND_STATUS=0
 FRONTEND_STATUS=0
-wait "$BACKEND_PID" 2>/dev/null || BACKEND_STATUS=$?
-wait "$FRONTEND_PID" 2>/dev/null || FRONTEND_STATUS=$?
+wait "GHSBACKEND_PID" 2>/dev/null || BACKEND_STATUS=GH₵?
+wait "GHSFRONTEND_PID" 2>/dev/null || FRONTEND_STATUS=GH₵?
 
-if [ "$BACKEND_STATUS" -ne 0 ]; then
-  exit "$BACKEND_STATUS"
+if [ "GHSBACKEND_STATUS" -ne 0 ]; then
+  exit "GHSBACKEND_STATUS"
 fi
 
-exit "$FRONTEND_STATUS"
+exit "GHSFRONTEND_STATUS"

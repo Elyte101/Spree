@@ -9,7 +9,7 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db.models import Brand, Category, Collection, Product, PromoBanner, SellerReport, User
-from app.schemas.catalog import ProductCreateIn
+from app.schemas.catalog import ProductCreateIn, ProductUpdateIn
 
 
 @dataclass(slots=True)
@@ -27,6 +27,7 @@ class ProductListParams:
     in_stock: bool | None = None
     min_price: float | None = None
     max_price: float | None = None
+    include_blacklisted: bool = False
 
 
 def _slugify(value: str) -> str:
@@ -150,6 +151,7 @@ def _product_to_dict(product: Product) -> dict:
         "colors": _extract_unique_values(variants, "color"),
         "sizes": _extract_unique_values(variants, "size"),
         "tags": product.tags or [],
+        "isBlacklisted": bool(product.is_blacklisted),
     }
 
 
@@ -184,7 +186,7 @@ def _collection_to_dict(collection: Collection, count: int) -> dict:
     }
 
 
-def _base_product_query(include_inactive_sellers: bool = False):
+def _base_product_query(include_inactive_sellers: bool = False, include_blacklisted: bool = False):
     statement = (
         select(Product)
         .join(Product.brand)
@@ -199,16 +201,19 @@ def _base_product_query(include_inactive_sellers: bool = False):
         )
     )
 
-    if include_inactive_sellers:
-        return statement
-
-    return statement.where(
-        or_(
-            Product.seller_id.is_(None),
-            User.role == "admin",
-            User.seller_status == "active",
+    if not include_inactive_sellers:
+        statement = statement.where(
+            or_(
+                Product.seller_id.is_(None),
+                User.role == "admin",
+                User.seller_status == "active",
+            )
         )
-    )
+
+    if not include_blacklisted:
+        statement = statement.where(Product.is_blacklisted == False)  # noqa: E712
+
+    return statement
 
 
 def _apply_product_filters(statement, params: ProductListParams):
@@ -507,7 +512,10 @@ def _load_products(
 ) -> list[Product]:
     """Return a flat list of products matching params (no pagination, no count)."""
     statement = _sort_product_query(
-        _apply_product_filters(_base_product_query(include_inactive_sellers), params),
+        _apply_product_filters(
+            _base_product_query(include_inactive_sellers, params.include_blacklisted),
+            params,
+        ),
         params.sort,
     )
     return list(db.scalars(statement.limit(params.limit)).unique().all())
@@ -561,7 +569,7 @@ def list_products(db: Session, params: ProductListParams) -> dict:
     limit = max(params.limit, 1)
     offset = (page - 1) * limit
 
-    filtered = _apply_product_filters(_base_product_query(), params)
+    filtered = _apply_product_filters(_base_product_query(include_blacklisted=params.include_blacklisted), params)
     sorted_filtered = _sort_product_query(filtered, params.sort)
 
     # Count via subquery to avoid double-counting from JOINs
@@ -830,3 +838,111 @@ def get_admin_overview(db: Session) -> dict:
             for product in recent_products
         ],
     }
+
+
+def _resolve_product_for_actor(
+    db: Session,
+    product_id: str,
+    actor_user_id: str | None,
+    actor_role: str,
+) -> Product:
+    product = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(
+            or_(Product.id == product_id, Product.slug == product_id)
+        )
+    )
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    if actor_role != "admin":
+        if actor_user_id is None or product.seller_id != actor_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only modify your own products",
+            )
+
+    return product
+
+
+def update_product(
+    db: Session,
+    product_id: str,
+    payload: ProductUpdateIn,
+    actor_user_id: str | None,
+    actor_role: str,
+) -> dict:
+    product = _resolve_product_for_actor(db, product_id, actor_user_id, actor_role)
+
+    if payload.name is not None:
+        product.name = payload.name.strip()
+    if payload.description is not None:
+        product.description = payload.description.strip()
+    if payload.price is not None:
+        product.price = Decimal(str(payload.price))
+    if payload.discount is not None:
+        product.discount_percentage = Decimal(str(payload.discount))
+    if payload.images is not None:
+        images = [img.strip() for img in payload.images if img.strip()]
+        if images:
+            product.images = images
+    if payload.stock is not None:
+        product.stock = max(payload.stock, 0)
+    if payload.badge is not None:
+        product.badge = payload.badge.strip() or None
+    if payload.tags is not None:
+        normalized = _normalize_tags(payload.tags)
+        product.tags = normalized
+        product.is_featured = "featured" in normalized
+        product.is_new_arrival = "new" in normalized or "new-arrival" in normalized
+    if payload.categoryId is not None or payload.categoryName is not None:
+        default_img = (product.images or ["/product-placeholder.svg"])[0]
+        product.category = _resolve_category(db, payload.categoryId, payload.categoryName, default_img)
+        product.category_id = product.category.id
+    if payload.brandId is not None or payload.brandName is not None:
+        default_img = (product.images or ["/product-placeholder.svg"])[0]
+        product.brand = _resolve_brand(db, payload.brandId, payload.brandName, default_img)
+        product.brand_id = product.brand.id
+    if payload.collectionId is not None or payload.collectionName is not None:
+        default_img = (product.images or ["/product-placeholder.svg"])[0]
+        product.collection = _resolve_collection(
+            db, payload.collectionId, payload.collectionName, product.description or "", default_img
+        )
+        product.collection_id = product.collection.id if product.collection else None
+
+    db.add(product)
+    db.commit()
+
+    refreshed = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(Product.id == product.id)
+    )
+    return _product_to_dict(refreshed)
+
+
+def delete_product(
+    db: Session,
+    product_id: str,
+    actor_user_id: str | None,
+    actor_role: str,
+) -> None:
+    product = _resolve_product_for_actor(db, product_id, actor_user_id, actor_role)
+    db.delete(product)
+    db.commit()
+
+
+def toggle_product_blacklist(db: Session, product_id: str, blacklisted: bool) -> dict:
+    product = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(
+            or_(Product.id == product_id, Product.slug == product_id)
+        )
+    )
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    product.is_blacklisted = blacklisted
+    db.add(product)
+    db.commit()
+
+    refreshed = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(Product.id == product.id)
+    )
+    return _product_to_dict(refreshed)

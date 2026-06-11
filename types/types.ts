@@ -138,6 +138,7 @@ export interface Product {
   originalPrice?: number | null;
   badge?: string;
   inStock: boolean;
+  isBlacklisted?: boolean;
   colors: string[];
   sizes: string[];
   tags: string[];
@@ -368,6 +369,8 @@ export interface SellerSummary {
   adminNote: string;
   governmentIdType: GovernmentIdType;
   governmentIdVerified: boolean;
+  isBlacklisted?: boolean;
+  lastLoginAt?: string | null;
   followerCount: number;
   productCount: number;
   purchaseCount: number;

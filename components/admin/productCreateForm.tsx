@@ -55,7 +55,7 @@ const slugify = (value: string) =>
     .trim()
     .replace(/['"]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(/^-+|-+GH₵/g, "")
     .slice(0, 160);
 
 export function ProductCreateForm({

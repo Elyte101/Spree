@@ -30,6 +30,8 @@ class SellerSummaryOut(BaseModel):
     sellerNotice: str = ""
     governmentIdType: GhanaIdType = "ghana-card"
     governmentIdVerified: bool = False
+    isBlacklisted: bool = False
+    lastLoginAt: datetime | None = None
     followerCount: int
     productCount: int
     purchaseCount: int
@@ -93,6 +95,10 @@ class AdminSellerStatusUpdateRequest(BaseModel):
     completedDeliveries: int = Field(default=0, ge=0)
     averageDeliveryDays: float | None = Field(default=None, ge=0)
     governmentIdVerified: bool = False
+
+
+class SellerBlacklistIn(BaseModel):
+    blacklisted: bool
 
 
 class TopProductsResponseOut(BaseModel):

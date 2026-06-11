@@ -187,6 +187,9 @@ def authenticate_user(db: Session, email: str, password: str) -> dict | None:
     if user is None or not verify_password(password, user.password_hash):
         return None
 
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+
     return _serialize_user(user)
 
 

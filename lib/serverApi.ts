@@ -77,7 +77,7 @@ const createFallbackCart = (): CartSummary => ({
   standardShipping: DEFAULT_STANDARD_SHIPPING,
   tax: 0,
   total: 0,
-  currency: "GHS",
+  currency: "GH₵",
 });
 
 const createFallbackSearchResponse = (query: string): SearchResponse => ({
@@ -335,10 +335,16 @@ export async function proxyBackend(
 export const getHomeFeed = () =>
   getJson<HomeFeed>("/home", undefined, { fallback: createFallbackHomeFeed });
 
-export const getProducts = (params?: ProductQueryParams) =>
-  getJson<CatalogResponse>(`/products${buildQueryString(params ?? {})}`, undefined, {
-    fallback: () => createFallbackCatalog(params),
-  });
+export const getProducts = (params?: ProductQueryParams) => {
+  const { includeBlacklisted, ...rest } = params ?? {};
+  const useInternal = Boolean(includeBlacklisted);
+  const queryParams = includeBlacklisted ? { ...rest, includeBlacklisted: true } : rest;
+  return getJson<CatalogResponse>(
+    `/products${buildQueryString(queryParams)}`,
+    useInternal ? { headers: { "X-Actor-Role": "admin" } } : undefined,
+    { internal: useInternal, fallback: () => createFallbackCatalog(params) }
+  );
+};
 
 export const getProductByIdOrSlug = async (identifier: string) => {
   const response = await fetchBackend(`/products/${identifier}`);
@@ -398,9 +404,9 @@ export const getSeller = async (identifier: string) => {
   return response.json() as Promise<SellerDetail>;
 };
 
-export const getAdminSellers = () =>
+export const getAdminSellers = (filter?: "all" | "blacklisted" | "inactive") =>
   getJson<SellerSummary[]>(
-    "/admin/sellers",
+    `/admin/sellers${buildQueryString(filter && filter !== "all" ? { filter } : {})}`,
     { headers: { "X-Actor-Role": "admin" } },
     { internal: true, fallback: () => [] }
   );

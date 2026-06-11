@@ -22,6 +22,7 @@ export interface ProductQueryParams {
   inStock?: boolean;
   minPrice?: number;
   maxPrice?: number;
+  includeBlacklisted?: boolean;
 }
 
 export interface ProductVariantPayload {
@@ -77,6 +78,23 @@ export interface UpdateProfilePayload {
   };
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
+}
+
+export interface UpdateProductPayload {
+  name?: string;
+  description?: string;
+  price?: number;
+  discount?: number;
+  images?: string[];
+  categoryId?: string | null;
+  categoryName?: string;
+  brandId?: string | null;
+  brandName?: string;
+  collectionId?: string | null;
+  collectionName?: string;
+  stock?: number;
+  badge?: string | null;
+  tags?: string[];
 }
 
 export interface ReportSellerPayload {

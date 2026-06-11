@@ -26,3 +26,25 @@ export async function GET(
   const { id } = await params;
   return proxyBackend(`/admin/sellers/${id}`, undefined, { internal: true });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await auth();
+
+  if (!session) {
+    return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+  }
+
+  if (session.user.role !== "admin") {
+    return NextResponse.json({ detail: "Admin only" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  return proxyBackend(
+    `/admin/sellers/${id}`,
+    { method: "DELETE", headers: { "X-Actor-Role": "admin" } },
+    { internal: true }
+  );
+}

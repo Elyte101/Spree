@@ -36,7 +36,7 @@ class OrderCreateIn(BaseModel):
     shippingCost: float = Field(ge=0)
     tax: float = Field(ge=0)
     total: float = Field(ge=0)
-    currency: str = Field(default="GHS", max_length=8)
+    currency: str = Field(default="GH₵", max_length=8)
 
     items: list[OrderItemIn] = Field(min_length=1)
 

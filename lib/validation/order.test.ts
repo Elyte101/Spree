@@ -24,7 +24,7 @@ const validOrder = {
   shippingCost: 12,
   tax: 2.4,
   total: 44.39,
-  currency: "GHS",
+  currency: "GH₵",
   items: [validItem],
 };
 
