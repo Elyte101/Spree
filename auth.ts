@@ -11,7 +11,7 @@ import { isSafeCallbackUrl } from "@/lib/safeUrl";
 
 type AppUserRole = "customer" | "seller" | "admin";
 
-const SignInSchema = z.object({
+const SignInSchema = z.object({ 
   email: z.string().email(),
   password: z.string().min(1),
 });
