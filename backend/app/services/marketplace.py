@@ -328,6 +328,8 @@ def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
         "idFrontUrl": seller.id_front_url or "",
         "idBackUrl": seller.id_back_url or "",
         "selfieUrl": seller.selfie_url or "",
+        "onboardingStep": seller.onboarding_step or 0,
+        "rejectionReason": seller.rejection_reason,
         "shippingAddress": {
             **_default_shipping_address(seller.name),
             **(seller.shipping_info or {}),
@@ -412,6 +414,78 @@ def toggle_seller_blacklist(db: Session, seller_id: str, blacklisted: bool) -> d
     db.commit()
     db.refresh(seller)
     return get_admin_seller_detail(db, seller.id)
+
+
+def list_verification_queue(db: Session) -> list[dict]:
+    """All sellers with status pending_verification, newest first."""
+    sellers = db.scalars(
+        select(User)
+        .where(User.seller_status == "pending_verification")
+        .order_by(User.seller_started_at.asc(), User.created_at.asc())
+    ).all()
+    seller_ids = [s.id for s in sellers]
+    metrics = _batch_seller_metrics(db, seller_ids)
+    return [_serialize_admin_seller_summary(seller, metrics[seller.id]) for seller in sellers]
+
+
+def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
+    seller = db.get(User, seller_id)
+    if seller is None:
+        raise HTTPException(status_code=404, detail="Seller not found")
+    if seller.seller_status not in ("pending_verification", "incomplete", "rejected"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot approve a seller with status '{seller.seller_status}'",
+        )
+    seller.seller_status = "verified"
+    seller.government_id_verified = True
+    seller.rejection_reason = None
+    seller.role = "seller"
+    db.commit()
+
+    from app.services import notifications as notif_svc
+    notif_svc.notify(
+        db,
+        event_type="seller_approved",
+        recipient_id=seller.id,
+        title="Your seller account is verified! 🎉",
+        body="Congratulations! Your Spree seller account has been verified. "
+             "You can now list products and start selling.",
+        href="/dashboard/products/new",
+        email_subject="Your Spree seller account is approved",
+        cta_label="Start selling",
+    )
+
+    return get_admin_seller_detail(db, seller_id)
+
+
+def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> dict:
+    if not reason or not reason.strip():
+        raise HTTPException(status_code=400, detail="A rejection reason is required")
+    seller = db.get(User, seller_id)
+    if seller is None:
+        raise HTTPException(status_code=404, detail="Seller not found")
+
+    seller.seller_status = "rejected"
+    seller.rejection_reason = reason.strip()
+    seller.government_id_verified = False
+    db.commit()
+
+    from app.services import notifications as notif_svc
+    notif_svc.notify(
+        db,
+        event_type="seller_rejected",
+        recipient_id=seller.id,
+        title="Seller application not approved",
+        body=f"We reviewed your documents and could not verify your account at this time. "
+             f"Reason: {reason.strip()}. "
+             "Please update your information and re-submit.",
+        href="/seller/register",
+        email_subject="Spree seller application — action required",
+        cta_label="Re-submit application",
+    )
+
+    return get_admin_seller_detail(db, seller_id)
 
 
 def list_top_products(db: Session, page: int = 1, limit: int = 100) -> dict:

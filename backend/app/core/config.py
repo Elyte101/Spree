@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # Override the uploads storage directory (defaults to /tmp/uploads on Vercel)
     uploads_dir: str = ""
 
+    # Resend email API
+    resend_api_key: str = ""
+    email_from: str = "Spree <no-reply@spree.com>"
+    frontend_url: str = "http://localhost:3000"
+
+    # Web Push VAPID keys (generate once with: pywebpush --gen-vapid-keys)
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_subject: str = "mailto:admin@spree.com"
+
     @field_validator("backend_internal_api_key", mode="after")
     @classmethod
     def warn_default_api_key(cls, value: str) -> str:

@@ -117,3 +117,58 @@ export interface UpdateSellerStatusPayload {
   averageDeliveryDays: number | null;
   governmentIdVerified: boolean;
 }
+
+// ── Onboarding step payloads ──────────────────────────────────────────────────
+
+export interface OnboardingStep1Payload {
+  name: string;
+  phone: string;
+  termsAccepted: boolean;
+}
+
+export interface OnboardingStep2Payload {
+  country: string;
+  state: string;
+  city: string;
+  addressLine1: string;
+  postalCode?: string;
+}
+
+export interface OnboardingStep3Payload {
+  storeName: string;
+  storeDescription: string;
+  storeTagline?: string;
+  sellerType: SellerType;
+  businessType: "individual" | "registered";
+  registrationNumber?: string;
+  logoUrl?: string;
+}
+
+export interface OnboardingStep4Payload {
+  governmentIdType: "ghana-card" | "voters-id" | "drivers-license" | "passport" | "ecowas-card" | "ssnit";
+  governmentIdNumber: string;
+  idFrontUrl: string;
+  idBackUrl: string;
+  selfieUrl: string;
+}
+
+export interface OnboardingStep5Payload {
+  method: "bank" | "mobile_money";
+  bankName?: string;
+  accountNumber?: string;
+  bankCode?: string;
+  mobileMoneyNetwork?: string;
+  mobileMoneyNumber?: string;
+  currency?: string;
+  accountName: string;
+}
+
+export interface SellerRejectPayload {
+  reason: string;
+}
+
+export interface PushSubscribePayload {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}

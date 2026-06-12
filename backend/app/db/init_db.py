@@ -18,6 +18,14 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("products", "is_blacklisted", "BOOLEAN NOT NULL DEFAULT FALSE", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "is_blacklisted", "BOOLEAN NOT NULL DEFAULT FALSE", "INTEGER NOT NULL DEFAULT 0"),
     ("users", "last_login_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    # Onboarding & verification
+    ("users", "onboarding_step", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    ("users", "rejection_reason", "TEXT", "TEXT"),
+    ("users", "notification_prefs", "JSONB", "TEXT"),
+    # Extended notification channels
+    ("notifications", "event_type", "VARCHAR(64)", "TEXT"),
+    ("notifications", "channel", "VARCHAR(16) NOT NULL DEFAULT 'in_app'", "TEXT NOT NULL DEFAULT 'in_app'"),
+    ("notifications", "is_sent", "BOOLEAN NOT NULL DEFAULT TRUE", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

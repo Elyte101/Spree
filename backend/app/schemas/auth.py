@@ -1,10 +1,13 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 SellerType = Literal["retail", "wholesale"]
-SellerStatus = Literal["buyer", "pending", "active", "suspended", "removed"]
+SellerStatus = Literal[
+    "buyer", "incomplete", "pending_verification", "verified",
+    "rejected", "active", "pending", "suspended", "removed",
+]
 
 
 class LoginRequest(BaseModel):
@@ -140,3 +143,75 @@ class UserProfileOut(BaseModel):
     idFrontUrl: str = ""
     idBackUrl: str = ""
     selfieUrl: str = ""
+    onboardingStep: int = 0
+    rejectionReason: str | None = None
+
+
+# ── Onboarding step schemas ───────────────────────────────────────────────────
+
+class OnboardingStep1Request(BaseModel):
+    """Account basics — name, phone, terms. Email comes from session."""
+    name: str = Field(min_length=2, max_length=120)
+    phone: str = Field(min_length=7, max_length=32)
+    termsAccepted: bool
+
+    @field_validator("termsAccepted")
+    @classmethod
+    def must_accept_terms(cls, v: bool) -> bool:
+        if not v:
+            raise ValueError("You must accept the terms to continue")
+        return v
+
+
+class OnboardingStep2Request(BaseModel):
+    """Store location."""
+    country: str = Field(min_length=2, max_length=120)
+    state: str = Field(min_length=2, max_length=120)
+    city: str = Field(min_length=2, max_length=120)
+    addressLine1: str = Field(min_length=5, max_length=160)
+    postalCode: str = Field(default="", max_length=40)
+
+
+class OnboardingStep3Request(BaseModel):
+    """Store / business details."""
+    storeName: str = Field(min_length=2, max_length=120)
+    storeDescription: str = Field(min_length=24, max_length=500)
+    storeTagline: str = Field(default="", max_length=160)
+    sellerType: SellerType = "retail"
+    businessType: Literal["individual", "registered"] = "individual"
+    registrationNumber: str = Field(default="", max_length=80)
+    logoUrl: str = Field(default="", max_length=512)
+
+
+class OnboardingStep4Request(BaseModel):
+    """Identity verification — document URLs after direct Supabase upload."""
+    governmentIdType: GhanaIdType = "ghana-card"
+    governmentIdNumber: str = Field(min_length=4, max_length=64)
+    idFrontUrl: str = Field(min_length=1, max_length=512)
+    idBackUrl: str = Field(min_length=1, max_length=512)
+    selfieUrl: str = Field(min_length=1, max_length=512)
+
+
+class OnboardingStep5Request(BaseModel):
+    """Payout details."""
+    method: Literal["bank", "mobile_money"] = "bank"
+    bankName: str = Field(default="", max_length=120)
+    accountNumber: str = Field(default="", max_length=32)
+    bankCode: str = Field(default="", max_length=20)
+    mobileMoneyNetwork: str = Field(default="", max_length=20)
+    mobileMoneyNumber: str = Field(default="", max_length=20)
+    currency: str = Field(default="GHS", max_length=8)
+    accountName: str = Field(min_length=2, max_length=120)
+
+
+class OnboardingStateOut(BaseModel):
+    step: int
+    profile: UserProfileOut
+
+
+class NotificationPrefsOut(BaseModel):
+    prefs: dict
+
+
+class NotificationPrefsUpdateRequest(BaseModel):
+    prefs: dict

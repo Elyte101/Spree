@@ -7,7 +7,16 @@ export type CatalogSort =
 
 export type UserRole = "customer" | "seller" | "admin";
 export type PaymentMethod = "card" | "paypal" | "bank-transfer";
-export type SellerStatus = "buyer" | "pending" | "active" | "suspended" | "removed";
+export type SellerStatus =
+  | "buyer"
+  | "incomplete"
+  | "pending_verification"
+  | "verified"
+  | "rejected"
+  | "active"
+  | "pending"
+  | "suspended"
+  | "removed";
 export type SellerType = "retail" | "wholesale";
 export type GovernmentIdType =
   | "ghana-card"
@@ -263,6 +272,38 @@ export interface AdminOverview {
 
 export type NotificationType = "promo" | "order" | "stock" | "account";
 
+export type NotificationEventType =
+  | "seller_created"
+  | "docs_submitted"
+  | "new_verification_pending"
+  | "seller_approved"
+  | "seller_rejected"
+  | "payout_saved"
+  | "onboarding_reminder"
+  | "promo"
+  | "order"
+  | "stock"
+  | "account";
+
+export type NotificationChannel = "in_app" | "email" | "push";
+
+export type OnboardingStepIndex = 0 | 1 | 2 | 3 | 4 | 5;
+
+export interface OnboardingState {
+  step: OnboardingStepIndex;
+  profile: UserProfile;
+}
+
+export interface PushSubscriptionData {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export type NotificationPrefMatrix = Partial<
+  Record<NotificationEventType, Partial<Record<NotificationChannel, boolean>>>
+>;
+
 export interface NotificationItem {
   id: string;
   title: string;
@@ -271,6 +312,8 @@ export interface NotificationItem {
   isRead: boolean;
   type: NotificationType;
   href?: string;
+  eventType?: string | null;
+  channel?: NotificationChannel;
 }
 
 export interface AuthUser {
@@ -398,9 +441,17 @@ export interface AdminSellerDetail extends SellerSummary {
   idFrontUrl: string;
   idBackUrl: string;
   selfieUrl: string;
+  onboardingStep: number;
+  rejectionReason?: string | null;
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
   reports: SellerReport[];
+}
+
+export interface VerificationQueueItem extends SellerSummary {
+  onboardingStep: number;
+  rejectionReason?: string | null;
+  adminNote: string;
 }
 
 export interface TopProductsResponse {

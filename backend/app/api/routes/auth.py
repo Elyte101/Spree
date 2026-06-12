@@ -6,7 +6,15 @@ from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
 from app.schemas.auth import (
     AuthUserOut,
     LoginRequest,
+    NotificationPrefsOut,
+    NotificationPrefsUpdateRequest,
     OAuthUpsertRequest,
+    OnboardingStateOut,
+    OnboardingStep1Request,
+    OnboardingStep2Request,
+    OnboardingStep3Request,
+    OnboardingStep4Request,
+    OnboardingStep5Request,
     PayoutInfoRequest,
     ProfileUpdateRequest,
     SendVerificationRequest,
@@ -25,6 +33,7 @@ from app.services.auth import (
     upsert_oauth_user,
     verify_email_token,
 )
+from app.services import onboarding as onboarding_svc
 
 router = APIRouter(prefix="/auth")
 
@@ -105,6 +114,99 @@ def profile_payout_info(
 @router.post("/oauth-upsert", response_model=AuthUserOut)
 def oauth_upsert(payload: OAuthUpsertRequest, db: DBSession, _: InternalAPIKey):
     return upsert_oauth_user(db, payload)
+
+
+# ── Onboarding wizard ─────────────────────────────────────────────────────────
+
+@router.get("/onboarding", response_model=OnboardingStateOut)
+def onboarding_state(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.get_onboarding_state(db, actor_id)
+
+
+@router.patch("/onboarding/step/1", response_model=UserProfileOut)
+def onboarding_step1(
+    payload: OnboardingStep1Request, db: DBSession, _: InternalAPIKey, actor_id: ActorUserId
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.save_step1(db, actor_id, payload)
+
+
+@router.patch("/onboarding/step/2", response_model=UserProfileOut)
+def onboarding_step2(
+    payload: OnboardingStep2Request, db: DBSession, _: InternalAPIKey, actor_id: ActorUserId
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.save_step2(db, actor_id, payload)
+
+
+@router.patch("/onboarding/step/3", response_model=UserProfileOut)
+def onboarding_step3(
+    payload: OnboardingStep3Request, db: DBSession, _: InternalAPIKey, actor_id: ActorUserId
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.save_step3(db, actor_id, payload)
+
+
+@router.patch("/onboarding/step/4", response_model=UserProfileOut)
+def onboarding_step4(
+    payload: OnboardingStep4Request, db: DBSession, _: InternalAPIKey, actor_id: ActorUserId
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.save_step4(db, actor_id, payload)
+
+
+@router.patch("/onboarding/step/5", response_model=UserProfileOut)
+def onboarding_step5(
+    payload: OnboardingStep5Request, db: DBSession, _: InternalAPIKey, actor_id: ActorUserId
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.save_step5(db, actor_id, payload)
+
+
+@router.post("/onboarding/submit", response_model=UserProfileOut)
+def onboarding_submit(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return onboarding_svc.submit_onboarding(db, actor_id)
+
+
+# ── Notification preferences ──────────────────────────────────────────────────
+
+@router.get("/notification-preferences", response_model=NotificationPrefsOut)
+def get_notification_prefs(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    user = db.get_one if False else db.get(type(None), None)  # just to hint type
+    from app.db.models import User as _User
+    user = db.get(_User, actor_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"prefs": user.notification_prefs or {}}
+
+
+@router.patch("/notification-preferences", response_model=NotificationPrefsOut)
+def update_notification_prefs(
+    payload: NotificationPrefsUpdateRequest,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    from app.db.models import User as _User
+    user = db.get(_User, actor_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.notification_prefs = payload.prefs
+    db.commit()
+    return {"prefs": user.notification_prefs}
 
 
 @router.post("/send-verification")

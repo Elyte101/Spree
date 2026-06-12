@@ -1,19 +1,22 @@
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import ActorRole, DBSession, InternalAPIKey
+from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
 from app.schemas.marketplace import (
     AdminSellerDetailOut,
     AdminSellerStatusUpdateRequest,
     AdminSellerSummaryOut,
     FollowSellerRequest,
     ReportSellerRequest,
+    SellerApproveRequest,
     SellerBlacklistIn,
     SellerDetailOut,
+    SellerRejectRequest,
     SellerSummaryOut,
     TopProductsResponseOut,
     UnfollowSellerRequest,
 )
 from app.services.marketplace import (
+    approve_seller,
     delete_seller,
     follow_seller,
     get_admin_seller_detail,
@@ -21,6 +24,8 @@ from app.services.marketplace import (
     list_admin_sellers,
     list_public_sellers,
     list_top_products,
+    list_verification_queue,
+    reject_seller,
     report_seller,
     toggle_seller_blacklist,
     unfollow_seller,
@@ -53,6 +58,36 @@ def seller_unfollow(seller_id: str, payload: UnfollowSellerRequest, db: DBSessio
 @router.post("/sellers/{seller_id}/report", response_model=SellerSummaryOut)
 def seller_report(seller_id: str, payload: ReportSellerRequest, db: DBSession, _: InternalAPIKey):
     return report_seller(db, seller_id, payload.reporterId, payload.reason, payload.details)
+
+
+@router.get("/admin/verification", response_model=list[AdminSellerSummaryOut])
+def admin_verification_queue(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return list_verification_queue(db)
+
+
+@router.post("/admin/sellers/{seller_id}/approve", response_model=AdminSellerDetailOut)
+def admin_seller_approve(
+    seller_id: str, db: DBSession, _: InternalAPIKey, actor_role: ActorRole, actor_id: ActorUserId
+):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return approve_seller(db, seller_id, actor_id or "")
+
+
+@router.post("/admin/sellers/{seller_id}/reject", response_model=AdminSellerDetailOut)
+def admin_seller_reject(
+    seller_id: str,
+    payload: SellerRejectRequest,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+    actor_id: ActorUserId,
+):
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return reject_seller(db, seller_id, actor_id or "", payload.reason)
 
 
 @router.get("/admin/sellers", response_model=list[AdminSellerSummaryOut])

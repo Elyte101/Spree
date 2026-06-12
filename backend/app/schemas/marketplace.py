@@ -7,7 +7,10 @@ from app.schemas.auth import GhanaIdType, PaymentInfo, SellerContact, ShippingAd
 from app.schemas.catalog import ProductOut
 
 SellerType = Literal["retail", "wholesale"]
-SellerStatus = Literal["buyer", "pending", "active", "suspended", "removed"]
+SellerStatus = Literal[
+    "buyer", "incomplete", "pending_verification", "verified",
+    "rejected", "active", "pending", "suspended", "removed",
+]
 
 
 class SellerSummaryOut(BaseModel):
@@ -61,9 +64,22 @@ class SellerDetailOut(SellerSummaryOut):
 
 class AdminSellerDetailOut(AdminSellerSummaryOut):
     governmentIdNumber: str = ""
+    idFrontUrl: str = ""
+    idBackUrl: str = ""
+    selfieUrl: str = ""
+    onboardingStep: int = 0
+    rejectionReason: str | None = None
     shippingAddress: ShippingAddress
     paymentInfo: PaymentInfo
     reports: list[SellerReportOut]
+
+
+class SellerApproveRequest(BaseModel):
+    pass
+
+
+class SellerRejectRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=600)
 
 
 class FollowSellerRequest(BaseModel):

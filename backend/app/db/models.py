@@ -127,6 +127,23 @@ class Notification(Base):
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     type: Mapped[str] = mapped_column(String(32), index=True)
     href: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    event_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    channel: Mapped[str] = mapped_column(String(16), default="in_app", index=True)
+    is_sent: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text)
+    p256dh: Mapped[str] = mapped_column(String(512))
+    auth: Mapped[str] = mapped_column(String(256))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
 
 
 class User(Base):
@@ -167,6 +184,9 @@ class User(Base):
     id_front_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     id_back_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     selfie_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    onboarding_step: Mapped[int] = mapped_column(Integer, default=0)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notification_prefs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

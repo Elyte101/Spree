@@ -9,12 +9,16 @@ import {
   Collection,
   HomeFeed,
   NotificationItem,
+  NotificationPrefMatrix,
+  OnboardingState,
   Product,
+  PushSubscriptionData,
   SellerDetail,
   SellerSummary,
   SearchResponse,
   TopProductsResponse,
   UserProfile,
+  VerificationQueueItem,
 } from "@/types/types";
 
 import { buildQueryString } from "@/lib/api/queryString";
@@ -22,6 +26,7 @@ import {
   CreateProductPayload,
   ProductQueryParams,
   ReportSellerPayload,
+  SellerRejectPayload,
   SignUpPayload,
   UpdateProductPayload,
   UpdateSellerStatusPayload,
@@ -30,9 +35,16 @@ import {
 
 export type {
   CreateProductPayload,
+  OnboardingStep1Payload,
+  OnboardingStep2Payload,
+  OnboardingStep3Payload,
+  OnboardingStep4Payload,
+  OnboardingStep5Payload,
   ProductQueryParams,
   ProductVariantPayload,
+  PushSubscribePayload,
   ReportSellerPayload,
+  SellerRejectPayload,
   SignUpPayload,
   UpdateProductPayload,
   UpdateSellerStatusPayload,
@@ -263,4 +275,80 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ blacklisted }),
     }),
+
+  /* ---------- ONBOARDING ---------- */
+
+  getOnboardingState: () =>
+    requestJson<OnboardingState>("/api/seller/onboarding"),
+
+  saveOnboardingStep: (step: 1 | 2 | 3 | 4 | 5, payload: unknown) =>
+    requestJson<UserProfile>(`/api/seller/onboarding/step/${step}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  submitOnboarding: () =>
+    requestJson<UserProfile>("/api/seller/onboarding/submit", { method: "POST" }),
+
+  getUploadUrl: (slot: "id_front" | "id_back" | "selfie" | "logo") =>
+    requestJson<{ uploadUrl: string; path: string; bucket: string }>(
+      "/api/seller/onboarding/upload-url",
+      { method: "POST", body: JSON.stringify({ slot }) }
+    ),
+
+  /* ---------- VERIFICATION QUEUE (ADMIN) ---------- */
+
+  getVerificationQueue: () =>
+    requestJson<VerificationQueueItem[]>("/api/admin/verification"),
+
+  approveSeller: (id: string) =>
+    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/approve`, { method: "POST" }),
+
+  rejectSeller: (id: string, payload: SellerRejectPayload) =>
+    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  getSellerDocumentUrls: (id: string) =>
+    requestJson<{ idFrontUrl: string; idBackUrl: string; selfieUrl: string }>(
+      `/api/admin/sellers/${id}/documents`
+    ),
+
+  /* ---------- NOTIFICATIONS (EXTENDED) ---------- */
+
+  getUnreadCount: () =>
+    requestJson<{ count: number }>("/api/notifications/unread-count", {}, { safe: true, fallback: { count: 0 } }),
+
+  markNotificationRead: (id: string) =>
+    requestJson<void>(`/api/notifications/${id}/read`, { method: "PATCH" }),
+
+  markAllNotificationsRead: () =>
+    requestJson<void>("/api/notifications/read-all", { method: "POST" }),
+
+  /* ---------- NOTIFICATION PREFERENCES ---------- */
+
+  getNotificationPrefs: () =>
+    requestJson<{ prefs: NotificationPrefMatrix }>("/api/auth/notification-preferences"),
+
+  updateNotificationPrefs: (prefs: NotificationPrefMatrix) =>
+    requestJson<{ prefs: NotificationPrefMatrix }>("/api/auth/notification-preferences", {
+      method: "PATCH",
+      body: JSON.stringify({ prefs }),
+    }),
+
+  /* ---------- PUSH SUBSCRIPTIONS ---------- */
+
+  subscribePush: (payload: PushSubscriptionData) =>
+    requestJson<{ status: string }>("/api/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  unsubscribePush: (endpoint: string) =>
+    requestJson<void>("/api/push/subscribe", {
+      method: "DELETE",
+      body: JSON.stringify({ endpoint }),
+    }),
+
 };
