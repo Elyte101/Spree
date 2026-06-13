@@ -175,7 +175,13 @@ async function validateImage(
       `4. SCALE — Does the product occupy a reasonable portion of the frame? ` +
         `(Reject if it is a tiny speck in a sea of background, or so zoomed in the product is unrecognisable.)\n` +
       `5. CONTENT — Is this a genuine product photo? ` +
-        `Reject screenshots, blank/solid-colour images, documents, body parts, memes, or unrelated content.\n` +
+        `Reject screenshots, blank/solid-colour images, documents, memes, or unrelated content.\n` +
+      `6. BACKGROUND — Is the background clean, neutral, and free of clutter? ` +
+        `Reject images with messy rooms, dirty floors, piles of unrelated objects, laundry, food waste, ` +
+        `or any distracting environment that undermines the professionalism of the listing.\n` +
+      `7. APPROPRIATENESS — Is the image free of nudity, sexually suggestive content, ` +
+        `graphic violence, hate symbols, or any other material that violates marketplace standards? ` +
+        `Reject immediately if any such content is present, even partially visible in the background.\n` +
       relevanceRule +
       `\nRespond with ONLY a raw JSON object — no markdown fences, no commentary:\n` +
       `{"approved":true,"issues":[]}\n` +
@@ -186,7 +192,7 @@ async function validateImage(
 
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 300,
+      max_tokens: 400,
       messages: [{
         role: "user",
         content: [
