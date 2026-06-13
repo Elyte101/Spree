@@ -63,14 +63,88 @@ function resolveLanguage(acceptLanguage: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// AI image quality validation
-// Fails open: if ANTHROPIC_API_KEY is unset or the API errors, the upload
-// proceeds normally so sellers are never blocked by an infrastructure issue.
+// Manual algorithmic quality checks (always run, no API key required)
+// Uses sharp pixel statistics — fails open on any sharp error.
 // ---------------------------------------------------------------------------
 
 type ValidationResult =
   | { approved: true }
   | { approved: false; issues: string[] };
+
+async function performManualChecks(imageBytes: Uint8Array): Promise<ValidationResult> {
+  const issues: string[] = [];
+  try {
+    const buf = Buffer.from(imageBytes);
+    const [meta, stats] = await Promise.all([
+      sharp(buf).metadata(),
+      sharp(buf).stats(),
+    ]);
+
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+
+    // 1. Minimum resolution — anything smaller than 300×300 will look poor at listing size
+    if (width < 300 || height < 300) {
+      issues.push(
+        `Image resolution is too low (${width}×${height} px). ` +
+        `Please upload a photo of at least 300×300 px for a clear product display.`
+      );
+    }
+
+    // 2. Extreme aspect ratio — catches banner crops and very tall/narrow slices
+    if (width > 0 && height > 0) {
+      const ratio = width / height;
+      if (ratio > 4 || ratio < 0.25) {
+        issues.push(
+          "Image proportions are too extreme. " +
+          "Use a square or near-square photo (up to 4:1 or 1:4) for best results."
+        );
+      }
+    }
+
+    // Evaluate only RGB channels (first 3); ignore alpha to avoid false-dark readings
+    // on transparent PNGs.
+    const colorChannels = stats.channels.slice(0, Math.min(3, stats.channels.length));
+    const meanBrightness = colorChannels.reduce((s, c) => s + c.mean, 0) / colorChannels.length;
+    const maxStdev = Math.max(...colorChannels.map((c) => c.stdev));
+
+    // 3. Near-blank / solid-colour — stdev < 8 across all channels means virtually
+    //    no variation; the image is a blank fill or placeholder.
+    if (maxStdev < 8) {
+      issues.push(
+        "Image appears to be blank or a solid colour. " +
+        "Please upload an actual photo of your product."
+      );
+    }
+
+    // 4. Too dark — mean brightness below 20 out of 255
+    if (meanBrightness < 20) {
+      issues.push(
+        "Image is too dark — the product is not clearly visible. " +
+        "Please retake the photo in better lighting."
+      );
+    }
+
+    // 5. Overexposed — mean above 250 and very low variation means a near-white blank
+    if (meanBrightness > 250 && maxStdev < 15) {
+      issues.push(
+        "Image is overexposed or blank white. " +
+        "Please adjust the lighting so the product is clearly visible."
+      );
+    }
+  } catch (err) {
+    // Fail open — don't block uploads if sharp encounters an unexpected format
+    console.warn("[product-images] manual checks skipped:", err instanceof Error ? err.message : err);
+  }
+
+  return issues.length > 0 ? { approved: false, issues } : { approved: true };
+}
+
+// ---------------------------------------------------------------------------
+// AI image quality validation
+// Fails open: if ANTHROPIC_API_KEY is unset or the API errors, the upload
+// proceeds normally so sellers are never blocked by an infrastructure issue.
+// ---------------------------------------------------------------------------
 
 async function validateImage(
   imageBytes: Uint8Array,
@@ -224,6 +298,16 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       { error: "Only JPEG, PNG, WebP, and HEIC images are accepted" },
       { status: 400 }
+    );
+  }
+
+  // Manual quality gate — fast pixel-level checks, no API key needed.
+  // Runs first so obvious rejections never incur an AI API call.
+  const manualCheck = await performManualChecks(finalBytes);
+  if (!manualCheck.approved) {
+    return Response.json(
+      { error: "Image did not pass quality check", issues: manualCheck.issues },
+      { status: 422 }
     );
   }
 
