@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   AccountCircleOutlined,
@@ -17,7 +17,6 @@ import {
   MenuRounded,
   NotificationsOutlined,
   ReceiptLongOutlined,
-  SearchRounded,
   SettingsOutlined,
   ShoppingBagOutlined,
 } from "@mui/icons-material";
@@ -28,8 +27,6 @@ import {
   Divider,
   Drawer,
   IconButton,
-  InputAdornment,
-  InputBase,
   List,
   ListItemButton,
   ListItemIcon,
@@ -53,7 +50,6 @@ import { useThemeContext } from "@/theme/themeContext";
 
 export function StoreAppBar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { status } = useSession();
   const theme = useTheme();
   const { toggleMode } = useThemeContext();
@@ -64,7 +60,6 @@ export function StoreAppBar() {
     notificationsQuery.data?.filter((item) => !item.isRead).length ?? 0;
   const [profileAnchorEl, setProfileAnchorEl] = React.useState<HTMLElement | null>(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = React.useState<HTMLElement | null>(null);
-  const [searchValue, setSearchValue] = React.useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isAuthenticated = status === "authenticated";
@@ -79,13 +74,6 @@ export function StoreAppBar() {
 
   const profileHref = isAuthenticated ? "/profile" : "/auth/sign-in?callbackUrl=%2Fprofile";
   const settingsHref = isAuthenticated ? "/settings" : "/auth/sign-in?callbackUrl=%2Fsettings";
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchValue.trim()) {
-      router.push(`/products?search=${encodeURIComponent(searchValue.trim())}`);
-    }
-  };
 
   const getNavButtonSx = (active: boolean): SxProps<Theme> => (theme) => ({
     color: active
@@ -198,70 +186,7 @@ export function StoreAppBar() {
           </Stack>
         </Box>
 
-        {/* Search bar — center */}
-        <Box
-          component="form"
-          onSubmit={handleSearchSubmit}
-          sx={{
-            flexGrow: 1,
-            maxWidth: { xs: "100%", md: 520 },
-            mx: { md: "auto" },
-            display: { xs: "none", sm: "flex" },
-          }}
-        >
-          <InputBase
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search products, brands…"
-            fullWidth
-            startAdornment={
-              <InputAdornment position="start" sx={{ ml: 0.5 }}>
-                <SearchRounded fontSize="small" sx={{ color: "text.secondary" }} />
-              </InputAdornment>
-            }
-            sx={(theme) => ({
-              px: 1.5,
-              py: 0.75,
-              borderRadius: 999,
-              border: "1.5px solid",
-              borderColor: theme.palette.divider,
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha(theme.palette.common.white, 0.05)
-                  : alpha(theme.palette.primary.main, 0.04),
-              fontSize: "0.875rem",
-              transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-              "&:hover": {
-                borderColor: alpha(theme.palette.primary.main, 0.4),
-              },
-              "&.Mui-focused": {
-                borderColor: "primary.main",
-                boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.12)}`,
-              },
-              "& .MuiInputBase-input": {
-                py: 0,
-                "&::placeholder": {
-                  color: theme.palette.text.secondary,
-                  opacity: 0.8,
-                },
-              },
-            })}
-          />
-        </Box>
-
-        {/* Mobile search icon */}
-        <Tooltip title="Search">
-          <IconButton
-            aria-label="search"
-            component={Link}
-            href="/products"
-            sx={{ ...getNavButtonSx(false), display: { xs: "inline-flex", sm: "none" } }}
-          >
-            <SearchRounded />
-          </IconButton>
-        </Tooltip>
-
-        <Box sx={{ flexGrow: { xs: 1, sm: 0 } }} />
+        <Box sx={{ flexGrow: 1 }} />
 
         {/* Nav icons — collapsed on mobile */}
         <Stack

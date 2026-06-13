@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   AutoAwesome,
+  CloseRounded,
   Inventory2Outlined,
   SearchRounded,
   TuneRounded,
@@ -13,7 +14,8 @@ import {
   Chip,
   Divider,
   FormControl,
-  InputAdornment,
+  IconButton,
+  InputBase,
   InputLabel,
   LinearProgress,
   Pagination,
@@ -21,7 +23,6 @@ import {
   Select,
   Stack,
   Switch,
-  TextField,
   Typography,
   MenuItem,
 } from "@mui/material";
@@ -285,6 +286,57 @@ export function ProductListingPage({
           </Stack>
         </Paper>
 
+        <Paper
+          elevation={0}
+          component="form"
+          onSubmit={(e: React.BaseSyntheticEvent) => e.preventDefault()}
+          sx={(theme) => ({
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            px: 2,
+            py: 0.75,
+            borderRadius: 999,
+            border: "1.5px solid",
+            borderColor: theme.palette.divider,
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha(theme.palette.common.white, 0.04)
+                : theme.palette.background.paper,
+            transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+            "&:focus-within": {
+              borderColor: "primary.main",
+              boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
+            },
+          })}
+        >
+          <SearchRounded sx={{ color: "text.secondary", flexShrink: 0 }} />
+          <InputBase
+            value={searchInput}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search products, brands, tags…"
+            fullWidth
+            inputProps={{ "aria-label": "search products" }}
+            sx={{ fontSize: "0.9375rem", py: 0.5 }}
+          />
+          {searchInput ? (
+            <IconButton
+              size="small"
+              aria-label="clear search"
+              onClick={() => {
+                setSearchInput("");
+                setPage(1);
+              }}
+              sx={{ flexShrink: 0 }}
+            >
+              <CloseRounded fontSize="small" />
+            </IconButton>
+          ) : null}
+        </Paper>
+
         <Box
           sx={{
             display: "grid",
@@ -302,24 +354,6 @@ export function ProductListingPage({
               paperSx={{ borderRadius: 2 }}
             >
               <Stack spacing={2}>
-                <TextField
-                  value={searchInput}
-                  onChange={(event) => {
-                    setSearchInput(event.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search products, brands, tags..."
-                  fullWidth
-                  size="small"
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchRounded fontSize="small" />
-                      </InputAdornment>
-                    ),
-                  }}
-                />
-
                 <FormControl size="small" fullWidth>
                   <InputLabel id="sort-products-label">Sort by</InputLabel>
                   <Select
