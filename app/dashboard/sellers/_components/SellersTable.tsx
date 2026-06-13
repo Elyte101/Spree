@@ -5,13 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Alert,
+  Avatar,
+  Box,
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   Menu,
   MenuItem,
@@ -27,9 +31,19 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
+import {
+  ExpandMoreRounded,
+  LocalShippingRounded,
+  MoreVertRounded,
+  PeopleRounded,
+  PersonOffRounded,
+  ShoppingBagOutlined,
+  StorefrontRounded,
+} from "@mui/icons-material";
 
 import { api, ApiClientError } from "@/lib/api";
-import { SellerSummary, SellerType } from "@/types/types";
+import { SellerSummary, SellerStatus, SellerType } from "@/types/types";
 
 interface SellersTableProps {
   sellers: SellerSummary[];
@@ -49,6 +63,27 @@ const sellerTypeLabels: Record<SellerType, string> = {
   wholesale: "Wholesale",
 };
 
+const statusColor = (
+  status: SellerStatus
+): "default" | "success" | "warning" | "error" | "info" => {
+  switch (status) {
+    case "verified":
+    case "active":
+      return "success";
+    case "pending_verification":
+    case "pending":
+      return "info";
+    case "rejected":
+    case "suspended":
+    case "removed":
+      return "error";
+    case "incomplete":
+      return "warning";
+    default:
+      return "default";
+  }
+};
+
 const formatDate = (value?: string | null) =>
   value
     ? new Intl.DateTimeFormat("en-US", {
@@ -58,17 +93,35 @@ const formatDate = (value?: string | null) =>
       }).format(new Date(value))
     : "Not started";
 
-const formatStoreLocation = (seller: SellerSummary) =>
+const formatLocation = (seller: SellerSummary) =>
   [seller.storeLocation.city, seller.storeLocation.state, seller.storeLocation.country]
     .filter(Boolean)
     .join(", ") || "Not provided";
 
+const getInitials = (name: string) => name.slice(0, 2).toUpperCase();
+
+const AVATAR_COLORS = [
+  "#655AFF",
+  "#F97316",
+  "#0EA5E9",
+  "#22C55E",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+];
+
+const avatarColor = (id: string) =>
+  AVATAR_COLORS[id.charCodeAt(0) % AVATAR_COLORS.length];
+
 export function SellersTable({ sellers, filter }: SellersTableProps) {
   const router = useRouter();
-  const currentFilter = (FILTER_TABS.some((t) => t.value === filter) ? filter : "all") as FilterTab;
+  const currentFilter = (
+    FILTER_TABS.some((t) => t.value === filter) ? filter : "all"
+  ) as FilterTab;
 
   const [menuAnchor, setMenuAnchor] = React.useState<null | HTMLElement>(null);
   const [activeSellerId, setActiveSellerId] = React.useState<string | null>(null);
+  const [expandedCards, setExpandedCards] = React.useState<Set<string>>(new Set());
 
   const [deleteTarget, setDeleteTarget] = React.useState<SellerSummary | null>(null);
   const [deleting, setDeleting] = React.useState(false);
@@ -88,7 +141,18 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
     setActiveSellerId(null);
   };
 
-  const activeSeller = activeSellerId ? sellers.find((s) => s.id === activeSellerId) : null;
+  const toggleExpand = (id: string) => {
+    setExpandedCards((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const activeSeller = activeSellerId
+    ? sellers.find((s) => s.id === activeSellerId)
+    : null;
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -99,7 +163,9 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
       setDeleteTarget(null);
       router.refresh();
     } catch (err) {
-      setDeleteError(err instanceof ApiClientError ? err.message : "Failed to delete seller.");
+      setDeleteError(
+        err instanceof ApiClientError ? err.message : "Failed to delete seller."
+      );
     } finally {
       setDeleting(false);
     }
@@ -115,15 +181,94 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
       router.refresh();
     } catch (err) {
       setBlacklistError(
-        err instanceof ApiClientError ? err.message : "Failed to update blacklist status."
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to update blacklist status."
       );
     } finally {
       setBlacklisting(false);
     }
   };
 
+  const emptyTitle =
+    currentFilter === "blacklisted"
+      ? "No blacklisted sellers"
+      : currentFilter === "inactive"
+        ? "No inactive sellers"
+        : "No sellers yet";
+
+  const emptyBody =
+    currentFilter === "all"
+      ? "Once sellers register and submit for verification, they will appear here."
+      : "Adjust the filter above to see other sellers.";
+
+  // ── shared kebab menu items ────────────────────────────────────────────────
+  const actionMenu = (
+    <Menu
+      anchorEl={menuAnchor}
+      open={Boolean(menuAnchor)}
+      onClose={closeMenu}
+      transformOrigin={{ horizontal: "right", vertical: "top" }}
+      anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+      slotProps={{
+        paper: {
+          sx: { minWidth: 180, borderRadius: 2, border: "1px solid", borderColor: "divider" },
+        },
+      }}
+    >
+      <MenuItem
+        component={Link}
+        href={`/dashboard/sellers/${activeSellerId}`}
+        onClick={closeMenu}
+      >
+        Edit seller
+      </MenuItem>
+      <MenuItem
+        component={Link}
+        href={`/dashboard/products?seller=${activeSellerId}`}
+        onClick={closeMenu}
+      >
+        View products
+      </MenuItem>
+      {activeSeller?.isBlacklisted ? (
+        <MenuItem
+          onClick={() => {
+            setBlacklistTarget(activeSeller);
+            closeMenu();
+          }}
+        >
+          Restore seller
+        </MenuItem>
+      ) : (
+        <MenuItem
+          onClick={() => {
+            if (activeSeller) {
+              setBlacklistTarget(activeSeller);
+              closeMenu();
+            }
+          }}
+          sx={{ color: "warning.main" }}
+        >
+          Blacklist seller
+        </MenuItem>
+      )}
+      <MenuItem
+        onClick={() => {
+          if (activeSeller) {
+            setDeleteTarget(activeSeller);
+            closeMenu();
+          }
+        }}
+        sx={{ color: "error.main" }}
+      >
+        Delete seller
+      </MenuItem>
+    </Menu>
+  );
+
   return (
     <>
+      {/* Filter tabs */}
       <Tabs
         value={currentFilter}
         sx={{ borderBottom: 1, borderColor: "divider" }}
@@ -137,177 +282,442 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             value={tab.value}
             component={Link}
             href={`?filter=${tab.value}`}
-            sx={{ textTransform: "none", fontWeight: 700 }}
+            sx={{ textTransform: "none", fontWeight: 700, minHeight: 48 }}
           />
         ))}
       </Tabs>
 
-      <TableContainer
-        component={Paper}
-        elevation={0}
-        sx={{
-          borderRadius: 2,
-          border: "1px solid",
-          borderColor: "divider",
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-        }}
-      >
-        <Table sx={{ minWidth: 1120 }}>
-          <TableHead>
-            <TableRow>
-              <TableCell>Seller</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell>Location</TableCell>
-              <TableCell>Badge</TableCell>
-              <TableCell>Followers</TableCell>
-              <TableCell>Purchases</TableCell>
-              <TableCell>Deliveries</TableCell>
-              <TableCell>Started</TableCell>
-              <TableCell>Notice</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {sellers.map((seller) => (
-              <TableRow
+      {/* ── DESKTOP TABLE (md+) ──────────────────────────────────────────── */}
+      <Box sx={{ display: { xs: "none", md: "block" } }}>
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{
+            borderRadius: 2,
+            border: "1px solid",
+            borderColor: "divider",
+            overflowX: "auto",
+            maxWidth: "100%",
+            WebkitOverflowScrolling: "touch",
+            // Subtle scroll affordance via inset shadow when content overflows
+            backgroundImage: "none",
+          }}
+        >
+          <Table sx={{ minWidth: 960 }} aria-label="Seller management table">
+            <TableHead>
+              <TableRow sx={{ "& th": { fontWeight: 700, whiteSpace: "nowrap" } }}>
+                <TableCell component="th" scope="col">Seller</TableCell>
+                <TableCell component="th" scope="col">Status</TableCell>
+                <TableCell component="th" scope="col">Type</TableCell>
+                <TableCell component="th" scope="col">Location</TableCell>
+                <TableCell component="th" scope="col">Badge</TableCell>
+                <TableCell component="th" scope="col" align="right">Followers</TableCell>
+                <TableCell component="th" scope="col" align="right">Purchases</TableCell>
+                <TableCell component="th" scope="col" align="right">Deliveries</TableCell>
+                <TableCell component="th" scope="col">Started</TableCell>
+                <TableCell component="th" scope="col">Notice</TableCell>
+                <TableCell component="th" scope="col" align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {sellers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11} sx={{ border: 0 }}>
+                    <Stack spacing={1.5} alignItems="center" justifyContent="center" sx={{ py: 7 }}>
+                      <PersonOffRounded sx={{ fontSize: 44, color: "text.disabled" }} />
+                      <Typography variant="h6" fontWeight={700}>
+                        {emptyTitle}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 320, textAlign: "center" }}>
+                        {emptyBody}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                sellers.map((seller) => (
+                  <TableRow
+                    key={seller.id}
+                    hover
+                    sx={
+                      seller.isBlacklisted
+                        ? { opacity: 0.65, bgcolor: "action.hover" }
+                        : undefined
+                    }
+                  >
+                    {/* Seller identity */}
+                    <TableCell sx={{ minWidth: 220 }}>
+                      <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Avatar
+                          aria-hidden
+                          sx={{ bgcolor: avatarColor(seller.id), width: 34, height: 34, fontSize: "0.75rem", flexShrink: 0 }}
+                        >
+                          {getInitials(seller.storeName)}
+                        </Avatar>
+                        <Stack spacing={0.2} minWidth={0}>
+                          <Typography
+                            component="a"
+                            href={`/dashboard/sellers/${seller.id}`}
+                            sx={{
+                              color: "text.primary",
+                              textDecoration: "none",
+                              fontWeight: 700,
+                              fontSize: "0.875rem",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              "&:hover": { color: "primary.main" },
+                            }}
+                          >
+                            {seller.storeName}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {seller.name} · {seller.email}
+                          </Typography>
+                          {seller.isBlacklisted && (
+                            <Chip
+                              label="Blacklisted"
+                              color="error"
+                              size="small"
+                              sx={{ width: "fit-content", height: 18, fontSize: "0.65rem" }}
+                            />
+                          )}
+                        </Stack>
+                      </Stack>
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={seller.sellerStatus}
+                        size="small"
+                        color={statusColor(seller.sellerStatus)}
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={sellerTypeLabels[seller.sellerType]}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                      {formatLocation(seller)}
+                    </TableCell>
+
+                    <TableCell>
+                      {seller.sellerBadge ? (
+                        <Chip
+                          label={seller.sellerBadge}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                        />
+                      ) : (
+                        <Typography variant="body2" color="text.disabled">—</Typography>
+                      )}
+                    </TableCell>
+
+                    <TableCell align="right">{seller.followerCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{seller.purchaseCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{seller.completedDeliveries.toLocaleString()}</TableCell>
+
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>
+                      {formatDate(seller.startedAt)}
+                    </TableCell>
+
+                    <TableCell sx={{ maxWidth: 200 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        title={seller.sellerNotice || undefined}
+                        sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                      >
+                        {seller.sellerNotice || "—"}
+                      </Typography>
+                    </TableCell>
+
+                    <TableCell align="right">
+                      <IconButton
+                        onClick={(e) => openMenu(e, seller.id)}
+                        aria-label={`Actions for ${seller.storeName}`}
+                        size="medium"
+                        sx={{ width: 44, height: 44 }}
+                      >
+                        <MoreVertRounded fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+      {/* ── MOBILE CARD LIST (below md) ─────────────────────────────────── */}
+      <Stack spacing={1.5} sx={{ display: { xs: "flex", md: "none" } }}>
+        {sellers.length === 0 ? (
+          <Paper
+            elevation={0}
+            sx={{
+              p: { xs: 4, sm: 6 },
+              borderRadius: 2,
+              border: "1px solid",
+              borderColor: "divider",
+              textAlign: "center",
+            }}
+          >
+            <PersonOffRounded sx={{ fontSize: 44, color: "text.disabled", mb: 1.5 }} />
+            <Typography variant="h6" fontWeight={700} mb={0.75}>
+              {emptyTitle}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 300, mx: "auto" }}>
+              {emptyBody}
+            </Typography>
+          </Paper>
+        ) : (
+          sellers.map((seller) => {
+            const expanded = expandedCards.has(seller.id);
+            return (
+              <Paper
                 key={seller.id}
-                hover
-                sx={seller.isBlacklisted ? { opacity: 0.6, bgcolor: "action.hover" } : undefined}
+                elevation={0}
+                sx={(theme) => ({
+                  borderRadius: 2,
+                  border: "1.5px solid",
+                  borderColor: seller.isBlacklisted
+                    ? alpha(theme.palette.error.main, 0.35)
+                    : theme.palette.divider,
+                  overflow: "hidden",
+                  opacity: seller.isBlacklisted ? 0.82 : 1,
+                })}
               >
-                <TableCell sx={{ minWidth: 280 }}>
-                  <Stack spacing={0.5}>
+                {/* Card header — primary info */}
+                <Stack
+                  direction="row"
+                  spacing={1.5}
+                  alignItems="flex-start"
+                  sx={{ p: 1.5 }}
+                >
+                  <Avatar
+                    aria-hidden
+                    sx={{
+                      bgcolor: avatarColor(seller.id),
+                      width: 40,
+                      height: 40,
+                      flexShrink: 0,
+                      mt: 0.25,
+                    }}
+                  >
+                    {getInitials(seller.storeName)}
+                  </Avatar>
+
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       component="a"
                       href={`/dashboard/sellers/${seller.id}`}
                       sx={{
                         color: "text.primary",
                         textDecoration: "none",
-                        fontWeight: 900,
+                        fontWeight: 700,
+                        fontSize: "0.9375rem",
+                        display: "block",
                         "&:hover": { color: "primary.main" },
                       }}
                     >
                       {seller.storeName}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" display="block" noWrap>
                       {seller.name} · {seller.email}
                     </Typography>
-                    {seller.isBlacklisted ? (
-                      <Chip label="Blacklisted" color="error" size="small" sx={{ width: "fit-content" }} />
-                    ) : null}
-                  </Stack>
-                </TableCell>
-                <TableCell>
-                  <Chip label={seller.sellerStatus} size="small" />
-                </TableCell>
-                <TableCell>
-                  <Chip
-                    label={sellerTypeLabels[seller.sellerType]}
-                    size="small"
-                    variant="outlined"
-                  />
-                </TableCell>
-                <TableCell>{formatStoreLocation(seller)}</TableCell>
-                <TableCell>
-                  {seller.sellerBadge ? (
-                    <Chip
-                      label={seller.sellerBadge}
-                      size="small"
-                      color="success"
-                      variant="outlined"
-                    />
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No badge
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell>{seller.followerCount}</TableCell>
-                <TableCell>{seller.purchaseCount}</TableCell>
-                <TableCell>{seller.completedDeliveries}</TableCell>
-                <TableCell>{formatDate(seller.startedAt)}</TableCell>
-                <TableCell sx={{ minWidth: 200 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {seller.sellerNotice || "No active notice"}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
+                    <Stack
+                      direction="row"
+                      spacing={0.75}
+                      mt={0.75}
+                      useFlexGap
+                      flexWrap="wrap"
+                    >
+                      <Chip
+                        label={seller.sellerStatus}
+                        size="small"
+                        color={statusColor(seller.sellerStatus)}
+                        sx={{ height: 22 }}
+                      />
+                      <Chip
+                        label={sellerTypeLabels[seller.sellerType]}
+                        size="small"
+                        variant="outlined"
+                        sx={{ height: 22 }}
+                      />
+                      {seller.isBlacklisted && (
+                        <Chip
+                          label="Blacklisted"
+                          color="error"
+                          size="small"
+                          sx={{ height: 22 }}
+                        />
+                      )}
+                    </Stack>
+                  </Box>
+
                   <IconButton
-                    size="small"
                     onClick={(e) => openMenu(e, seller.id)}
                     aria-label={`Actions for ${seller.storeName}`}
-                    sx={{ cursor: "pointer" }}
+                    size="medium"
+                    sx={{ width: 44, height: 44, flexShrink: 0 }}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                    </svg>
+                    <MoreVertRounded />
                   </IconButton>
-                </TableCell>
-              </TableRow>
-            ))}
-            {sellers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={11}>
-                  <Stack spacing={1} sx={{ py: 3 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      {currentFilter === "blacklisted"
-                        ? "No blacklisted sellers"
-                        : currentFilter === "inactive"
-                          ? "No inactive sellers"
-                          : "No sellers yet"}
-                    </Typography>
+                </Stack>
+
+                <Divider />
+
+                {/* Stats row — secondary info */}
+                <Box
+                  role="list"
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(3, 1fr)",
+                    "& > *": {
+                      borderRight: "1px solid",
+                      borderColor: "divider",
+                      "&:last-child": { borderRight: "none" },
+                    },
+                  }}
+                >
+                  {[
+                    { icon: <PeopleRounded sx={{ fontSize: 14 }} />, label: "Followers", value: seller.followerCount },
+                    { icon: <ShoppingBagOutlined sx={{ fontSize: 14 }} />, label: "Purchases", value: seller.purchaseCount },
+                    { icon: <LocalShippingRounded sx={{ fontSize: 14 }} />, label: "Deliveries", value: seller.completedDeliveries },
+                  ].map(({ icon, label, value }) => (
+                    <Box
+                      key={label}
+                      role="listitem"
+                      sx={{ textAlign: "center", px: 1, py: 1.25 }}
+                    >
+                      <Stack direction="row" justifyContent="center" alignItems="center" spacing={0.5} mb={0.25}>
+                        <Box sx={{ color: "text.secondary", display: "flex" }} aria-hidden>{icon}</Box>
+                        <Typography variant="subtitle1" fontWeight={800} lineHeight={1}>
+                          {value.toLocaleString()}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">{label}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+
+                {/* Location row */}
+                <Stack
+                  direction="row"
+                  spacing={0.75}
+                  alignItems="center"
+                  sx={{ px: 1.5, pb: 1.25, pt: 0.5 }}
+                >
+                  <StorefrontRounded sx={{ fontSize: 14, color: "text.secondary", flexShrink: 0 }} aria-hidden />
+                  <Typography variant="caption" color="text.secondary">
+                    {formatLocation(seller)}
+                  </Typography>
+                </Stack>
+
+                {/* Expand toggle for tertiary info */}
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => toggleExpand(seller.id)}
+                  aria-expanded={expanded}
+                  aria-label={
+                    expanded
+                      ? `Collapse details for ${seller.storeName}`
+                      : `Show more details for ${seller.storeName}`
+                  }
+                  sx={(theme) => ({
+                    display: "flex",
+                    width: "100%",
+                    alignItems: "center",
+                    gap: 0.75,
+                    px: 1.5,
+                    minHeight: 44,
+                    border: "none",
+                    borderTop: "1px solid",
+                    borderColor: theme.palette.divider,
+                    bgcolor: "action.hover",
+                    cursor: "pointer",
+                    color: "text.secondary",
+                    fontFamily: "inherit",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    textAlign: "left",
+                    "&:focus-visible": {
+                      outline: "2.5px solid",
+                      outlineColor: "primary.main",
+                      outlineOffset: -2,
+                    },
+                  })}
+                >
+                  <ExpandMoreRounded
+                    sx={{
+                      fontSize: 16,
+                      transition: "transform 0.2s ease",
+                      transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+                    }}
+                    aria-hidden
+                  />
+                  {expanded ? "Hide details" : "More details"}
+                </Box>
+
+                {/* Tertiary info */}
+                <Collapse in={expanded}>
+                  <Stack
+                    spacing={1}
+                    divider={<Divider />}
+                    sx={{ px: 1.5, py: 1.25, borderTop: "1px solid", borderColor: "divider" }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        Started
+                      </Typography>
+                      <Typography variant="caption" fontWeight={700}>
+                        {formatDate(seller.startedAt)}
+                      </Typography>
+                    </Stack>
+                    {seller.sellerBadge ? (
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                          Badge
+                        </Typography>
+                        <Chip
+                          label={seller.sellerBadge}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          sx={{ height: 22 }}
+                        />
+                      </Stack>
+                    ) : null}
+                    {seller.sellerNotice ? (
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                          Notice
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 0.25 }}>
+                          {seller.sellerNotice}
+                        </Typography>
+                      </Box>
+                    ) : null}
                   </Stack>
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Action menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={closeMenu}
-        transformOrigin={{ horizontal: "right", vertical: "top" }}
-        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
-      >
-        <MenuItem component={Link} href={`/dashboard/sellers/${activeSellerId}`} onClick={closeMenu}>
-          Edit seller
-        </MenuItem>
-        <MenuItem
-          component={Link}
-          href={`/dashboard/products?seller=${activeSellerId}`}
-          onClick={closeMenu}
-        >
-          View products
-        </MenuItem>
-        {activeSeller?.isBlacklisted ? (
-          <MenuItem
-            onClick={() => { setBlacklistTarget(activeSeller); closeMenu(); }}
-            sx={{ gap: 1 }}
-          >
-            Restore seller
-          </MenuItem>
-        ) : (
-          <MenuItem
-            onClick={() => { if (activeSeller) { setBlacklistTarget(activeSeller); closeMenu(); } }}
-            sx={{ gap: 1, color: "warning.main" }}
-          >
-            Blacklist seller
-          </MenuItem>
+                </Collapse>
+              </Paper>
+            );
+          })
         )}
-        <MenuItem
-          onClick={() => { if (activeSeller) { setDeleteTarget(activeSeller); closeMenu(); } }}
-          sx={{ gap: 1, color: "error.main" }}
-        >
-          Delete seller
-        </MenuItem>
-      </Menu>
+      </Stack>
 
-      {/* Delete confirmation */}
+      {/* ── SHARED ACTION MENU ────────────────────────────────────────── */}
+      {actionMenu}
+
+      {/* ── DELETE CONFIRMATION ────────────────────────────────────────── */}
       <Dialog
         open={Boolean(deleteTarget)}
         onClose={() => !deleting && setDeleteTarget(null)}
@@ -317,19 +727,17 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         <DialogTitle sx={{ fontWeight: 900 }}>Delete seller?</DialogTitle>
         <DialogContent>
           {deleteError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>{deleteError}</Alert>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {deleteError}
+            </Alert>
           ) : null}
           <Typography>
-            <strong>{deleteTarget?.storeName}</strong> ({deleteTarget?.name}) and all their data will
-            be permanently removed. This cannot be undone.
+            <strong>{deleteTarget?.storeName}</strong> ({deleteTarget?.name}) and all their data
+            will be permanently removed. This cannot be undone.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button
-            onClick={() => setDeleteTarget(null)}
-            disabled={deleting}
-            sx={{ textTransform: "none" }}
-          >
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
             Cancel
           </Button>
           <Button
@@ -338,14 +746,14 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             onClick={handleDelete}
             disabled={deleting}
             startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : null}
-            sx={{ textTransform: "none", fontWeight: 900 }}
+            sx={{ fontWeight: 900 }}
           >
             Delete
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Blacklist/Restore confirmation */}
+      {/* ── BLACKLIST / RESTORE CONFIRMATION ─────────────────────────── */}
       <Dialog
         open={Boolean(blacklistTarget)}
         onClose={() => !blacklisting && setBlacklistTarget(null)}
@@ -357,7 +765,9 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         </DialogTitle>
         <DialogContent>
           {blacklistError ? (
-            <Alert severity="error" sx={{ mb: 2 }}>{blacklistError}</Alert>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {blacklistError}
+            </Alert>
           ) : null}
           <Typography>
             {blacklistTarget?.isBlacklisted
@@ -366,11 +776,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button
-            onClick={() => setBlacklistTarget(null)}
-            disabled={blacklisting}
-            sx={{ textTransform: "none" }}
-          >
+          <Button onClick={() => setBlacklistTarget(null)} disabled={blacklisting}>
             Cancel
           </Button>
           <Button
@@ -379,7 +785,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             onClick={handleBlacklist}
             disabled={blacklisting}
             startIcon={blacklisting ? <CircularProgress size={16} color="inherit" /> : null}
-            sx={{ textTransform: "none", fontWeight: 900 }}
+            sx={{ fontWeight: 900 }}
           >
             {blacklistTarget?.isBlacklisted ? "Restore" : "Blacklist"}
           </Button>

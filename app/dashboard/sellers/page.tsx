@@ -38,7 +38,7 @@ export default async function DashboardSellersPage({ searchParams }: PageProps) 
       <Paper
         elevation={0}
         sx={{
-          p: { xs: 3, md: 4 },
+          p: { xs: 2, md: 2.5 },
           borderRadius: 2,
           border: "1px solid",
           borderColor: "divider",

@@ -416,7 +416,7 @@ export function AdminWorkspaceShell({
             {renderWorkspaceNavigation()}
           </Paper>
 
-          <Stack component="section" spacing={3}>
+          <Stack component="section" spacing={3} sx={{ minWidth: 0, overflow: "hidden" }}>
             {children}
           </Stack>
         </Box>
