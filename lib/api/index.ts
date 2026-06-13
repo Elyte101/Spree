@@ -351,4 +351,9 @@ export const api = {
       body: JSON.stringify({ endpoint }),
     }),
 
+  /* ---------- ORDER ACTIONS (ADMIN) ---------- */
+
+  refundOrder: (id: string) =>
+    requestJson<{ id: string; status: string }>(`/api/orders/${id}/refund`, { method: "POST" }),
+
 };

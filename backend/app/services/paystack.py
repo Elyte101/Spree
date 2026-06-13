@@ -113,6 +113,15 @@ def initiate_transfer(amount_minor: int, recipient_code: str, reason: str = "") 
     return result.get("data", {})
 
 
+def refund_transaction(reference: str, amount_minor: int | None = None) -> dict:
+    """Issue a full or partial refund. Returns refund data dict."""
+    payload: dict = {"transaction": reference}
+    if amount_minor is not None:
+        payload["amount"] = amount_minor
+    result = _request("POST", "/refund", payload)
+    return result.get("data", {})
+
+
 def verify_webhook_signature(payload_bytes: bytes, signature: str) -> bool:
     """Return True if the webhook signature matches the secret key."""
     if not settings.paystack_secret_key:

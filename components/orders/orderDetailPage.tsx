@@ -169,23 +169,28 @@ function StatusTimeline({ status }: { status: OrderStatus }) {
 export function OrderDetailPage({
   order,
   sessionUserId,
+  sessionUserRole = "customer",
 }: {
   order: OrderDetail;
   sessionUserId: string;
+  sessionUserRole?: string;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
+  const [refunding, setRefunding] = React.useState(false);
   const [tracking, setTracking] = React.useState(false);
   const [trackingNumber, setTrackingNumber] = React.useState("");
   const [carrier, setCarrier] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [successMsg, setSuccessMsg] = React.useState<string | null>(null);
 
+  const isAdmin = sessionUserRole === "admin";
   const isBuyer = order.userId === sessionUserId;
   const isSeller = order.items.some((item) => item.sellerId === sessionUserId);
   const canConfirm = isBuyer && order.status === "shipped";
   const canCancel = isBuyer && order.status === "paid";
+  const canRefund = isAdmin && ["paid", "shipped", "completed"].includes(order.status);
   const canAddTracking = isSeller && order.status === "paid";
 
   const handleConfirmDelivery = async () => {
@@ -223,6 +228,26 @@ export function OrderDetailPage({
       setError("Network error. Please try again.");
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleRefund = async () => {
+    if (!confirm("Issue a full refund and cancel this order?")) return;
+    setError(null);
+    setRefunding(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/refund`, { method: "POST" });
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string; error?: string };
+        setError(data.detail ?? data.error ?? "Refund failed.");
+      } else {
+        setSuccessMsg("Refund issued and order cancelled.");
+        router.refresh();
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setRefunding(false);
     }
   };
 
@@ -480,6 +505,26 @@ export function OrderDetailPage({
                         sx={{ fontWeight: 700, borderRadius: 2.5 }}
                       >
                         Cancel Order
+                      </Button>
+                    </motion.div>
+                  )}
+                  {canRefund && (
+                    <motion.div whileTap={{ scale: 0.97 }}>
+                      <Button
+                        variant="outlined"
+                        color="error"
+                        startIcon={
+                          refunding ? (
+                            <CircularProgress size={16} color="inherit" />
+                          ) : (
+                            <CancelOutlined />
+                          )
+                        }
+                        onClick={handleRefund}
+                        disabled={refunding}
+                        sx={{ fontWeight: 700, borderRadius: 2.5 }}
+                      >
+                        Refund &amp; Cancel
                       </Button>
                     </motion.div>
                   )}

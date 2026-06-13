@@ -6,7 +6,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
 from app.api.deps import DBSession, InternalAPIKey
 from app.schemas.order import OrderCreateIn, PaymentInitOut, PaymentVerifyOut
-from app.services.orders import handle_paystack_webhook, initialize_payment, verify_payment
+from app.services.orders import handle_paystack_webhook, initialize_payment, refund_order, verify_payment
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -67,3 +67,15 @@ async def paystack_webhook(
     logger.info("Paystack webhook received: %s", event)
     handle_paystack_webhook(db, event, data)
     return {"received": True}
+
+
+@router.post("/orders/{order_id}/refund", status_code=status.HTTP_200_OK)
+def order_refund(
+    order_id: str,
+    db: DBSession,
+    _: InternalAPIKey,
+    x_actor_role: str = Header(default="", alias="X-Actor-Role"),
+):
+    if x_actor_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return refund_order(db, order_id)

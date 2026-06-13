@@ -416,10 +416,62 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
             _mark_order_paid(db, order, tx_id=str(data.get("id", "")))
             logger.info("Webhook: marked order %s as paid (ref=%s)", order.id, reference)
 
+    elif event == "charge.failed":
+        reference = data.get("reference", "")
+        if not reference:
+            return
+        order = db.scalar(
+            select(Order)
+            .where(Order.paystack_reference == reference)
+            .with_for_update(skip_locked=True)
+        )
+        if order and order.status == "pending":
+            order.status = "cancelled"
+            db.commit()
+            logger.info("Webhook: cancelled order %s — charge failed (ref=%s)", order.id, reference)
+            if order.user_id:
+                create_notification(
+                    db,
+                    title="Payment failed",
+                    body=(
+                        "Your payment could not be processed and your order has been cancelled. "
+                        "Please try again or use a different payment method."
+                    ),
+                    notif_type="order",
+                    href="/orders",
+                    recipient_id=order.user_id,
+                )
+
     elif event == "transfer.success":
         # Paystack confirmed the seller payout transfer
         reference = data.get("reference", "")
         logger.info("Webhook: transfer success ref=%s", reference)
+
+    elif event == "transfer.failed":
+        recipient_code = data.get("recipient", {}).get("recipient_code", "")
+        amount_minor = data.get("amount", 0)
+        if not recipient_code:
+            return
+        seller = db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
+        if seller:
+            amount = amount_minor / 100
+            logger.warning(
+                "Webhook: payout transfer failed for seller %s (recipient=%s, amount=%.2f)",
+                seller.id, recipient_code, amount,
+            )
+            create_notification(
+                db,
+                title="Payout failed — action required",
+                body=(
+                    f"We couldn't send your payout of {seller.payout_info.get('currency', '$')} "
+                    f"{amount:.2f}. Please update your payout account details in your profile "
+                    "so we can retry."
+                ),
+                notif_type="account",
+                href="/settings?tab=payout",
+                recipient_id=seller.id,
+            )
+            db.commit()
 
 
 def create_order(db: Session, payload: OrderCreateIn) -> dict:
@@ -687,5 +739,44 @@ def cancel_order(db: Session, order_id: str, actor_id: str, actor_role: str) -> 
 
     order.status = "cancelled"
     db.commit()
+    db.refresh(order)
+    return _order_to_dict(order)
+
+
+def refund_order(db: Session, order_id: str) -> dict:
+    """Admin-only: issue a Paystack refund and cancel the order."""
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.status not in ("paid", "shipped", "completed"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot refund an order with status '{order.status}'",
+        )
+
+    if order.paystack_reference and settings.paystack_secret_key:
+        try:
+            paystack_svc.refund_transaction(order.paystack_reference)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    order.status = "cancelled"
+    db.commit()
+
+    if order.user_id:
+        create_notification(
+            db,
+            title="Your order has been refunded",
+            body=(
+                f"Your order has been cancelled and a refund of "
+                f"{order.currency} {float(order.total):.2f} has been issued. "
+                "It should appear in your account within 5–10 business days."
+            ),
+            notif_type="order",
+            href="/orders",
+            recipient_id=order.user_id,
+        )
+
     db.refresh(order)
     return _order_to_dict(order)

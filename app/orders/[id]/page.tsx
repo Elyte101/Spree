@@ -23,5 +23,5 @@ export default async function OrderDetailRoute({
   const order = await getOrder(id, session.user.id, session.user.role);
   if (!order) notFound();
 
-  return <OrderDetailPage order={order} sessionUserId={session.user.id} />;
+  return <OrderDetailPage order={order} sessionUserId={session.user.id} sessionUserRole={session.user.role} />;
 }
