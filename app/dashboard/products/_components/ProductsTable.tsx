@@ -174,6 +174,10 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
     }
   };
 
+  // Ref so uploadFile always reads the current editName without recreating.
+  const editNameRef = React.useRef(editName);
+  editNameRef.current = editName;
+
   const uploadFile = React.useCallback(async (file: File) => {
     const id = crypto.randomUUID();
     const preview = URL.createObjectURL(file);
@@ -181,11 +185,18 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
     try {
       const body = new FormData();
       body.append("file", file);
+      if (editNameRef.current.trim()) body.append("productName", editNameRef.current.trim());
       const res = await fetch("/api/products/images", { method: "POST", body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      const data: { url?: string; error?: string; issues?: string[] } = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          data.issues?.length
+            ? `${data.error ?? "Image rejected"}: ${data.issues.join(" · ")}`
+            : (data.error ?? "Upload failed");
+        throw new Error(message);
+      }
       setImageEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, url: data.url, status: "done" } : e))
+        prev.map((e) => (e.id === id ? { ...e, url: data.url!, status: "done" } : e))
       );
     } catch (err) {
       const error = err instanceof Error ? err.message : "Upload failed";

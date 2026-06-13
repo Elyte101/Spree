@@ -1,5 +1,6 @@
 import "server-only";
 
+import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
@@ -10,38 +11,136 @@ const BUCKET = "product-images";
 type WebFormat = "jpeg" | "png" | "webp";
 type SniffResult = WebFormat | "heic" | "tiff" | "unknown";
 
-/**
- * Detect the actual image format from magic bytes, not the browser-reported
- * MIME type. This catches HEIC files renamed to .jpg (common on iOS).
- */
+// ---------------------------------------------------------------------------
+// Format detection
+// ---------------------------------------------------------------------------
+
 function sniffFormat(buf: Uint8Array): SniffResult {
   if (buf.length < 12) return "unknown";
-  // JPEG: FF D8 FF
   if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return "jpeg";
-  // PNG: 89 50 4E 47
   if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return "png";
-  // WebP: RIFF .... WEBP
   if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
       buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "webp";
-  // HEIC/HEIF: ISO Base Media (ftyp box starting at byte 4)
   if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "heic";
-  // TIFF: little-endian (II) or big-endian (MM)
   if ((buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2A && buf[3] === 0x00) ||
       (buf[0] === 0x4D && buf[1] === 0x4D && buf[2] === 0x00 && buf[3] === 0x2A)) return "tiff";
   return "unknown";
 }
 
-const EXT: Record<WebFormat, string> = {
-  jpeg: ".jpg",
-  png: ".png",
-  webp: ".webp",
-};
-
+const EXT: Record<WebFormat, string> = { jpeg: ".jpg", png: ".png", webp: ".webp" };
 const CONTENT_TYPE: Record<WebFormat, string> = {
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
 };
+
+// ---------------------------------------------------------------------------
+// Language resolution from Accept-Language header
+// ---------------------------------------------------------------------------
+
+const LANG_MAP: Record<string, string> = {
+  // English
+  "en": "English", "en-us": "English", "en-gb": "English", "en-gh": "English",
+  // Ghanaian languages (primary target market)
+  "ak": "Akan (Twi)", "tw": "Twi", "fat": "Fante", "ee": "Ewe",
+  "ha": "Hausa", "dag": "Dagbani",
+  // Other African languages
+  "sw": "Swahili", "yo": "Yoruba", "ig": "Igbo",
+  // European
+  "fr": "French", "fr-fr": "French", "fr-ca": "French",
+  "es": "Spanish", "es-es": "Spanish", "es-mx": "Spanish",
+  "de": "German", "pt": "Portuguese", "pt-br": "Portuguese (Brazilian)",
+  "it": "Italian", "nl": "Dutch", "pl": "Polish",
+  // Middle East / Asia
+  "ar": "Arabic", "ar-sa": "Arabic",
+  "zh": "Chinese (Simplified)", "zh-cn": "Chinese (Simplified)", "zh-tw": "Chinese (Traditional)",
+  "ja": "Japanese", "ko": "Korean", "hi": "Hindi", "tr": "Turkish",
+};
+
+function resolveLanguage(acceptLanguage: string | null): string {
+  const tag = (acceptLanguage ?? "en").split(",")[0].split(";")[0].trim().toLowerCase();
+  return LANG_MAP[tag] ?? LANG_MAP[tag.split("-")[0]] ?? "English";
+}
+
+// ---------------------------------------------------------------------------
+// AI image quality validation
+// Fails open: if ANTHROPIC_API_KEY is unset or the API errors, the upload
+// proceeds normally so sellers are never blocked by an infrastructure issue.
+// ---------------------------------------------------------------------------
+
+type ValidationResult =
+  | { approved: true }
+  | { approved: false; issues: string[] };
+
+async function validateImage(
+  imageBytes: Uint8Array,
+  format: WebFormat,
+  productName: string | null,
+  language: string,
+): Promise<ValidationResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { approved: true };
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const base64 = Buffer.from(imageBytes).toString("base64");
+    const mediaType = `image/${format}` as "image/jpeg" | "image/png" | "image/webp";
+
+    const nameCtx = productName ? `Product being listed: "${productName}"\n` : "";
+    const relevanceRule = productName
+      ? `6. RELEVANCE — Does what is shown plausibly match the product name "${productName}"?\n`
+      : "";
+
+    const prompt =
+      `You are a strict product image quality validator for an e-commerce marketplace.\n` +
+      nameCtx +
+      `\nInspect this image and evaluate ALL of the following criteria:\n\n` +
+      `1. VISIBILITY — Is there a real, identifiable product clearly visible?\n` +
+      `2. FRAMING — Is the product fully in frame and not cut off at the edges?\n` +
+      `3. CLARITY — Is the image sharp, in focus, and adequately lit (not too dark or blown out)?\n` +
+      `4. SCALE — Does the product occupy a reasonable portion of the frame? ` +
+        `(Reject if it is a tiny speck in a sea of background, or so zoomed in the product is unrecognisable.)\n` +
+      `5. CONTENT — Is this a genuine product photo? ` +
+        `Reject screenshots, blank/solid-colour images, documents, body parts, memes, or unrelated content.\n` +
+      relevanceRule +
+      `\nRespond with ONLY a raw JSON object — no markdown fences, no commentary:\n` +
+      `{"approved":true,"issues":[]}\n` +
+      `or\n` +
+      `{"approved":false,"issues":["Specific actionable reason 1","Specific actionable reason 2"]}\n` +
+      `\nWrite every rejection reason in ${language}. ` +
+      `Be specific and actionable so the seller knows exactly what to fix.`;
+
+    const msg = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 300,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: prompt },
+        ],
+      }],
+    });
+
+    const raw = msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+    // Strip optional markdown fences the model occasionally emits despite instructions
+    const json = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+    const result = JSON.parse(json) as { approved: boolean; issues?: string[] };
+
+    if (result.approved === false && Array.isArray(result.issues) && result.issues.length > 0) {
+      return { approved: false, issues: result.issues };
+    }
+    return { approved: true };
+  } catch (err) {
+    // Fail open — don't block uploads due to AI infrastructure issues
+    console.warn("[product-images] AI validation skipped:", err instanceof Error ? err.message : err);
+    return { approved: true };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Supabase helpers
+// ---------------------------------------------------------------------------
 
 function supabaseUrl(): string {
   const url = process.env.DATABASE_SUPABASE_URL;
@@ -67,6 +166,10 @@ async function ensureBucket(base: string, key: string): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
+
 export async function POST(request: Request): Promise<Response> {
   const session = await auth();
   if (!session || !canCreateProductsRole(session.user.role)) {
@@ -91,6 +194,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "File must be under 5 MB" }, { status: 413 });
   }
 
+  // Optional: product name hint for relevance checking
+  const productName = (formData.get("productName") as string | null)?.trim() || null;
+  const language = resolveLanguage(request.headers.get("accept-language"));
+
   const rawBytes = await file.arrayBuffer();
   const sniffed = sniffFormat(new Uint8Array(rawBytes));
 
@@ -98,11 +205,9 @@ export async function POST(request: Request): Promise<Response> {
   let finalBytes: Uint8Array;
 
   if (sniffed === "jpeg" || sniffed === "png" || sniffed === "webp") {
-    // Recognised web format — pass through as-is
     finalFormat = sniffed;
     finalBytes = new Uint8Array(rawBytes);
   } else if (sniffed === "heic" || sniffed === "tiff") {
-    // Non-web format (HEIC from iOS, TIFF from scanners/pro cameras) — convert to JPEG
     console.log(`[product-images] converting ${sniffed.toUpperCase()} → JPEG for ${file.name}`);
     try {
       const buf = await sharp(Buffer.from(rawBytes)).jpeg({ quality: 90 }).toBuffer();
@@ -116,10 +221,19 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
   } else {
-    // Unknown or unsupported format
     return Response.json(
       { error: "Only JPEG, PNG, WebP, and HEIC images are accepted" },
       { status: 400 }
+    );
+  }
+
+  // AI quality gate — runs after format normalisation so we always send a
+  // web-safe image to the model regardless of what the seller originally uploaded.
+  const validation = await validateImage(finalBytes, finalFormat, productName, language);
+  if (!validation.approved) {
+    return Response.json(
+      { error: "Image did not pass quality check", issues: validation.issues },
+      { status: 422 }
     );
   }
 

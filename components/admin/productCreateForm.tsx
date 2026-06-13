@@ -152,6 +152,11 @@ export function ProductCreateForm({
       uploadedImages.length
   );
 
+  // Keep a ref so the uploadFile callback always reads the latest name
+  // without needing to be recreated on every keystroke.
+  const nameRef = React.useRef(name);
+  nameRef.current = name;
+
   const uploadFile = React.useCallback(async (file: File) => {
     const id = crypto.randomUUID();
     const preview = URL.createObjectURL(file);
@@ -159,11 +164,18 @@ export function ProductCreateForm({
     try {
       const body = new FormData();
       body.append("file", file);
+      if (nameRef.current.trim()) body.append("productName", nameRef.current.trim());
       const res = await fetch("/api/products/images", { method: "POST", body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      const data: { url?: string; error?: string; issues?: string[] } = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          data.issues?.length
+            ? `${data.error ?? "Image rejected"}: ${data.issues.join(" · ")}`
+            : (data.error ?? "Upload failed");
+        throw new Error(message);
+      }
       setImageEntries((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, url: data.url, status: "done" } : e))
+        prev.map((e) => (e.id === id ? { ...e, url: data.url!, status: "done" } : e))
       );
     } catch (err) {
       const error = err instanceof Error ? err.message : "Upload failed";
