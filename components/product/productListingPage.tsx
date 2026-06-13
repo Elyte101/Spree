@@ -609,7 +609,8 @@ export function ProductListingPage({
                       display: "grid",
                       gap: 1.5,
                       gridTemplateColumns: {
-                        xs: "repeat(2, 1fr)",
+                        xs: "1fr",
+                        sm: "repeat(2, 1fr)",
                         md: "repeat(3, 1fr)",
                         xl: "repeat(4, 1fr)",
                       },
