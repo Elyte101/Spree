@@ -182,10 +182,9 @@ export function ProductListingPage({
         )}, transparent 30%), linear-gradient(180deg, ${
           theme.palette.background.default
         } 0%, ${theme.palette.background.paper} 100%)`,
-        px: { xs: 1.5, sm: 3, md: 5 },
-        py: { xs: 3, md: 5 },
       })}
     >
+    <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3 }, py: { xs: 3, md: 4 } }}>
       <Stack spacing={3}>
         <Paper
           elevation={0}
@@ -193,7 +192,7 @@ export function ProductListingPage({
             position: "relative",
             overflow: "hidden",
             borderRadius: 2,
-            p: { xs: 2.5, md: 4 },
+            p: { xs: 1.75, md: 2.5 },
             background: `linear-gradient(135deg, rgba(26, 26, 26, 0.96) 0%, ${alpha(
               theme.palette.primary.main,
               0.92
@@ -624,7 +623,11 @@ export function ProductListingPage({
                     sx={{
                       display: "grid",
                       gap: 1.5,
-                      gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+                      gridTemplateColumns: {
+                        xs: "repeat(2, 1fr)",
+                        md: "repeat(3, 1fr)",
+                        xl: "repeat(4, 1fr)",
+                      },
                     }}
                   >
                     {catalog.items.map((product) => (
@@ -656,6 +659,7 @@ export function ProductListingPage({
           </Stack>
         </Box>
       </Stack>
+    </Box>
     </Box>
   );
 }

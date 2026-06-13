@@ -126,8 +126,8 @@ export function LandingPage({
       <Box
         sx={(theme) => ({
           position: "relative",
-          pt: { xs: 8, md: 10 },
-          pb: { xs: 7, md: 9 },
+          pt: { xs: 5, md: 6 },
+          pb: { xs: 4, md: 5 },
           overflow: "hidden",
           background:
             theme.palette.mode === "dark"
@@ -186,7 +186,7 @@ export function LandingPage({
                   sx={{
                     fontWeight: 900,
                     lineHeight: 0.93,
-                    fontSize: { xs: "2.8rem", sm: "3.6rem", md: "4.6rem" },
+                    fontSize: { xs: "1.75rem", sm: "2.125rem", md: "2.5rem" },
                     letterSpacing: "-0.03em",
                     color: "text.primary",
                   }}
@@ -432,10 +432,10 @@ export function LandingPage({
 
       {/* ── CATEGORIES ───────────────────────────────── */}
       {homeFeed.categories.length > 0 && (
-        <Box sx={{ py: { xs: 6, md: 8 } }}>
+        <Box sx={{ py: { xs: 4, md: 6 } }}>
           <Container maxWidth="lg">
             <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Browse</Typography>
                   <Typography variant="h3" fontWeight={800} lineHeight={1}>Shop by category</Typography>
@@ -509,7 +509,7 @@ export function LandingPage({
       {/* ── FEATURED PRODUCTS ────────────────────────── */}
       <Box
         sx={{
-          py: { xs: 6, md: 8 },
+          py: { xs: 4, md: 6 },
           borderTop: "1px solid",
           borderBottom: "1px solid",
           borderColor: "divider",
@@ -518,7 +518,7 @@ export function LandingPage({
       >
         <Container maxWidth="lg">
           <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
               <Box>
                 <Typography variant="overline" color="primary.main" fontWeight={700}>Handpicked</Typography>
                 <Typography variant="h3" fontWeight={800} lineHeight={1} color="text.primary">Featured now</Typography>
@@ -567,7 +567,7 @@ export function LandingPage({
       {/* ── WHY SPREE / HOW IT WORKS ─────────────────── */}
       <Box
         sx={(theme) => ({
-          py: { xs: 7, md: 10 },
+          py: { xs: 4.5, md: 7 },
           position: "relative",
           overflow: "hidden",
           background:
@@ -738,7 +738,7 @@ export function LandingPage({
       {newArrivals.length > 0 && (
         <Box
           sx={{
-            py: { xs: 6, md: 8 },
+            py: { xs: 4, md: 6 },
             borderTop: "1px solid",
             borderColor: "divider",
             bgcolor: "background.paper",
@@ -746,7 +746,7 @@ export function LandingPage({
         >
           <Container maxWidth="lg">
             <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Just in</Typography>
                   <Typography variant="h3" fontWeight={800} lineHeight={1}>Fresh arrivals</Typography>
@@ -837,10 +837,10 @@ export function LandingPage({
 
       {/* ── COLLECTIONS ──────────────────────────────── */}
       {homeFeed.collections.length > 0 && (
-        <Box sx={{ py: { xs: 6, md: 8 }, borderTop: "1px solid", borderColor: "divider" }}>
+        <Box sx={{ py: { xs: 4, md: 6 }, borderTop: "1px solid", borderColor: "divider" }}>
           <Container maxWidth="lg">
             <motion.div variants={sectionHeader} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-60px" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={3.5}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Curated</Typography>
                   <Typography variant="h3" fontWeight={800} lineHeight={1}>Collections</Typography>
@@ -911,7 +911,7 @@ export function LandingPage({
       {/* ── SELL ON SPREE ────────────────────────────── */}
       <Box
         sx={(theme) => ({
-          py: { xs: 7, md: 9 },
+          py: { xs: 4.5, md: 6 },
           borderTop: "1px solid",
           borderColor: "divider",
           background:
@@ -999,7 +999,7 @@ export function LandingPage({
       {/* ── FINAL CTA ────────────────────────────────── */}
       <Box
         sx={(theme) => ({
-          py: { xs: 8, md: 11 },
+          py: { xs: 5, md: 7.5 },
           position: "relative",
           overflow: "hidden",
           textAlign: "center",
@@ -1036,7 +1036,7 @@ export function LandingPage({
               <Image src="/spreelogo.png" alt="Spree" fill sizes="64px" style={{ objectFit: "contain", padding: 10 }} />
             </Box>
 
-            <Typography variant="h2" fontWeight={800} lineHeight={1.08} mb={2} sx={{ color: "#fff" }}>
+            <Typography variant="h2" fontWeight={800} lineHeight={1.08} mb={2} sx={{ color: "#fff", fontSize: { xs: "1.5rem", md: "1.875rem" } }}>
               {hasProducts ? "Ready to start shopping?" : "Coming soon to Ghana."}
             </Typography>
             <Typography

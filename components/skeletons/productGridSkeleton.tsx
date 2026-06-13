@@ -8,7 +8,11 @@ export function ProductGridSkeleton({ count = 8 }: { count?: number }) {
       sx={{
         display: "grid",
         gap: 1.5,
-        gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+        gridTemplateColumns: {
+          xs: "repeat(2, 1fr)",
+          md: "repeat(3, 1fr)",
+          xl: "repeat(4, 1fr)",
+        },
       }}
     >
       {Array.from({ length: count }).map((_, index) => (

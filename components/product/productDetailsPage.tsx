@@ -112,8 +112,7 @@ export function ProductDetailsPage({
     <Box
       sx={(theme) => ({
         minHeight: "100%",
-        px: { xs: 1.5, sm: 3, md: 5 },
-        py: { xs: 3, md: 5 },
+        pb: { xs: "76px", lg: 0 },
         background: `radial-gradient(circle at top right, ${alpha(
           theme.palette.primary.main,
           theme.palette.mode === "dark" ? 0.18 : 0.1
@@ -122,6 +121,7 @@ export function ProductDetailsPage({
         } 0%, ${theme.palette.background.paper} 100%)`,
       })}
     >
+    <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3 }, py: { xs: 3, md: 4 } }}>
       <Stack spacing={4}>
         <Stack spacing={2}>
           <Button
@@ -176,23 +176,30 @@ export function ProductDetailsPage({
               })}
             >
               <Box
-                sx={{
+                sx={(theme) => ({
                   position: "relative",
                   width: "100%",
-                  minHeight: { xs: 280, sm: 460, md: 560 },
-                  aspectRatio: "4 / 5",
-                  borderRadius: 3,
+                  // Cap height: 52 vh on mobile so Add-to-Cart stays visible; 480 px on desktop
+                  height: { xs: "52vh", lg: 480 },
+                  maxHeight: { xs: "52vh", lg: 480 },
+                  maxWidth: { lg: 480 },
+                  mx: { lg: "auto" },
+                  borderRadius: "18px",
                   overflow: "hidden",
-                }}
+                  backgroundColor:
+                    theme.palette.mode === "dark"
+                      ? alpha(theme.palette.primary.main, 0.08)
+                      : alpha(theme.palette.primary.main, 0.04),
+                })}
               >
                 <Image
                   src={selectedImage}
                   alt={product.name}
                   fill
-                  sizes="(max-width: 900px) 100vw, 50vw"
+                  sizes="(max-width: 1024px) 100vw, 480px"
                   style={{
-                    objectFit: "cover",
-                    objectPosition: "center",
+                    objectFit: "contain",
+                    padding: "16px",
                   }}
                   priority
                 />
@@ -242,8 +249,8 @@ export function ProductDetailsPage({
                       fill
                       sizes="90px"
                       style={{
-                        objectFit: "cover",
-                        objectPosition: "center",
+                        objectFit: "contain",
+                        padding: "6px",
                       }}
                     />
                   </Box>
@@ -588,6 +595,54 @@ export function ProductDetailsPage({
           </Box>
         </Stack>
       </Stack>
+    </Box>
+
+      {/* Sticky Add-to-Cart bar — mobile only */}
+      <Box
+        sx={(theme) => ({
+          display: { xs: "flex", lg: "none" },
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          alignItems: "center",
+          gap: 1.5,
+          px: 2,
+          py: 1.25,
+          bgcolor: alpha(theme.palette.background.paper, 0.95),
+          backdropFilter: "blur(16px)",
+          borderTop: "1px solid",
+          borderColor: theme.palette.divider,
+          boxShadow: "0 -4px 24px rgba(0,0,0,0.10)",
+        })}
+      >
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={700} noWrap>
+            {product.name}
+          </Typography>
+          <Typography variant="subtitle1" color="primary.main" fontWeight={800} lineHeight={1.2}>
+            {formatPrice(product.price)}
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          disableElevation
+          onClick={() => {
+            addToCart(product, {
+              color: selectedColor,
+              size: selectedSize,
+              isPreorder: !product.inStock,
+            });
+            setLastAddedAt(Date.now());
+          }}
+          sx={{ borderRadius: 999, fontWeight: 800, whiteSpace: "nowrap", minWidth: 140, py: 1.25 }}
+        >
+          {recentlyAdded
+            ? product.inStock ? "Added ✓" : "Preordered ✓"
+            : product.inStock ? "Add to Cart" : "Preorder Now"}
+        </Button>
+      </Box>
     </Box>
   );
 }

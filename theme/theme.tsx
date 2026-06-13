@@ -46,36 +46,42 @@ export const getAppTheme = (mode: PaletteMode) =>
         h1: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 900,
+          fontSize: "2.125rem",    // 34px desktop → ~26px mobile via responsiveFontSizes
           letterSpacing: "-0.03em",
           lineHeight: 0.9,
         },
         h2: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 800,
+          fontSize: "1.875rem",    // 30px desktop → ~23px mobile
           letterSpacing: "-0.025em",
           lineHeight: 0.96,
         },
         h3: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 800,
+          fontSize: "1.5rem",      // 24px desktop → ~19px mobile
           letterSpacing: "-0.02em",
           lineHeight: 1.0,
         },
         h4: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 700,
+          fontSize: "1.25rem",     // 20px desktop → ~16px mobile
           letterSpacing: "-0.015em",
           lineHeight: 1.1,
         },
         h5: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 700,
+          fontSize: "1.125rem",    // 18px
           letterSpacing: "-0.01em",
           lineHeight: 1.2,
         },
         h6: {
           fontFamily: '"Rubik", sans-serif',
           fontWeight: 600,
+          fontSize: "1rem",        // 16px
           letterSpacing: "-0.005em",
           lineHeight: 1.25,
         },
@@ -147,11 +153,24 @@ export const getAppTheme = (mode: PaletteMode) =>
             },
           },
         },
+        MuiButtonBase: {
+          styleOverrides: {
+            root: {
+              "&:focus-visible": {
+                outline: "2.5px solid #655AFF",
+                outlineOffset: 2,
+              },
+            },
+          },
+        },
         MuiChip: {
           styleOverrides: {
             root: {
               fontFamily: '"Nunito Sans", sans-serif',
               fontWeight: 700,
+              "&.MuiChip-clickable": {
+                minHeight: 44,
+              },
             },
           },
         },

@@ -13,7 +13,7 @@ export function ProductDetailsSkeleton() {
     >
       <Stack spacing={2}>
         <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}>
-          <Skeleton variant="rounded" height={560} />
+          <Skeleton variant="rounded" sx={{ height: { xs: "52vh", lg: 480 } }} />
         </Paper>
         <Box
           sx={{

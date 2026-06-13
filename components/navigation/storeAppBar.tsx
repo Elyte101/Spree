@@ -270,7 +270,8 @@ export function StoreAppBar() {
           alignItems="center"
           sx={{
             "& .MuiIconButton-root": {
-              p: { xs: 0.75, sm: 0.875 },
+              width: 44,
+              height: 44,
             },
             "& .MuiSvgIcon-root": {
               fontSize: { xs: 21, sm: 22 },

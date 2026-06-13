@@ -52,21 +52,20 @@ export function CartPage({ recommendations }: CartPageProps) {
     <Box
       sx={(theme) => ({
         minHeight: "100vh",
-        px: { xs: 1.5, sm: 3, md: 5 },
-        py: { xs: 3, md: 5 },
         background:
           theme.palette.mode === "dark"
             ? `radial-gradient(circle at top left, ${alpha(theme.palette.primary.main, 0.14)}, transparent 28%), ${theme.palette.background.default}`
             : `radial-gradient(circle at top left, ${alpha(theme.palette.primary.main, 0.07)}, transparent 28%), #F5F4FF`,
       })}
     >
+    <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3 }, py: { xs: 3, md: 4 } }}>
       <Stack spacing={3.5}>
 
         {/* ── Page header ── */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, ease }}>
           <Paper
             sx={(theme) => ({
-              p: { xs: 2.5, md: 3.5 },
+              p: { xs: 1.5, md: 2 },
               borderRadius: 3,
               border: "1.5px solid",
               borderColor: theme.palette.divider,
@@ -461,6 +460,7 @@ export function CartPage({ recommendations }: CartPageProps) {
           </Stack>
         )}
       </Stack>
+    </Box>
     </Box>
   );
 }

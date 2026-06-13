@@ -79,10 +79,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           <Box
             sx={(theme) => ({
               position: "relative",
-              aspectRatio: "4 / 3.6",
+              aspectRatio: "1 / 1",
               borderRadius: 2.5,
               overflow: "hidden",
-              // Theme-aware background shows around product images (contain keeps whitespace visible)
               backgroundColor:
                 theme.palette.mode === "dark"
                   ? alpha(theme.palette.primary.main, 0.08)
@@ -188,8 +187,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             onClick={(e) => { e.preventDefault(); toggleFavorite(product.id); }}
             sx={(theme) => ({
               pointerEvents: "auto",
-              width: 30,
-              height: 30,
+              width: 44,
+              height: 44,
               color: liked ? "#EF4444" : theme.palette.text.primary,
               backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.82 : 0.92),
               backdropFilter: "blur(8px)",
