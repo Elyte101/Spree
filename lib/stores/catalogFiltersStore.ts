@@ -13,6 +13,8 @@ interface CatalogFiltersStoreState {
   sort: CatalogSort;
   page: number;
   inStockOnly: boolean;
+  minPrice: number | undefined;
+  maxPrice: number | undefined;
   setSearch: (value: string) => void;
   setCategory: (value: string) => void;
   setBrand: (value: string) => void;
@@ -20,6 +22,8 @@ interface CatalogFiltersStoreState {
   setSort: (value: CatalogSort) => void;
   setPage: (value: number) => void;
   setInStockOnly: (value: boolean) => void;
+  setMinPrice: (value: number | undefined) => void;
+  setMaxPrice: (value: number | undefined) => void;
   reset: () => void;
 }
 
@@ -31,6 +35,8 @@ const defaultFilters = {
   sort: "featured" as CatalogSort,
   page: 1,
   inStockOnly: false,
+  minPrice: undefined as number | undefined,
+  maxPrice: undefined as number | undefined,
 };
 
 export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
@@ -44,6 +50,8 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
       setSort: (value) => set({ sort: value, page: 1 }),
       setPage: (value) => set({ page: value }),
       setInStockOnly: (value) => set({ inStockOnly: value, page: 1 }),
+      setMinPrice: (value) => set({ minPrice: value, page: 1 }),
+      setMaxPrice: (value) => set({ maxPrice: value, page: 1 }),
       reset: () => set(defaultFilters),
     }),
     {

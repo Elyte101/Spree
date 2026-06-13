@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   AutoAwesome,
+  CategoryRounded,
   CloseRounded,
   Inventory2Outlined,
   SearchRounded,
@@ -19,9 +20,14 @@ import {
   InputBase,
   InputLabel,
   LinearProgress,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
   Pagination,
   Paper,
   Select,
+  Slider,
   Stack,
   Switch,
   Tooltip,
@@ -75,6 +81,8 @@ export function ProductListingPage({
   const sort = useCatalogFiltersStore((state) => state.sort);
   const page = useCatalogFiltersStore((state) => state.page);
   const inStockOnly = useCatalogFiltersStore((state) => state.inStockOnly);
+  const minPrice = useCatalogFiltersStore((state) => state.minPrice);
+  const maxPrice = useCatalogFiltersStore((state) => state.maxPrice);
   const search = useCatalogFiltersStore((state) => state.search);
   const setSelectedCategory = useCatalogFiltersStore((state) => state.setCategory);
   const setSelectedBrand = useCatalogFiltersStore((state) => state.setBrand);
@@ -82,6 +90,8 @@ export function ProductListingPage({
   const setSort = useCatalogFiltersStore((state) => state.setSort);
   const setPage = useCatalogFiltersStore((state) => state.setPage);
   const setInStockOnly = useCatalogFiltersStore((state) => state.setInStockOnly);
+  const setMinPrice = useCatalogFiltersStore((state) => state.setMinPrice);
+  const setMaxPrice = useCatalogFiltersStore((state) => state.setMaxPrice);
   const setSearch = useCatalogFiltersStore((state) => state.setSearch);
   const resetCatalogFilters = useCatalogFiltersStore((state) => state.reset);
   // Seed the store from a URL ?search= param on first render so the header
@@ -131,8 +141,10 @@ export function ProductListingPage({
       brand: selectedBrand || undefined,
       collection: selectedCollection || undefined,
       inStock: inStockOnly ? true : undefined,
+      minPrice,
+      maxPrice,
     }),
-    [inStockOnly, page, search, selectedBrand, selectedCategory, selectedCollection, sort]
+    [inStockOnly, maxPrice, minPrice, page, search, selectedBrand, selectedCategory, selectedCollection, sort]
   );
 
   const useInitialCatalog =
@@ -141,8 +153,24 @@ export function ProductListingPage({
     !selectedBrand &&
     !selectedCollection &&
     !inStockOnly &&
+    minPrice === undefined &&
+    maxPrice === undefined &&
     sort === initialCatalog.sort &&
     page === initialCatalog.page;
+
+  const boundsMin = initialCatalog.filters.priceRange.min;
+  const boundsMax = initialCatalog.filters.priceRange.max;
+  const hasPriceBounds = boundsMax > boundsMin;
+  const [localPriceRange, setLocalPriceRange] = React.useState<[number, number]>([
+    minPrice ?? boundsMin,
+    maxPrice ?? boundsMax,
+  ]);
+
+  React.useEffect(() => {
+    if (minPrice === undefined && maxPrice === undefined) {
+      setLocalPriceRange([boundsMin, boundsMax]);
+    }
+  }, [minPrice, maxPrice, boundsMin, boundsMax]);
 
   const catalogQuery = useCatalogQuery(
     params,
@@ -173,9 +201,25 @@ export function ProductListingPage({
     setSearchInput("");
   };
 
+  const suggestions = React.useMemo(() => {
+    const q = searchInput.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const categoryMatches = homeFeed.categories
+      .filter((c) => c.name.toLowerCase().includes(q))
+      .slice(0, 3)
+      .map((c) => ({ type: "category" as const, label: c.name, id: String(c.id) }));
+    const productMatches = catalog.items
+      .filter((p) => p.name.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((p) => ({ type: "product" as const, label: p.name, id: String(p.id) }));
+    return [...categoryMatches, ...productMatches].slice(0, 7);
+  }, [searchInput, catalog.items, homeFeed.categories]);
+
   const [filterDrawerOpen, setFilterDrawerOpen] = React.useState(false);
+  const [searchFocused, setSearchFocused] = React.useState(false);
   const hasActiveFilters = Boolean(
     selectedCategory || selectedBrand || selectedCollection || inStockOnly || sort !== "featured"
+    || minPrice !== undefined || maxPrice !== undefined
   );
   const activeFilterCount = [
     selectedCategory,
@@ -183,6 +227,7 @@ export function ProductListingPage({
     selectedCollection,
     inStockOnly ? "stock" : "",
     sort !== "featured" ? "sort" : "",
+    minPrice !== undefined || maxPrice !== undefined ? "price" : "",
   ].filter(Boolean).length;
 
   return (
@@ -322,57 +367,110 @@ export function ProductListingPage({
             </IconButton>
           </Tooltip>
 
-          <Paper
-            elevation={0}
-            component="form"
-            onSubmit={(e: React.BaseSyntheticEvent) => e.preventDefault()}
-            sx={(theme) => ({
-              flex: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 2,
-              py: 0.75,
-              borderRadius: 999,
-              border: "1.5px solid",
-              borderColor: theme.palette.divider,
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha(theme.palette.common.white, 0.04)
-                  : theme.palette.background.paper,
-              transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-              "&:focus-within": {
-                borderColor: "primary.main",
-                boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
-              },
-            })}
-          >
-            <SearchRounded sx={{ color: "text.secondary", flexShrink: 0 }} />
-            <InputBase
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search products, brands, tags…"
-              fullWidth
-              inputProps={{ "aria-label": "search products" }}
-              sx={{ fontSize: "0.9375rem", py: 0.5 }}
-            />
-            {searchInput ? (
-              <IconButton
-                size="small"
-                aria-label="clear search"
-                onClick={() => {
-                  setSearchInput("");
+          <Box sx={{ flex: 1, position: "relative" }}>
+            <Paper
+              elevation={0}
+              component="form"
+              onSubmit={(e: React.BaseSyntheticEvent) => e.preventDefault()}
+              sx={(theme) => ({
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                px: 2,
+                py: 0.75,
+                borderRadius: 999,
+                border: "1.5px solid",
+                borderColor: theme.palette.divider,
+                backgroundColor:
+                  theme.palette.mode === "dark"
+                    ? alpha(theme.palette.common.white, 0.04)
+                    : theme.palette.background.paper,
+                transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                "&:focus-within": {
+                  borderColor: "primary.main",
+                  boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
+                },
+              })}
+            >
+              <SearchRounded sx={{ color: "text.secondary", flexShrink: 0 }} />
+              <InputBase
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
                   setPage(1);
                 }}
-                sx={{ flexShrink: 0 }}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                placeholder="Search products, brands, tags…"
+                fullWidth
+                inputProps={{ "aria-label": "search products" }}
+                sx={{ fontSize: "0.9375rem", py: 0.5 }}
+              />
+              {searchInput ? (
+                <IconButton
+                  size="small"
+                  aria-label="clear search"
+                  onClick={() => {
+                    setSearchInput("");
+                    setPage(1);
+                  }}
+                  sx={{ flexShrink: 0 }}
+                >
+                  <CloseRounded fontSize="small" />
+                </IconButton>
+              ) : null}
+            </Paper>
+            {searchFocused && suggestions.length > 0 ? (
+              <Paper
+                elevation={8}
+                sx={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  left: 0,
+                  right: 0,
+                  zIndex: 1300,
+                  borderRadius: 2,
+                  overflow: "hidden",
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
               >
-                <CloseRounded fontSize="small" />
-              </IconButton>
+                <List disablePadding>
+                  {suggestions.map((s) => (
+                    <ListItemButton
+                      key={`${s.type}-${s.id}`}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        if (s.type === "category") {
+                          setSearchInput("");
+                          setSelectedCategory(s.label);
+                        } else {
+                          setSearchInput(s.label);
+                        }
+                        setSearchFocused(false);
+                        setPage(1);
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 32 }}>
+                        {s.type === "category"
+                          ? <CategoryRounded fontSize="small" color="primary" />
+                          : <SearchRounded fontSize="small" sx={{ color: "text.secondary" }} />
+                        }
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={s.label}
+                        secondary={s.type === "category" ? "Category" : undefined}
+                        slotProps={{
+                          primary: { variant: "body2" },
+                          secondary: { variant: "caption" },
+                        }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              </Paper>
             ) : null}
-          </Paper>
+          </Box>
         </Stack>
 
           <Stack spacing={2.5}>
@@ -435,12 +533,13 @@ export function ProductListingPage({
                 ) : null}
 
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip
-                    label={`Price range ${formatPrice(catalog.filters.priceRange.min)} - ${formatPrice(
-                      catalog.filters.priceRange.max
-                    )}`}
-                    variant="outlined"
-                  />
+                  {minPrice !== undefined || maxPrice !== undefined ? (
+                    <Chip
+                      label={`Price: ${formatPrice(minPrice ?? boundsMin)} – ${formatPrice(maxPrice ?? boundsMax)}`}
+                      color="primary"
+                      onDelete={() => { setMinPrice(undefined); setMaxPrice(undefined); }}
+                    />
+                  ) : null}
                   {search ? <Chip label={`Search: ${search}`} color="primary" /> : null}
                   {inStockOnly ? <Chip label="In stock only" color="success" /> : null}
                 </Stack>
@@ -482,21 +581,21 @@ export function ProductListingPage({
                     }}
                   >
                     <Typography variant="h6" sx={{ mb: 1 }}>
-                      {search || selectedCategory || selectedBrand || selectedCollection || inStockOnly
+                      {hasActiveFilters
                         ? "No products matched those filters"
                         : "More products are coming soon"}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {search || selectedCategory || selectedBrand || selectedCollection || inStockOnly
+                      {hasActiveFilters
                         ? "Try widening your search or clearing a few filters."
                         : "Please check back soon for new arrivals."}
                     </Typography>
                     <Chip
-                      label={search || selectedCategory || selectedBrand || selectedCollection || inStockOnly ? "Reset filters" : "Go home"}
+                      label={hasActiveFilters ? "Reset filters" : "Go home"}
                       clickable
                       color="primary"
                       onClick={() => {
-                        if (search || selectedCategory || selectedBrand || selectedCollection || inStockOnly) {
+                        if (hasActiveFilters) {
                           resetFilters();
                         } else {
                           window.location.href = "/";
@@ -585,6 +684,43 @@ export function ProductListingPage({
               </Stack>
               <Switch checked={inStockOnly} onChange={(event) => { setInStockOnly(event.target.checked); setPage(1); }} />
             </Stack>
+
+            {hasPriceBounds ? (
+              <Box sx={{ px: 0.5 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
+                  <Typography variant="subtitle2">Price range</Typography>
+                  {minPrice !== undefined || maxPrice !== undefined ? (
+                    <Chip
+                      size="small"
+                      label="Reset"
+                      onClick={() => { setMinPrice(undefined); setMaxPrice(undefined); }}
+                      clickable
+                      sx={{ borderRadius: 999, height: 22, fontSize: "0.7rem" }}
+                    />
+                  ) : null}
+                </Stack>
+                <Box sx={{ px: 1 }}>
+                  <Slider
+                    value={localPriceRange}
+                    min={boundsMin}
+                    max={boundsMax}
+                    onChange={(_, value) => setLocalPriceRange(value as [number, number])}
+                    onChangeCommitted={(_, value) => {
+                      const [lo, hi] = value as [number, number];
+                      setMinPrice(lo === boundsMin ? undefined : lo);
+                      setMaxPrice(hi === boundsMax ? undefined : hi);
+                    }}
+                    valueLabelDisplay="auto"
+                    valueLabelFormat={(v) => formatPrice(v)}
+                    disableSwap
+                  />
+                </Box>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="caption" color="text.secondary">{formatPrice(localPriceRange[0])}</Typography>
+                  <Typography variant="caption" color="text.secondary">{formatPrice(localPriceRange[1])}</Typography>
+                </Stack>
+              </Box>
+            ) : null}
 
             <Divider />
 

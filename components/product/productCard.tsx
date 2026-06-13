@@ -3,7 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Favorite, FavoriteBorder, ShoppingBagOutlined, StarRounded } from "@mui/icons-material";
+import {
+  BrokenImageRounded,
+  Favorite,
+  FavoriteBorder,
+  ShoppingBagOutlined,
+  StarRounded,
+} from "@mui/icons-material";
 import {
   Box,
   Button,
@@ -30,6 +36,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const [lastAddedAt, setLastAddedAt] = React.useState(0);
   const [hovered, setHovered] = React.useState(false);
+  const [imgError, setImgError] = React.useState(false);
   const liked = isFavorite(product.id);
   const recentlyAdded = lastAddedAt > 0;
   const isCompact = size === "compact";
@@ -39,12 +46,19 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
 
   const allImages = product.images?.length ? product.images : [product.image];
   const heroImage = hovered && allImages.length > 1 ? allImages[1] : allImages[0];
+  // Show "Limited" overlay only when the badge explicitly signals scarcity
+  const isLimited = Boolean(product.badge?.toLowerCase().includes("limited"));
 
   React.useEffect(() => {
     if (!recentlyAdded) return;
     const id = window.setTimeout(() => setLastAddedAt(0), 1800);
     return () => window.clearTimeout(id);
   }, [recentlyAdded, lastAddedAt]);
+
+  // Reset image error state when the displayed image src changes
+  React.useEffect(() => {
+    setImgError(false);
+  }, [heroImage]);
 
   return (
     <Card
@@ -61,11 +75,18 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         border: "1.5px solid",
         borderColor: hovered ? "primary.main" : theme.palette.divider,
         backgroundColor: "background.paper",
+        boxShadow:
+          theme.palette.mode === "dark"
+            ? "0 2px 12px rgba(0,0,0,0.32)"
+            : "0 2px 8px rgba(0,0,0,0.06)",
         transition: "transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease",
         cursor: "pointer",
         "&:hover": {
           transform: "translateY(-5px)",
-          boxShadow: `0 20px 48px ${alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.14)}`,
+          boxShadow: `0 20px 48px ${alpha(
+            theme.palette.primary.main,
+            theme.palette.mode === "dark" ? 0.22 : 0.14
+          )}`,
         },
       })}
     >
@@ -97,13 +118,43 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 transition={{ duration: 0.25 }}
                 style={{ position: "absolute", inset: 0 }}
               >
-                <Image
-                  src={heroImage}
-                  alt={product.name}
-                  fill
-                  sizes={isCompact ? "(max-width: 600px) 100vw, 33vw" : "(max-width: 900px) 100vw, 420px"}
-                  style={{ objectFit: "contain", padding: "12px" }}
-                />
+                {!imgError ? (
+                  <Image
+                    src={heroImage}
+                    alt={product.name}
+                    fill
+                    sizes={
+                      isCompact
+                        ? "(max-width: 600px) 100vw, 33vw"
+                        : "(max-width: 900px) 100vw, 420px"
+                    }
+                    style={{ objectFit: "contain", padding: "12px" }}
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <Stack
+                    alignItems="center"
+                    justifyContent="center"
+                    spacing={0.75}
+                    sx={(theme) => ({
+                      position: "absolute",
+                      inset: 0,
+                      background: `linear-gradient(135deg, ${alpha(
+                        theme.palette.primary.main,
+                        0.07
+                      )}, ${alpha(theme.palette.secondary.main, 0.07)})`,
+                    })}
+                  >
+                    <BrokenImageRounded sx={{ fontSize: 36, color: "text.disabled" }} />
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      sx={{ textAlign: "center", px: 1 }}
+                    >
+                      Image unavailable
+                    </Typography>
+                  </Stack>
+                )}
               </motion.div>
             </AnimatePresence>
 
@@ -112,7 +163,12 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               <Stack
                 direction="row"
                 spacing={0.5}
-                sx={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)" }}
+                sx={{
+                  position: "absolute",
+                  bottom: 8,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                }}
               >
                 {allImages.slice(0, 4).map((_, i) => (
                   <Box
@@ -131,7 +187,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           </Box>
         </Box>
 
-        {/* Overlaid badges */}
+        {/* Overlaid badges — left: discount + limited; right: favorite */}
         <Stack
           direction="row"
           justifyContent="space-between"
@@ -161,9 +217,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 })}
               />
             )}
-            {product.badge && !discount && (
+            {isLimited && (
               <Chip
-                label={product.badge}
+                label="Limited"
                 size="small"
                 sx={(theme) => ({
                   pointerEvents: "auto",
@@ -171,10 +227,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                   height: 22,
                   fontWeight: 700,
                   fontSize: "0.7rem",
-                  backgroundColor: alpha(theme.palette.background.paper, 0.9),
+                  backgroundColor: alpha(theme.palette.warning.main, 0.9),
+                  color: "#fff",
                   backdropFilter: "blur(8px)",
-                  border: "1px solid",
-                  borderColor: theme.palette.divider,
                   "& .MuiChip-label": { px: 0.75 },
                 })}
               />
@@ -190,7 +245,10 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               width: 44,
               height: 44,
               color: liked ? "#EF4444" : theme.palette.text.primary,
-              backgroundColor: alpha(theme.palette.background.paper, theme.palette.mode === "dark" ? 0.82 : 0.92),
+              backgroundColor: alpha(
+                theme.palette.background.paper,
+                theme.palette.mode === "dark" ? 0.82 : 0.92
+              ),
               backdropFilter: "blur(8px)",
               border: "1px solid",
               borderColor: liked ? alpha("#EF4444", 0.3) : theme.palette.divider,
@@ -203,24 +261,36 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               },
             })}
           >
-            {liked
-              ? <Favorite sx={{ fontSize: 15 }} />
-              : <FavoriteBorder sx={{ fontSize: 15 }} />}
+            {liked ? <Favorite sx={{ fontSize: 15 }} /> : <FavoriteBorder sx={{ fontSize: 15 }} />}
           </IconButton>
         </Stack>
       </Box>
 
       {/* Content */}
       <Stack
-        spacing={isCompact ? 1 : 1.25}
+        spacing={isCompact ? 0.75 : 1}
         sx={{ p: isCompact ? 1.5 : 2, flexGrow: 1, pt: isCompact ? 1.25 : 1.5 }}
       >
-        {/* Brand + stock */}
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
+        {/* Brand + stock status */}
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          spacing={0.5}
+        >
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ letterSpacing: "0.08em", fontWeight: 700, textTransform: "uppercase", fontSize: "0.65rem" }}
+            sx={{
+              letterSpacing: "0.08em",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              fontSize: "0.65rem",
+              minWidth: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
           >
             {product.brand}
           </Typography>
@@ -228,17 +298,23 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             label={product.inStock ? "In stock" : "Preorder"}
             size="small"
             color={product.inStock ? "success" : "warning"}
-            sx={{ height: 18, fontSize: "0.62rem", fontWeight: 700, "& .MuiChip-label": { px: 0.75 } }}
+            sx={{
+              height: 18,
+              fontSize: "0.62rem",
+              fontWeight: 700,
+              flexShrink: 0,
+              "& .MuiChip-label": { px: 0.75 },
+            }}
           />
         </Stack>
 
-        {/* Name */}
+        {/* Product name — clamped to 2 lines with fixed min-height for grid alignment */}
         <Typography
           component={Link}
           href={`/products/${product.slug}`}
           variant={isCompact ? "subtitle1" : "h6"}
           sx={{
-            lineHeight: 1.25,
+            lineHeight: 1.3,
             fontWeight: 700,
             color: "text.primary",
             textDecoration: "none",
@@ -246,13 +322,14 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             WebkitLineClamp: 2,
             WebkitBoxOrient: "vertical",
             overflow: "hidden",
+            minHeight: "2.6em",
             "&:hover": { color: "primary.main" },
           }}
         >
           {product.name}
         </Typography>
 
-        {/* Store */}
+        {/* Store link */}
         {product.storeName && product.storeSlug && (
           <Typography
             component={Link}
@@ -265,30 +342,37 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           </Typography>
         )}
 
-        {/* Rating */}
-        <Stack direction="row" alignItems="center" spacing={0.5}>
-          <StarRounded sx={{ fontSize: 15, color: "#F59E0B" }} />
-          <Typography variant="caption" fontWeight={700} color="text.primary">
-            {product.rating.toFixed(1)}
+        {/* Rating — hidden when no reviews exist */}
+        {product.reviewsCount > 0 ? (
+          <Stack direction="row" alignItems="center" spacing={0.5}>
+            <StarRounded sx={{ fontSize: 15, color: "#F59E0B" }} />
+            <Typography variant="caption" fontWeight={700} color="text.primary">
+              {product.rating.toFixed(1)}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              ({product.reviewsCount})
+            </Typography>
+          </Stack>
+        ) : (
+          <Typography variant="caption" color="text.disabled" sx={{ fontStyle: "italic" }}>
+            No reviews yet
           </Typography>
-          <Typography variant="caption" color="text.secondary">
-            ({product.reviewsCount})
-          </Typography>
-        </Stack>
+        )}
 
-        {/* Price + CTA */}
+        {/* Price + CTA — dedicated bottom row, never overlapping */}
         <Stack
           direction="row"
           alignItems="center"
           justifyContent="space-between"
-          sx={{ mt: "auto", pt: isCompact ? 0.5 : 0.75 }}
+          sx={{ mt: "auto", pt: isCompact ? 0.75 : 1, gap: 1 }}
         >
-          <Box>
+          <Box sx={{ minWidth: 0 }}>
             <Typography
               variant={isCompact ? "subtitle1" : "h6"}
               fontWeight={800}
               color="primary.main"
               lineHeight={1}
+              noWrap
             >
               {formatPrice(product.price)}
             </Typography>
@@ -316,7 +400,11 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 size="small"
                 color={recentlyAdded ? "success" : "primary"}
                 disableElevation
-                startIcon={!recentlyAdded ? <ShoppingBagOutlined sx={{ fontSize: "14px !important" }} /> : undefined}
+                startIcon={
+                  !recentlyAdded ? (
+                    <ShoppingBagOutlined sx={{ fontSize: "14px !important" }} />
+                  ) : undefined
+                }
                 onClick={(e) => {
                   e.preventDefault();
                   if (recentlyAdded) return;
@@ -329,19 +417,21 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 }}
                 sx={{
                   borderRadius: 999,
-                  px: isCompact ? 1.5 : 2,
+                  px: isCompact ? 1.25 : 2,
                   py: 0.6,
                   fontWeight: 700,
                   fontSize: "0.75rem",
                   whiteSpace: "nowrap",
-                  minWidth: 80,
+                  flexShrink: 0,
                 }}
               >
                 {recentlyAdded
                   ? "Added ✓"
                   : !product.inStock
                     ? "Preorder"
-                    : isCompact ? "Add" : "Add to cart"}
+                    : isCompact
+                      ? "Add"
+                      : "Add to cart"}
               </Button>
             </motion.div>
           </AnimatePresence>
