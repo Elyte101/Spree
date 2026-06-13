@@ -13,10 +13,13 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   IconButton,
+  InputLabel,
   Menu,
   MenuItem,
   Paper,
+  Select,
   Stack,
   Tab,
   Table,
@@ -31,6 +34,7 @@ import {
 } from "@mui/material";
 
 import { api, ApiClientError, UpdateProductPayload } from "@/lib/api";
+import { PRESET_CATEGORIES } from "@/components/admin/productCreateForm";
 import { Product, UserRole } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -454,7 +458,18 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
               <TextField label="Stock" type="number" value={editStock} onChange={(e) => setEditStock(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: 1 } } }} />
             </Box>
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr 1fr" }}>
-              <TextField label="Category" value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} />
+              <FormControl>
+                <InputLabel id="edit-category-label">Category</InputLabel>
+                <Select
+                  labelId="edit-category-label"
+                  value={editCategoryName}
+                  label="Category"
+                  onChange={(e) => setEditCategoryName(e.target.value)}
+                >
+                  {Array.from(new Set([...PRESET_CATEGORIES, ...(editCategoryName && !PRESET_CATEGORIES.includes(editCategoryName) ? [editCategoryName] : [])]))
+                    .map((name) => <MenuItem key={name} value={name}>{name}</MenuItem>)}
+                </Select>
+              </FormControl>
               <TextField label="Brand" value={editBrandName} onChange={(e) => setEditBrandName(e.target.value)} />
               <TextField label="Collection" value={editCollectionName} onChange={(e) => setEditCollectionName(e.target.value)} />
             </Box>

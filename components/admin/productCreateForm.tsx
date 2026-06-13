@@ -10,9 +10,13 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  FormControl,
   FormControlLabel,
   IconButton,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Switch,
   TextField,
@@ -39,6 +43,32 @@ interface ImageEntry {
 }
 
 const ACCEPTED_MIME = ["image/jpeg", "image/png", "image/webp"];
+
+export const PRESET_CATEGORIES = [
+  "Phones & Accessories",
+  "Electronics & Gadgets",
+  "Fashion & Clothing",
+  "Shoes & Footwear",
+  "Bags & Accessories",
+  "Beauty & Skincare",
+  "Hair & Beauty Products",
+  "Health & Wellness",
+  "Home & Living",
+  "Kitchen & Dining",
+  "Food & Beverages",
+  "Sports & Outdoors",
+  "Books & Stationery",
+  "Toys & Games",
+  "Baby & Kids",
+  "Jewelry & Watches",
+  "Art & Crafts",
+  "Agriculture & Farming",
+  "Pet Supplies",
+  "Automotive",
+  "Office Supplies",
+  "Tools & Hardware",
+  "Music & Instruments",
+];
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 const splitList = (value: string) =>
@@ -83,7 +113,9 @@ export function ProductCreateForm({
   const [featureOnHomepage, setFeatureOnHomepage] = React.useState(false);
   const [markAsNewArrival, setMarkAsNewArrival] = React.useState(false);
 
-  const categorySuggestions = buildSuggestions(categories.map((category) => category.name));
+  const allCategories = Array.from(
+    new Set([...PRESET_CATEGORIES, ...categories.map((c) => c.name)])
+  );
   const brandSuggestions = buildSuggestions(brands.map((brand) => brand.name));
   const collectionSuggestions = buildSuggestions(
     collections.map((collection) => collection.name)
@@ -485,18 +517,19 @@ export function ProductCreateForm({
                     gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
                   }}
                 >
-                  <TextField
-                    label="Category"
-                    value={categoryName}
-                    onChange={(event) => setCategoryName(event.target.value)}
-                    inputProps={{ list: "category-suggestions" }}
-                    helperText={
-                      categorySuggestions
-                        ? `Try one of these categories: ${categorySuggestions}`
-                        : "No categories yet. Your first entry will create one."
-                    }
-                    required
-                  />
+                  <FormControl required>
+                    <InputLabel id="create-category-label">Category</InputLabel>
+                    <Select
+                      labelId="create-category-label"
+                      value={categoryName}
+                      label="Category"
+                      onChange={(event) => setCategoryName(event.target.value)}
+                    >
+                      {allCategories.map((name) => (
+                        <MenuItem key={name} value={name}>{name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                   <TextField
                     label="Brand"
                     value={brandName}
@@ -599,11 +632,6 @@ export function ProductCreateForm({
               </Stack>
             </Paper>
 
-            <datalist id="category-suggestions">
-              {categories.map((category) => (
-                <option key={category.id} value={category.name} />
-              ))}
-            </datalist>
             <datalist id="brand-suggestions">
               {brands.map((brand) => (
                 <option key={brand.id} value={brand.name} />

@@ -13,6 +13,7 @@ import {
   Box,
   Chip,
   Divider,
+  Drawer,
   FormControl,
   IconButton,
   InputBase,
@@ -23,13 +24,13 @@ import {
   Select,
   Stack,
   Switch,
+  Tooltip,
   Typography,
   MenuItem,
 } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 
 import { ProductCard } from "@/components/product/productCard";
-import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { useCatalogQuery } from "@/lib/hooks/useStorefrontQueries";
 import { useCatalogFiltersStore } from "@/lib/stores/catalogFiltersStore";
 import { ProductGridSkeleton } from "@/components/skeletons/productGridSkeleton";
@@ -158,7 +159,7 @@ export function ProductListingPage({
   const heroSubtitle =
     homeFeed.hero?.subtitle ??
     (hasProducts
-      ? "Use search, filters, and sorting to narrow in on what feels right for you."
+      ? "Use search and filters to find what feels right for you."
       : "We're filling the shop with new items. Please check back soon.");
 
   React.useEffect(() => {
@@ -171,6 +172,18 @@ export function ProductListingPage({
     resetCatalogFilters();
     setSearchInput("");
   };
+
+  const [filterDrawerOpen, setFilterDrawerOpen] = React.useState(false);
+  const hasActiveFilters = Boolean(
+    selectedCategory || selectedBrand || selectedCollection || inStockOnly || sort !== "featured"
+  );
+  const activeFilterCount = [
+    selectedCategory,
+    selectedBrand,
+    selectedCollection,
+    inStockOnly ? "stock" : "",
+    sort !== "featured" ? "sort" : "",
+  ].filter(Boolean).length;
 
   return (
     <Box
@@ -286,242 +299,81 @@ export function ProductListingPage({
           </Stack>
         </Paper>
 
-        <Paper
-          elevation={0}
-          component="form"
-          onSubmit={(e: React.BaseSyntheticEvent) => e.preventDefault()}
-          sx={(theme) => ({
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            px: 2,
-            py: 0.75,
-            borderRadius: 999,
-            border: "1.5px solid",
-            borderColor: theme.palette.divider,
-            backgroundColor:
-              theme.palette.mode === "dark"
-                ? alpha(theme.palette.common.white, 0.04)
-                : theme.palette.background.paper,
-            transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-            "&:focus-within": {
-              borderColor: "primary.main",
-              boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
-            },
-          })}
-        >
-          <SearchRounded sx={{ color: "text.secondary", flexShrink: 0 }} />
-          <InputBase
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search products, brands, tags…"
-            fullWidth
-            inputProps={{ "aria-label": "search products" }}
-            sx={{ fontSize: "0.9375rem", py: 0.5 }}
-          />
-          {searchInput ? (
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <Tooltip title={hasActiveFilters ? `Filters (${activeFilterCount} active)` : "Filters"}>
             <IconButton
-              size="small"
-              aria-label="clear search"
-              onClick={() => {
-                setSearchInput("");
+              onClick={() => setFilterDrawerOpen(true)}
+              aria-label={hasActiveFilters ? `open filters, ${activeFilterCount} active` : "open filters"}
+              sx={(theme) => ({
+                border: "1.5px solid",
+                borderColor: hasActiveFilters ? theme.palette.primary.main : theme.palette.divider,
+                borderRadius: 2,
+                width: 48,
+                height: 48,
+                color: hasActiveFilters ? "primary.main" : "text.secondary",
+                bgcolor: hasActiveFilters
+                  ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.08)
+                  : theme.palette.background.paper,
+                flexShrink: 0,
+                transition: "border-color 0.18s ease, background-color 0.18s ease",
+              })}
+            >
+              <TuneRounded />
+            </IconButton>
+          </Tooltip>
+
+          <Paper
+            elevation={0}
+            component="form"
+            onSubmit={(e: React.BaseSyntheticEvent) => e.preventDefault()}
+            sx={(theme) => ({
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              px: 2,
+              py: 0.75,
+              borderRadius: 999,
+              border: "1.5px solid",
+              borderColor: theme.palette.divider,
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? alpha(theme.palette.common.white, 0.04)
+                  : theme.palette.background.paper,
+              transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+              "&:focus-within": {
+                borderColor: "primary.main",
+                boxShadow: `0 0 0 4px ${alpha(theme.palette.primary.main, 0.1)}`,
+              },
+            })}
+          >
+            <SearchRounded sx={{ color: "text.secondary", flexShrink: 0 }} />
+            <InputBase
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
                 setPage(1);
               }}
-              sx={{ flexShrink: 0 }}
-            >
-              <CloseRounded fontSize="small" />
-            </IconButton>
-          ) : null}
-        </Paper>
-
-        <Box
-          sx={{
-            display: "grid",
-            gap: 3,
-            gridTemplateColumns: { xs: "1fr", lg: "300px minmax(0, 1fr)" },
-            alignItems: "start",
-          }}
-        >
-          <Stack spacing={2.5}>
-            <ResponsiveDisclosurePanel
-              title="Filters"
-              icon={<TuneRounded fontSize="small" />}
-              action={<Chip label={`${catalog.total} items`} size="small" sx={{ borderRadius: 999 }} />}
-              collapseBelow="lg"
-              paperSx={{ borderRadius: 2 }}
-            >
-              <Stack spacing={2}>
-                <FormControl size="small" fullWidth>
-                  <InputLabel id="sort-products-label">Sort by</InputLabel>
-                  <Select
-                    labelId="sort-products-label"
-                    value={sort}
-                    label="Sort by"
-                    onChange={(event) => {
-                      setSort(event.target.value as CatalogSort);
-                      setPage(1);
-                    }}
-                  >
-                    {sortOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <Stack
-                  direction="row"
-                  justifyContent="space-between"
-                  alignItems="center"
-                  sx={{
-                    px: 1.5,
-                    py: 1,
-                    borderRadius: 2,
-                    backgroundColor: "action.hover",
-                  }}
-                >
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Inventory2Outlined fontSize="small" />
-                    <Typography variant="body2">In stock only</Typography>
-                  </Stack>
-                  <Switch
-                    checked={inStockOnly}
-                    onChange={(event) => {
-                      setInStockOnly(event.target.checked);
-                      setPage(1);
-                    }}
-                  />
-                </Stack>
-
-                <Divider />
-
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1.25 }}>
-                    Collections
-                  </Typography>
-                  {collections.length ? (
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                      <Chip
-                        label="All"
-                        clickable
-                        color={selectedCollection === ALL_FILTER_VALUE ? "primary" : "default"}
-                        variant={selectedCollection === ALL_FILTER_VALUE ? "filled" : "outlined"}
-                        onClick={() => {
-                          setSelectedCollection(ALL_FILTER_VALUE);
-                          setPage(1);
-                        }}
-                      />
-                      {collections.map((collection) => (
-                        <Chip
-                          key={collection.id}
-                          label={collection.name}
-                          clickable
-                          color={selectedCollection === collection.slug ? "primary" : "default"}
-                          variant={selectedCollection === collection.slug ? "filled" : "outlined"}
-                          onClick={() => {
-                            setSelectedCollection(collection.slug);
-                            setPage(1);
-                          }}
-                        />
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No collections are available yet.
-                    </Typography>
-                  )}
-                </Box>
-
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1.25 }}>
-                    Brands
-                  </Typography>
-                  {brands.length ? (
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                      <Chip
-                        label="All"
-                        clickable
-                        color={selectedBrand === ALL_FILTER_VALUE ? "primary" : "default"}
-                        variant={selectedBrand === ALL_FILTER_VALUE ? "filled" : "outlined"}
-                        onClick={() => {
-                          setSelectedBrand(ALL_FILTER_VALUE);
-                          setPage(1);
-                        }}
-                      />
-                      {brands.map((brand) => (
-                        <Chip
-                          key={brand.id}
-                          label={brand.name}
-                          clickable
-                          color={selectedBrand === brand.name ? "primary" : "default"}
-                          variant={selectedBrand === brand.name ? "filled" : "outlined"}
-                          onClick={() => {
-                            setSelectedBrand(brand.name);
-                            setPage(1);
-                          }}
-                        />
-                      ))}
-                    </Stack>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      No brands are available yet.
-                    </Typography>
-                  )}
-                </Box>
-
-                <Chip
-                  label="Reset all filters"
-                  onClick={resetFilters}
-                  clickable
-                  variant="outlined"
-                  sx={{ width: "fit-content", borderRadius: 999 }}
-                />
-              </Stack>
-            </ResponsiveDisclosurePanel>
-
-            <ResponsiveDisclosurePanel
-              title="Shop by category"
-              collapseBelow="lg"
-              paperSx={{ borderRadius: 2 }}
-            >
-              {homeFeed.categories.length ? (
-                <Stack spacing={1.5}>
-                  {homeFeed.categories.map((category) => (
-                    <Box
-                      key={category.id}
-                      onClick={() => {
-                        setSelectedCategory(category.name);
-                        setPage(1);
-                      }}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 2,
-                        cursor: "pointer",
-                        border: "1px solid",
-                        borderColor:
-                          selectedCategory === category.name ? "primary.main" : "divider",
-                        backgroundColor:
-                          selectedCategory === category.name ? "action.selected" : "transparent",
-                      }}
-                    >
-                      <Typography variant="subtitle2">{category.name}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {category.itemCount} items
-                      </Typography>
-                    </Box>
-                  ))}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Categories will appear here as more items arrive.
-                </Typography>
-              )}
-            </ResponsiveDisclosurePanel>
-          </Stack>
+              placeholder="Search products, brands, tags…"
+              fullWidth
+              inputProps={{ "aria-label": "search products" }}
+              sx={{ fontSize: "0.9375rem", py: 0.5 }}
+            />
+            {searchInput ? (
+              <IconButton
+                size="small"
+                aria-label="clear search"
+                onClick={() => {
+                  setSearchInput("");
+                  setPage(1);
+                }}
+                sx={{ flexShrink: 0 }}
+              >
+                <CloseRounded fontSize="small" />
+              </IconButton>
+            ) : null}
+          </Paper>
+        </Stack>
 
           <Stack spacing={2.5}>
             <Paper
@@ -691,7 +543,82 @@ export function ProductListingPage({
               </Stack>
             ) : null}
           </Stack>
-        </Box>
+
+        <Drawer
+          anchor="left"
+          open={filterDrawerOpen}
+          onClose={() => setFilterDrawerOpen(false)}
+          slotProps={{
+            paper: {
+              sx: { width: "min(86vw, 320px)", p: 2.5, boxSizing: "border-box" },
+            },
+          }}
+        >
+          <Stack spacing={2.5}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="h6" sx={{ fontWeight: 900 }}>Filters</Typography>
+              <IconButton size="small" onClick={() => setFilterDrawerOpen(false)} aria-label="close filters">
+                <CloseRounded fontSize="small" />
+              </IconButton>
+            </Stack>
+
+            <Chip label={`${catalog.total} items`} size="small" sx={{ borderRadius: 999, width: "fit-content" }} />
+
+            <FormControl size="small" fullWidth>
+              <InputLabel id="filter-sort-label">Sort by</InputLabel>
+              <Select
+                labelId="filter-sort-label"
+                value={sort}
+                label="Sort by"
+                onChange={(event) => { setSort(event.target.value as CatalogSort); setPage(1); }}
+              >
+                {sortOptions.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1.5, py: 1, borderRadius: 2, backgroundColor: "action.hover" }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Inventory2Outlined fontSize="small" />
+                <Typography variant="body2">In stock only</Typography>
+              </Stack>
+              <Switch checked={inStockOnly} onChange={(event) => { setInStockOnly(event.target.checked); setPage(1); }} />
+            </Stack>
+
+            <Divider />
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1.25 }}>Collections</Typography>
+              {collections.length ? (
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <Chip label="All" clickable color={selectedCollection === ALL_FILTER_VALUE ? "primary" : "default"} variant={selectedCollection === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => { setSelectedCollection(ALL_FILTER_VALUE); setPage(1); }} />
+                  {collections.map((collection) => (
+                    <Chip key={collection.id} label={collection.name} clickable color={selectedCollection === collection.slug ? "primary" : "default"} variant={selectedCollection === collection.slug ? "filled" : "outlined"} onClick={() => { setSelectedCollection(collection.slug); setPage(1); }} />
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No collections are available yet.</Typography>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1.25 }}>Brands</Typography>
+              {brands.length ? (
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <Chip label="All" clickable color={selectedBrand === ALL_FILTER_VALUE ? "primary" : "default"} variant={selectedBrand === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => { setSelectedBrand(ALL_FILTER_VALUE); setPage(1); }} />
+                  {brands.map((brand) => (
+                    <Chip key={brand.id} label={brand.name} clickable color={selectedBrand === brand.name ? "primary" : "default"} variant={selectedBrand === brand.name ? "filled" : "outlined"} onClick={() => { setSelectedBrand(brand.name); setPage(1); }} />
+                  ))}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No brands are available yet.</Typography>
+              )}
+            </Box>
+
+            <Chip label="Reset all filters" onClick={resetFilters} clickable variant="outlined" sx={{ width: "fit-content", borderRadius: 999 }} />
+          </Stack>
+        </Drawer>
       </Stack>
     </Box>
     </Box>
