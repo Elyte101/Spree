@@ -107,10 +107,7 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
   const [editSaving, setEditSaving] = React.useState(false);
   const [editError, setEditError] = React.useState("");
 
-  const [imagesTarget, setImagesTarget] = React.useState<Product | null>(null);
   const [imageEntries, setImageEntries] = React.useState<ImageEntry[]>([]);
-  const [imagesSaving, setImagesSaving] = React.useState(false);
-  const [imagesError, setImagesError] = React.useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const canManage = (p: Product) => isAdmin || p.sellerId === userId;
@@ -127,20 +124,17 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
     setEditCategoryName(product.category);
     setEditBrandName(product.brand);
     setEditCollectionName(product.collection ?? "");
+    setImageEntries(
+      product.images.map((url) => ({ id: url, preview: url, url, status: "done" as const }))
+    );
     setEditError("");
   };
 
-  const openAddImages = (product: Product) => {
-    setImagesTarget(product);
-    setImageEntries(
-      product.images.map((url) => ({
-        id: url,
-        preview: url,
-        url,
-        status: "done" as const,
-      }))
-    );
-    setImagesError("");
+  const closeEdit = () => {
+    if (editSaving) return;
+    imageEntries.forEach((e) => { if (!e.url?.startsWith("http")) URL.revokeObjectURL(e.preview); });
+    setEditTarget(null);
+    setImageEntries([]);
   };
 
   const handleEditSave = async () => {
@@ -160,8 +154,14 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
       if (editCategoryName.trim() !== editTarget.category) payload.categoryName = editCategoryName.trim();
       if (editBrandName.trim() !== editTarget.brand) payload.brandName = editBrandName.trim();
       if (editCollectionName.trim() !== (editTarget.collection ?? "")) payload.collectionName = editCollectionName.trim() || undefined;
+      const currentImageUrls = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
+      if (JSON.stringify(currentImageUrls) !== JSON.stringify(editTarget.images)) {
+        if (!currentImageUrls.length) { setEditError("At least one image is required."); return; }
+        payload.images = currentImageUrls;
+      }
       await api.updateProduct(editTarget.id, payload);
       setEditTarget(null);
+      setImageEntries([]);
       router.refresh();
     } catch (err) {
       setEditError(err instanceof ApiClientError ? err.message : "Failed to save changes.");
@@ -207,23 +207,6 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
       if (entry && !entry.url?.startsWith("http")) URL.revokeObjectURL(entry.preview);
       return prev.filter((e) => e.id !== id);
     });
-  };
-
-  const handleImagesSave = async () => {
-    if (!imagesTarget) return;
-    const urls = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
-    if (!urls.length) { setImagesError("At least one image is required."); return; }
-    setImagesSaving(true);
-    setImagesError("");
-    try {
-      await api.updateProduct(imagesTarget.id, { images: urls });
-      setImagesTarget(null);
-      router.refresh();
-    } catch (err) {
-      setImagesError(err instanceof ApiClientError ? err.message : "Failed to save images.");
-    } finally {
-      setImagesSaving(false);
-    }
   };
 
   const handleDelete = async () => {
@@ -435,9 +418,6 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
         <MenuItem onClick={() => { if (menuProduct) openEdit(menuProduct); closeActionMenu(); }}>
           Edit product
         </MenuItem>
-        <MenuItem onClick={() => { if (menuProduct) openAddImages(menuProduct); closeActionMenu(); }}>
-          Add more images
-        </MenuItem>
         {isAdmin ? (
           menuProduct?.isBlacklisted ? (
             <MenuItem onClick={() => { setBlacklistTarget(menuProduct); closeActionMenu(); }}>
@@ -461,7 +441,7 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
       </Menu>
 
       {/* Edit dialog */}
-      <Dialog open={Boolean(editTarget)} onClose={() => !editSaving && setEditTarget(null)} maxWidth="sm" fullWidth>
+      <Dialog open={Boolean(editTarget)} onClose={closeEdit} maxWidth="md" fullWidth>
         <DialogTitle sx={{ fontWeight: 900 }}>Edit product</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ pt: 1 }}>
@@ -480,60 +460,58 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
             </Box>
             <TextField label="Badge" value={editBadge} onChange={(e) => setEditBadge(e.target.value)} fullWidth />
             <TextField label="Tags (comma-separated)" value={editTags} onChange={(e) => setEditTags(e.target.value)} fullWidth helperText="e.g. featured, new, sale" />
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setEditTarget(null)} disabled={editSaving} sx={{ textTransform: "none" }}>Cancel</Button>
-          <Button variant="contained" onClick={handleEditSave} disabled={editSaving || !editName.trim()} startIcon={editSaving ? <CircularProgress size={16} color="inherit" /> : null} sx={{ textTransform: "none", fontWeight: 900 }}>
-            Save changes
-          </Button>
-        </DialogActions>
-      </Dialog>
 
-      {/* Add images dialog */}
-      <Dialog open={Boolean(imagesTarget)} onClose={() => !imagesSaving && setImagesTarget(null)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 900 }}>Manage images — {imagesTarget?.name}</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ pt: 1 }}>
-            {imagesError ? <Alert severity="error">{imagesError}</Alert> : null}
-            <input ref={fileInputRef} type="file" accept={ACCEPTED_MIME.join(",")} multiple style={{ display: "none" }} onChange={(e) => handleImageFiles(e.target.files)} />
-            <Box
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files); }}
-              sx={{ border: "2px dashed", borderColor: "divider", borderRadius: 2, p: 3, textAlign: "center", cursor: "pointer", "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" } }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                Click or drag to upload images (JPEG, PNG, WebP · max 5 MB each)
+            {/* Images */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>Images</Typography>
+              <input ref={fileInputRef} type="file" accept={ACCEPTED_MIME.join(",")} multiple style={{ display: "none" }} onChange={(e) => handleImageFiles(e.target.files)} />
+              <Box
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); handleImageFiles(e.dataTransfer.files); }}
+                sx={{ border: "2px dashed", borderColor: "divider", borderRadius: 2, p: 2.5, textAlign: "center", cursor: "pointer", "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" } }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Click or drag to add images (JPEG, PNG, WebP · max 5 MB each)
+                </Typography>
+              </Box>
+              {imageEntries.length > 0 ? (
+                <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", mt: 1.5 }}>
+                  {imageEntries.map((entry, idx) => (
+                    <Box key={entry.id} sx={{ position: "relative" }}>
+                      <Box component="img" src={entry.preview} alt="" sx={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 1, opacity: entry.status === "uploading" ? 0.5 : 1 }} />
+                      {idx === 0 && entry.status === "done" ? (
+                        <Chip label="Lead" size="small" color="primary" sx={{ position: "absolute", bottom: 4, left: 4, height: 18, fontSize: 10, borderRadius: 999, "& .MuiChip-label": { px: 0.75 } }} />
+                      ) : null}
+                      {entry.status === "uploading" ? (
+                        <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <CircularProgress size={20} />
+                        </Box>
+                      ) : (
+                        <IconButton size="small" onClick={() => removeImage(entry.id)} aria-label="Remove image" sx={{ position: "absolute", top: 2, right: 2, bgcolor: "background.paper", "&:hover": { bgcolor: "error.main", color: "common.white" } }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </IconButton>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              ) : null}
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                {imageEntries.filter((e) => e.status === "done").length} image{imageEntries.filter((e) => e.status === "done").length === 1 ? "" : "s"} · first image is the lead visual
               </Typography>
             </Box>
-            {imageEntries.length > 0 ? (
-              <Box sx={{ display: "grid", gap: 1, gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))" }}>
-                {imageEntries.map((entry) => (
-                  <Box key={entry.id} sx={{ position: "relative" }}>
-                    <Box component="img" src={entry.preview} alt="" sx={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 1, opacity: entry.status === "uploading" ? 0.5 : 1 }} />
-                    {entry.status === "uploading" ? (
-                      <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <CircularProgress size={20} />
-                      </Box>
-                    ) : (
-                      <IconButton size="small" onClick={() => removeImage(entry.id)} sx={{ position: "absolute", top: 2, right: 2, bgcolor: "background.paper", cursor: "pointer", "&:hover": { bgcolor: "error.main", color: "common.white" } }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </IconButton>
-                    )}
-                  </Box>
-                ))}
-              </Box>
-            ) : null}
-            <Typography variant="caption" color="text.secondary">
-              {imageEntries.filter((e) => e.status === "done").length} image{imageEntries.filter((e) => e.status === "done").length === 1 ? "" : "s"} ready
-            </Typography>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setImagesTarget(null)} disabled={imagesSaving} sx={{ textTransform: "none" }}>Cancel</Button>
-          <Button variant="contained" onClick={handleImagesSave} disabled={imagesSaving || imageEntries.some((e) => e.status === "uploading")} startIcon={imagesSaving ? <CircularProgress size={16} color="inherit" /> : null} sx={{ textTransform: "none", fontWeight: 900 }}>
-            Save images
+          <Button onClick={closeEdit} disabled={editSaving} sx={{ textTransform: "none" }}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleEditSave}
+            disabled={editSaving || !editName.trim() || imageEntries.some((e) => e.status === "uploading")}
+            startIcon={editSaving ? <CircularProgress size={16} color="inherit" /> : null}
+            sx={{ textTransform: "none", fontWeight: 900 }}
+          >
+            Save changes
           </Button>
         </DialogActions>
       </Dialog>
