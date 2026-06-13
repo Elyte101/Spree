@@ -1,16 +1,46 @@
 import "server-only";
 
+import sharp from "sharp";
 import { auth } from "@/auth";
 import { canCreateProductsRole } from "@/lib/roles";
 
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 5 * 1024 * 1024;
 const BUCKET = "product-images";
 
-const EXT: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
+type WebFormat = "jpeg" | "png" | "webp";
+type SniffResult = WebFormat | "heic" | "tiff" | "unknown";
+
+/**
+ * Detect the actual image format from magic bytes, not the browser-reported
+ * MIME type. This catches HEIC files renamed to .jpg (common on iOS).
+ */
+function sniffFormat(buf: Uint8Array): SniffResult {
+  if (buf.length < 12) return "unknown";
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return "jpeg";
+  // PNG: 89 50 4E 47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return "png";
+  // WebP: RIFF .... WEBP
+  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) return "webp";
+  // HEIC/HEIF: ISO Base Media (ftyp box starting at byte 4)
+  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return "heic";
+  // TIFF: little-endian (II) or big-endian (MM)
+  if ((buf[0] === 0x49 && buf[1] === 0x49 && buf[2] === 0x2A && buf[3] === 0x00) ||
+      (buf[0] === 0x4D && buf[1] === 0x4D && buf[2] === 0x00 && buf[3] === 0x2A)) return "tiff";
+  return "unknown";
+}
+
+const EXT: Record<WebFormat, string> = {
+  jpeg: ".jpg",
+  png: ".png",
+  webp: ".webp",
+};
+
+const CONTENT_TYPE: Record<WebFormat, string> = {
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
 };
 
 function supabaseUrl(): string {
@@ -31,7 +61,6 @@ async function ensureBucket(base: string, key: string): Promise<void> {
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ id: BUCKET, name: BUCKET, public: true, file_size_limit: MAX_BYTES }),
   });
-  // 400 means bucket already exists — that's fine
   if (!res.ok && res.status !== 400) {
     const text = await res.text();
     throw new Error(`Bucket setup failed: ${res.status} ${text}`);
@@ -55,16 +84,43 @@ export async function POST(request: Request): Promise<Response> {
   if (!(file instanceof File)) {
     return Response.json({ error: "No file provided" }, { status: 400 });
   }
-
-  const mime = file.type.toLowerCase().split(";")[0].trim();
-  if (!ALLOWED_TYPES.has(mime)) {
-    return Response.json({ error: "Only JPEG, PNG, and WebP images are accepted" }, { status: 400 });
-  }
   if (file.size === 0) {
     return Response.json({ error: "File is empty" }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
     return Response.json({ error: "File must be under 5 MB" }, { status: 413 });
+  }
+
+  const rawBytes = await file.arrayBuffer();
+  const sniffed = sniffFormat(new Uint8Array(rawBytes));
+
+  let finalFormat: WebFormat;
+  let finalBytes: Uint8Array;
+
+  if (sniffed === "jpeg" || sniffed === "png" || sniffed === "webp") {
+    // Recognised web format — pass through as-is
+    finalFormat = sniffed;
+    finalBytes = new Uint8Array(rawBytes);
+  } else if (sniffed === "heic" || sniffed === "tiff") {
+    // Non-web format (HEIC from iOS, TIFF from scanners/pro cameras) — convert to JPEG
+    console.log(`[product-images] converting ${sniffed.toUpperCase()} → JPEG for ${file.name}`);
+    try {
+      const buf = await sharp(Buffer.from(rawBytes)).jpeg({ quality: 90 }).toBuffer();
+      finalBytes = new Uint8Array(buf);
+      finalFormat = "jpeg";
+    } catch (err) {
+      console.error("[product-images] sharp conversion failed:", err);
+      return Response.json(
+        { error: "Could not convert image. Please export as JPEG, PNG, or WebP and try again." },
+        { status: 422 }
+      );
+    }
+  } else {
+    // Unknown or unsupported format
+    return Response.json(
+      { error: "Only JPEG, PNG, WebP, and HEIC images are accepted" },
+      { status: 400 }
+    );
   }
 
   let base: string;
@@ -83,14 +139,15 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "Storage setup failed" }, { status: 503 });
   }
 
-  const ext = EXT[mime];
-  const path = `${session.user.id}/${crypto.randomUUID()}${ext}`;
-  const bytes = await file.arrayBuffer();
+  const path = `${session.user.id}/${crypto.randomUUID()}${EXT[finalFormat]}`;
 
   const upload = await fetch(`${base}/storage/v1/object/${BUCKET}/${path}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": mime },
-    body: bytes,
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": CONTENT_TYPE[finalFormat],
+    },
+    body: finalBytes.buffer as ArrayBuffer,
   });
 
   if (!upload.ok) {

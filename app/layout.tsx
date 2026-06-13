@@ -51,7 +51,7 @@ export default async function RootLayout({
         {/* eslint-disable react/no-danger, @next/next/no-sync-scripts */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem('spree-theme-mode'),d=s==='dark'||(s===null&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.style.background='#0C0B14';document.documentElement.style.color='#F0EEFF';document.documentElement.style.colorScheme='dark';}}catch(e){}}())`,
+            __html: `(function(){try{var s=localStorage.getItem('spree-theme-mode'),d=s==='dark'||(s===null&&window.matchMedia('(prefers-color-scheme: dark)').matches),e=document.documentElement;if(d){e.style.background='#0C0B14';e.style.color='#F0EEFF';e.style.colorScheme='dark';}else{e.style.background='#F5F4FF';e.style.color='#0F0E1A';e.style.colorScheme='light';}}catch(e){}}())`,
           }}
         />
         {/* eslint-enable react/no-danger, @next/next/no-sync-scripts */}
@@ -64,7 +64,7 @@ export default async function RootLayout({
                 <CartProvider initialCart={initialCart}>
                   <StoreAppBar />
                   <Analytics />
-                  <main style={{ flex: 1, paddingTop: "72px" }}>
+                  <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
                     {children}
                   </main>
                 </CartProvider>

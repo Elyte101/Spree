@@ -12,4 +12,7 @@ body {
 body {
   margin: 0;
   font-family: var(--font-nunito-sans), var(--font-rubik), "Helvetica Neue", Arial, sans-serif;
+  /* Inherit the background set on <html> by the blocking script before JS hydrates.
+     MUI GlobalStyles overrides this with the active palette color after hydration. */
+  background-color: inherit;
 }
