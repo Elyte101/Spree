@@ -16,6 +16,7 @@ import {
   Card,
   Chip,
   IconButton,
+  Skeleton,
   Stack,
   Typography,
 } from "@mui/material";
@@ -36,6 +37,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const [lastAddedAt, setLastAddedAt] = React.useState(0);
   const [hovered, setHovered] = React.useState(false);
+  const [imgLoaded, setImgLoaded] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
   const liked = isFavorite(product.id);
   const recentlyAdded = lastAddedAt > 0;
@@ -55,8 +57,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
     return () => window.clearTimeout(id);
   }, [recentlyAdded, lastAddedAt]);
 
-  // Reset image error state when the displayed image src changes
+  // Reset both image states when the displayed src changes (e.g. hover to second image)
   React.useEffect(() => {
+    setImgLoaded(false);
     setImgError(false);
   }, [heroImage]);
 
@@ -119,18 +122,32 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 style={{ position: "absolute", inset: 0 }}
               >
                 {!imgError ? (
-                  <Image
-                    src={heroImage}
-                    alt={product.name}
-                    fill
-                    sizes={
-                      isCompact
-                        ? "(max-width: 600px) 100vw, 33vw"
-                        : "(max-width: 900px) 100vw, 420px"
-                    }
-                    style={{ objectFit: "contain", padding: "12px" }}
-                    onError={() => setImgError(true)}
-                  />
+                  <>
+                    {!imgLoaded && (
+                      <Skeleton
+                        variant="rounded"
+                        sx={{ position: "absolute", inset: 0, transform: "none" }}
+                      />
+                    )}
+                    <Image
+                      src={heroImage}
+                      alt={product.name}
+                      fill
+                      sizes={
+                        isCompact
+                          ? "(max-width: 600px) 100vw, 33vw"
+                          : "(max-width: 900px) 100vw, 420px"
+                      }
+                      style={{
+                        objectFit: "contain",
+                        padding: "12px",
+                        opacity: imgLoaded ? 1 : 0,
+                        transition: "opacity 0.2s ease",
+                      }}
+                      onLoad={() => setImgLoaded(true)}
+                      onError={() => setImgError(true)}
+                    />
+                  </>
                 ) : (
                   <Stack
                     alignItems="center"
