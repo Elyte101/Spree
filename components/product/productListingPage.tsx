@@ -158,8 +158,16 @@ export function ProductListingPage({
     sort === initialCatalog.sort &&
     page === initialCatalog.page;
 
-  const boundsMin = initialCatalog.filters.priceRange.min;
-  const boundsMax = initialCatalog.filters.priceRange.max;
+  // Prefer backend-supplied price range; fall back to computing from the
+  // first-page items when the backend returns the 0/0 placeholder default.
+  const rawBoundsMin = initialCatalog.filters.priceRange.min;
+  const rawBoundsMax = initialCatalog.filters.priceRange.max;
+  const [boundsMin, boundsMax] = (() => {
+    if (rawBoundsMin < rawBoundsMax) return [rawBoundsMin, rawBoundsMax];
+    const prices = initialCatalog.items.map((p) => p.price).filter((p) => p > 0);
+    if (!prices.length) return [0, 0];
+    return [Math.floor(Math.min(...prices)), Math.ceil(Math.max(...prices))];
+  })();
   const hasPriceBounds = boundsMax > boundsMin;
   const [localPriceRange, setLocalPriceRange] = React.useState<[number, number]>([
     minPrice ?? boundsMin,
@@ -217,6 +225,10 @@ export function ProductListingPage({
 
   const [filterDrawerOpen, setFilterDrawerOpen] = React.useState(false);
   const [searchFocused, setSearchFocused] = React.useState(false);
+  // Blur-delay ref: onBlur sets a 200ms timeout before hiding suggestions.
+  // onFocus and onMouseDown on a suggestion both cancel it, so clicking a
+  // suggestion always fires before the dropdown disappears.
+  const suggBlurTimer = React.useRef<number | null>(null);
   const hasActiveFilters = Boolean(
     selectedCategory || selectedBrand || selectedCollection || inStockOnly || sort !== "featured"
     || minPrice !== undefined || maxPrice !== undefined
@@ -399,8 +411,13 @@ export function ProductListingPage({
                   setSearchInput(e.target.value);
                   setPage(1);
                 }}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
+                onFocus={() => {
+                  if (suggBlurTimer.current) window.clearTimeout(suggBlurTimer.current);
+                  setSearchFocused(true);
+                }}
+                onBlur={() => {
+                  suggBlurTimer.current = window.setTimeout(() => setSearchFocused(false), 200);
+                }}
                 placeholder="Search products, brands, tags…"
                 fullWidth
                 inputProps={{ "aria-label": "search products" }}
@@ -441,6 +458,7 @@ export function ProductListingPage({
                       key={`${s.type}-${s.id}`}
                       onMouseDown={(e) => {
                         e.preventDefault();
+                        if (suggBlurTimer.current !== null) window.clearTimeout(suggBlurTimer.current);
                         if (s.type === "category") {
                           setSearchInput("");
                           setSelectedCategory(s.label);
