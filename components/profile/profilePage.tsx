@@ -48,7 +48,6 @@ import { canCreateProductsRole } from "@/lib/roles";
 import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
 import { GHANA_ID_TYPES, COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
-import { SellerApplicationWizard } from "@/components/profile/sellerApplicationWizard";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -65,7 +64,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const sellerSectionRef = React.useRef<HTMLDivElement | null>(null);
   const [profile, setProfile] = React.useState(initialProfile);
   const [sellerMode, setSellerMode] = React.useState(initialProfile.role === "seller");
-  const [wizardOpen, setWizardOpen] = React.useState(false);
+
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
@@ -228,13 +227,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const handleBecomeSeller = () => setWizardOpen(true);
-
-  const handleWizardSuccess = async () => {
-    await update();
-    router.refresh();
-  };
-
   const handleUploadDocs = async () => {
     if (!idFront && !idBack && !selfie) return;
     setDocsError(null);
@@ -343,10 +335,10 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               ) : null}
               {!sellerSwitchChecked && !isAdmin ? (
                 <Button
-                  type="button"
+                  component={Link}
+                  href="/seller/apply"
                   variant="contained"
                   startIcon={<AddBusinessRounded />}
-                  onClick={handleBecomeSeller}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
                   Become a seller
@@ -1200,12 +1192,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         </Box>
       </Stack>
 
-      <SellerApplicationWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        profile={profile}
-        onSuccess={handleWizardSuccess}
-      />
     </Box>
   );
 }

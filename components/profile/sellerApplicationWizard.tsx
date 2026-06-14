@@ -1,6 +1,9 @@
 'use client';
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   ArrowBackRounded,
   ArrowForwardRounded,
@@ -23,15 +26,14 @@ import {
   Box,
   Button,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
+  Container,
   FormControl,
   FormHelperText,
   IconButton,
   InputLabel,
+  LinearProgress,
   MenuItem,
+  Paper,
   Select,
   Stack,
   Step,
@@ -104,7 +106,18 @@ const STEP_LABELS = [
   "Review",
 ];
 
-// Maps server field names (from 422 responses) to wizard step indexes
+const STEP_ICONS = [
+  null,
+  <StoreRounded key="store" fontSize="inherit" />,
+  <PlaceRounded key="place" fontSize="inherit" />,
+  <ContactPhoneRounded key="contact" fontSize="inherit" />,
+  <LocalShippingRounded key="shipping" fontSize="inherit" />,
+  <PaymentRounded key="payment" fontSize="inherit" />,
+  <BadgeRounded key="badge" fontSize="inherit" />,
+  <CheckRounded key="check" fontSize="inherit" />,
+];
+
+// Maps server field names to wizard step indexes for 422 routing
 const FIELD_TO_STEP: Record<string, number> = {
   name: 0, email: 0,
   storeName: 1, storeDescription: 1, sellerType: 1,
@@ -133,7 +146,7 @@ function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
 }
 
-// ── Image validation (canvas-based, browser-only) ─────────────────────────────
+// ── Image validation ───────────────────────────────────────────────────────────
 
 function loadImg(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -144,10 +157,7 @@ function loadImg(src: string): Promise<HTMLImageElement> {
   });
 }
 
-async function validateIdImage(
-  file: File,
-  slot: "front" | "back" | "selfie",
-): Promise<ImgCheckResult> {
+async function validateIdImage(file: File, slot: "front" | "back" | "selfie"): Promise<ImgCheckResult> {
   const blocking: string[] = [];
   const warnings: string[] = [];
 
@@ -155,44 +165,33 @@ async function validateIdImage(
     blocking.push("Upload a JPEG, PNG, or WebP image.");
     return { blocking, warnings };
   }
-  if (file.size < 30 * 1024) {
-    blocking.push("Image is too small (minimum 30 KB). Use a higher-quality photo.");
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    blocking.push("Image exceeds 10 MB. Please compress it before uploading.");
-  }
+  if (file.size < 30 * 1024) blocking.push("Image is too small (min 30 KB). Use a higher-quality photo.");
+  if (file.size > 10 * 1024 * 1024) blocking.push("Image exceeds 10 MB. Please compress it.");
   if (blocking.length) return { blocking, warnings };
 
   const url = URL.createObjectURL(file);
   try {
     const img = await loadImg(url);
-    const w = img.naturalWidth;
-    const h = img.naturalHeight;
+    const w = img.naturalWidth, h = img.naturalHeight;
 
     if (Math.max(w, h) < 1000) {
       blocking.push(`Resolution too low (${w}×${h} px). Long edge must be ≥1000 px.`);
     }
-
     if (slot !== "selfie") {
       const ratio = Math.max(w, h) / Math.min(w, h);
-      if (ratio < 1.2 || ratio > 2.2) {
-        warnings.push("Photograph the full ID card in landscape for best results.");
-      }
+      if (ratio < 1.2 || ratio > 2.2) warnings.push("Photograph the full ID card in landscape for best results.");
     }
 
-    // Scale down for fast analysis
     const scale = Math.min(1, 400 / Math.max(w, h, 1));
     const cw = Math.max(1, Math.round(w * scale));
     const ch = Math.max(1, Math.round(h * scale));
     const canvas = document.createElement("canvas");
-    canvas.width = cw;
-    canvas.height = ch;
+    canvas.width = cw; canvas.height = ch;
     const ctx = canvas.getContext("2d");
     if (!ctx) return { blocking, warnings };
     ctx.drawImage(img, 0, 0, cw, ch);
     const { data: px } = ctx.getImageData(0, 0, cw, ch);
 
-    // Mean luminance
     let totalLum = 0;
     const count = cw * ch;
     for (let i = 0; i < px.length; i += 4) {
@@ -202,34 +201,27 @@ async function validateIdImage(
     if (meanLum < 45) blocking.push("Image is too dark. Retake in better lighting.");
     else if (meanLum > 240) warnings.push("Image may be overexposed — check that text is readable.");
 
-    // Variance of Laplacian (sharpness)
     let lapSum = 0, lapSqSum = 0;
     const lapCount = (cw - 2) * (ch - 2);
     for (let y = 1; y < ch - 1; y++) {
       for (let x = 1; x < cw - 1; x++) {
-        const gray = (idx: number) =>
-          0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
-        const c = gray((y * cw + x) * 4);
-        const t = gray(((y - 1) * cw + x) * 4);
-        const b = gray(((y + 1) * cw + x) * 4);
-        const l = gray((y * cw + (x - 1)) * 4);
-        const r = gray((y * cw + (x + 1)) * 4);
+        const g = (idx: number) => 0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
+        const c = g((y * cw + x) * 4);
+        const t = g(((y - 1) * cw + x) * 4);
+        const b = g(((y + 1) * cw + x) * 4);
+        const l = g((y * cw + (x - 1)) * 4);
+        const r = g((y * cw + (x + 1)) * 4);
         const lap = Math.abs(-4 * c + t + b + l + r);
-        lapSum += lap;
-        lapSqSum += lap * lap;
+        lapSum += lap; lapSqSum += lap * lap;
       }
     }
     const lapMean = lapSum / lapCount;
     const lapVar = lapSqSum / lapCount - lapMean * lapMean;
-    if (lapVar < 40) {
-      blocking.push("Image is blurry. Hold the camera still and ensure the ID is in sharp focus.");
-    } else if (lapVar < 100) {
-      warnings.push("Image may be slightly blurry — sharper photos speed up review.");
-    }
+    if (lapVar < 40) blocking.push("Image is blurry. Hold the camera still and keep the ID in focus.");
+    else if (lapVar < 100) warnings.push("Image may be slightly blurry — sharper photos speed up review.");
   } finally {
     URL.revokeObjectURL(url);
   }
-
   return { blocking, warnings };
 }
 
@@ -258,9 +250,7 @@ function validateStep(
     if (!data.storeState.trim()) e.storeState = "Region / state is required.";
   }
   if (step === 3) {
-    if (!data.businessPhone.trim() || data.businessPhone.trim() === "") {
-      e.businessPhone = "Business phone is required.";
-    }
+    if (!data.businessPhone.trim()) e.businessPhone = "Business phone is required.";
   }
   if (step === 6) {
     if (!data.governmentIdType) e.governmentIdType = "Select your ID type.";
@@ -275,7 +265,7 @@ function validateStep(
   return e;
 }
 
-// ── Initial data ──────────────────────────────────────────────────────────────
+// ── Initial data from profile + draft ─────────────────────────────────────────
 
 function buildInitialData(profile: UserProfile): WizardData {
   const d = loadDraft();
@@ -290,7 +280,7 @@ function buildInitialData(profile: UserProfile): WizardData {
     storeCity:          d?.storeCity          ?? profile.storeLocation?.city         ?? "",
     storeState:         d?.storeState         ?? profile.storeLocation?.state        ?? "",
     storePostalCode:    d?.storePostalCode    ?? profile.storeLocation?.postalCode   ?? "",
-    storeCountry:       (d?.storeCountry       ?? profile.storeLocation?.country)      || "Ghana",
+    storeCountry:       (d?.storeCountry      ?? profile.storeLocation?.country)     || "Ghana",
     businessEmail:      d?.businessEmail      ?? profile.sellerContact?.businessEmail     ?? "",
     businessPhone:      d?.businessPhone      ?? profile.sellerContact?.businessPhone     ?? "",
     whatsapp:           d?.whatsapp           ?? profile.sellerContact?.whatsapp          ?? "",
@@ -301,7 +291,7 @@ function buildInitialData(profile: UserProfile): WizardData {
     shipCity:           d?.shipCity           ?? profile.shippingAddress?.city          ?? "",
     shipState:          d?.shipState          ?? profile.shippingAddress?.state         ?? "",
     shipPostalCode:     d?.shipPostalCode     ?? profile.shippingAddress?.postalCode    ?? "",
-    shipCountry:        (d?.shipCountry        ?? profile.shippingAddress?.country)       || "Ghana",
+    shipCountry:        (d?.shipCountry       ?? profile.shippingAddress?.country)      || "Ghana",
     paymentMethod:      d?.paymentMethod      ?? profile.paymentInfo?.method            ?? "card",
     cardholderName:     d?.cardholderName     ?? profile.paymentInfo?.cardholderName    ?? "",
     cardLast4:          d?.cardLast4          ?? profile.paymentInfo?.cardLast4         ?? "",
@@ -314,6 +304,45 @@ function buildInitialData(profile: UserProfile): WizardData {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+// Country/Region selects render inside the page (not inside a Dialog), so z-index is just 1
+const MENU_SX = { "& .MuiPaper-root": { bgcolor: "background.paper", maxHeight: 300 } };
+
+function CountrySelect({ value, onChange, error, required }: {
+  value: string; onChange: (v: string) => void; error?: string; required?: boolean;
+}) {
+  return (
+    <FormControl fullWidth error={!!error} required={required}>
+      <InputLabel>Country</InputLabel>
+      <Select label="Country" value={value || "Ghana"} onChange={(e) => onChange(e.target.value)} MenuProps={{ sx: MENU_SX }}>
+        {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+      </Select>
+      {error && <FormHelperText>{error}</FormHelperText>}
+    </FormControl>
+  );
+}
+
+function RegionSelect({ country, value, onChange, error, required }: {
+  country: string; value: string; onChange: (v: string) => void; error?: string; required?: boolean;
+}) {
+  const regions = getRegionsForCountry(country);
+  const label = getRegionLabel(country);
+  if (regions) {
+    return (
+      <FormControl fullWidth error={!!error} required={required}>
+        <InputLabel>{label}</InputLabel>
+        <Select label={label} value={value} onChange={(e) => onChange(e.target.value)} MenuProps={{ sx: MENU_SX }}>
+          {regions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+        </Select>
+        {error && <FormHelperText>{error}</FormHelperText>}
+      </FormControl>
+    );
+  }
+  return (
+    <TextField label={label} value={value} onChange={(e) => onChange(e.target.value)}
+      error={!!error} helperText={error} required={required} fullWidth />
+  );
+}
 
 interface DropzoneProps {
   label: string;
@@ -331,13 +360,6 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
   const [dragging, setDragging] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) onFile(f);
-  };
-
   return (
     <Box>
       <Box
@@ -348,17 +370,13 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click(); } }}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
         sx={(theme) => ({
           position: "relative",
-          minHeight: 120,
+          minHeight: 130,
           borderRadius: 2,
           border: "2px dashed",
-          borderColor: error
-            ? "error.main"
-            : dragging
-              ? "primary.main"
-              : theme.palette.divider,
+          borderColor: error ? "error.main" : dragging ? "primary.main" : theme.palette.divider,
           bgcolor: dragging ? alpha(theme.palette.primary.main, 0.06) : "background.paper",
           cursor: "pointer",
           display: "flex",
@@ -366,10 +384,7 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
           justifyContent: "center",
           overflow: "hidden",
           transition: "border-color 0.2s ease, background-color 0.2s ease",
-          "&:focus-visible": {
-            outline: `2px solid ${theme.palette.primary.main}`,
-            outlineOffset: 2,
-          },
+          "&:focus-visible": { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
         })}
       >
         <input
@@ -377,37 +392,23 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
           type="file"
           accept="image/jpeg,image/png,image/webp"
           hidden
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFile(f);
-            e.target.value = "";
-          }}
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
         />
         {thumbnail ? (
           <>
-            <Box
-              component="img"
-              src={thumbnail}
-              alt={label}
-              sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-            />
-            <Box
-              sx={{
-                position: "absolute", inset: 0,
-                bgcolor: "rgba(0,0,0,0.38)",
-                display: "flex", alignItems: "flex-end", p: 1,
-              }}
-            >
+            <Box component="img" src={thumbnail} alt={label}
+              sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            <Box sx={{ position: "absolute", inset: 0, bgcolor: "rgba(0,0,0,0.38)", display: "flex", alignItems: "flex-end", p: 1 }}>
               <Typography variant="caption" color="white" fontWeight={700} noWrap sx={{ maxWidth: "100%" }}>
                 {file?.name}
               </Typography>
             </Box>
           </>
         ) : (
-          <Stack alignItems="center" spacing={0.75} sx={{ py: 1.5, px: 2, pointerEvents: "none" }}>
+          <Stack alignItems="center" spacing={0.75} sx={{ py: 2, px: 2, pointerEvents: "none" }}>
             {checking
-              ? <CircularProgress size={24} />
-              : <Box sx={{ fontSize: 32, color: "text.secondary", display: "flex" }}>{icon}</Box>
+              ? <CircularProgress size={26} />
+              : <Box sx={{ fontSize: 34, color: "text.secondary", display: "flex" }}>{icon}</Box>
             }
             <Typography variant="body2" fontWeight={700} textAlign="center">{label}</Typography>
             <Typography variant="caption" color="text.secondary" textAlign="center">
@@ -416,130 +417,39 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
           </Stack>
         )}
       </Box>
-
       {file && (
         <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 0.5 }}>
-          <Button
-            size="small"
-            color="error"
+          <Button size="small" color="error"
             startIcon={<DeleteOutlineRounded fontSize="small" />}
             onClick={(e) => { e.stopPropagation(); onClear(); }}
-            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.72rem", minWidth: 0 }}
-          >
+            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.72rem" }}>
             Remove
           </Button>
         </Box>
       )}
-
-      {checking && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
-          Checking image quality…
-        </Typography>
-      )}
-      {!checking && error && (
-        <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>
-          {error}
-        </Typography>
-      )}
-      {!checking && !error && warning && (
-        <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>
-          {warning}
-        </Typography>
-      )}
+      {checking && <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>Checking image…</Typography>}
+      {!checking && error && <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>{error}</Typography>}
+      {!checking && !error && warning && <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>{warning}</Typography>}
     </Box>
   );
 }
 
-// Country + Region selects with proper dialog z-index
-const MENU_SX = { zIndex: 1500, "& .MuiPaper-root": { bgcolor: "background.paper", maxHeight: 300 } };
+// ── Wizard page component ─────────────────────────────────────────────────────
 
-interface CountrySelectProps {
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-  required?: boolean;
-}
-
-function CountrySelect({ value, onChange, error, required }: CountrySelectProps) {
-  return (
-    <FormControl fullWidth error={!!error} required={required}>
-      <InputLabel>Country</InputLabel>
-      <Select
-        label="Country"
-        value={value || "Ghana"}
-        onChange={(e) => onChange(e.target.value)}
-        MenuProps={{ sx: MENU_SX }}
-      >
-        {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-      </Select>
-      {error && <FormHelperText>{error}</FormHelperText>}
-    </FormControl>
-  );
-}
-
-interface RegionSelectProps {
-  country: string;
-  value: string;
-  onChange: (v: string) => void;
-  error?: string;
-  required?: boolean;
-}
-
-function RegionSelect({ country, value, onChange, error, required }: RegionSelectProps) {
-  const regions = getRegionsForCountry(country);
-  const label = getRegionLabel(country);
-  if (regions) {
-    return (
-      <FormControl fullWidth error={!!error} required={required}>
-        <InputLabel>{label}</InputLabel>
-        <Select
-          label={label}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          MenuProps={{ sx: MENU_SX }}
-        >
-          {regions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-        </Select>
-        {error && <FormHelperText>{error}</FormHelperText>}
-      </FormControl>
-    );
-  }
-  return (
-    <TextField
-      label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      error={!!error}
-      helperText={error}
-      required={required}
-      fullWidth
-    />
-  );
-}
-
-// ── Wizard component ──────────────────────────────────────────────────────────
-
-export interface SellerApplicationWizardProps {
-  open: boolean;
-  onClose: () => void;
-  profile: UserProfile;
-  onSuccess: () => void;
-}
-
-export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: SellerApplicationWizardProps) {
+export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
+  const router = useRouter();
+  const { update } = useSession();
   const theme = useTheme();
-  const fullScreen = useMediaQuery(theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [step, setStep] = React.useState(0);
   const [data, setData] = React.useState<WizardData>(() => buildInitialData(profile));
   const [errors, setErrors] = React.useState<StepErrors>({});
   const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(new Set());
-  const [discardOpen, setDiscardOpen] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = React.useState(false);
 
-  // Identity document files
   const [idFront, setIdFront] = React.useState<File | null>(null);
   const [idBack, setIdBack] = React.useState<File | null>(null);
   const [idSelfie, setIdSelfie] = React.useState<File | null>(null);
@@ -554,29 +464,9 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
   const [errSelfie, setErrSelfie] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
 
   // Auto-save draft
-  React.useEffect(() => {
-    if (open) saveDraft(data);
-  }, [data, open]);
+  React.useEffect(() => { saveDraft(data); }, [data]);
 
-  // Reset when re-opened
-  React.useEffect(() => {
-    if (open) {
-      setData(buildInitialData(profile));
-      setStep(0);
-      setErrors({});
-      setCompletedSteps(new Set());
-      setServerError(null);
-      setSubmitSuccess(false);
-      setIdFront(null); setIdBack(null); setIdSelfie(null);
-      setThumbFront(null); setThumbBack(null); setThumbSelfie(null);
-      setErrFront({ blocking: [], warnings: [] });
-      setErrBack({ blocking: [], warnings: [] });
-      setErrSelfie({ blocking: [], warnings: [] });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  // Cleanup object URLs on unmount
+  // Cleanup object URLs
   React.useEffect(() => {
     return () => {
       if (thumbFront) URL.revokeObjectURL(thumbFront);
@@ -597,22 +487,17 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
 
   // ── File handling ──────────────────────────────────────────────────────────
 
-  const handleIdFile = React.useCallback(async (
-    slot: "front" | "back" | "selfie",
-    file: File,
-  ) => {
+  const handleIdFile = React.useCallback(async (slot: "front" | "back" | "selfie", file: File) => {
     const setFile = slot === "front" ? setIdFront : slot === "back" ? setIdBack : setIdSelfie;
     const setThumb = slot === "front" ? setThumbFront : slot === "back" ? setThumbBack : setThumbSelfie;
     const setChecking = slot === "front" ? setCheckingFront : slot === "back" ? setCheckingBack : setCheckingSelfie;
     const setImgErr = slot === "front" ? setErrFront : slot === "back" ? setErrBack : setErrSelfie;
     const errKey = slot === "front" ? "idFront" : slot === "back" ? "idBack" : "selfie";
-
     const prevThumb = slot === "front" ? thumbFront : slot === "back" ? thumbBack : thumbSelfie;
-    if (prevThumb) URL.revokeObjectURL(prevThumb);
 
-    const url = URL.createObjectURL(file);
+    if (prevThumb) URL.revokeObjectURL(prevThumb);
     setFile(file);
-    setThumb(url);
+    setThumb(URL.createObjectURL(file));
     setImgErr({ blocking: [], warnings: [] });
     setChecking(true);
     clearError(errKey);
@@ -620,19 +505,16 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
     const result = await validateIdImage(file, slot);
     setImgErr(result);
     setChecking(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbFront, thumbBack, thumbSelfie]);
 
   const clearIdFile = (slot: "front" | "back" | "selfie") => {
     const setFile = slot === "front" ? setIdFront : slot === "back" ? setIdBack : setIdSelfie;
     const setThumb = slot === "front" ? setThumbFront : slot === "back" ? setThumbBack : setThumbSelfie;
-    const prevThumb = slot === "front" ? thumbFront : slot === "back" ? thumbBack : thumbSelfie;
     const setImgErr = slot === "front" ? setErrFront : slot === "back" ? setErrBack : setErrSelfie;
-
+    const prevThumb = slot === "front" ? thumbFront : slot === "back" ? thumbBack : thumbSelfie;
     if (prevThumb) URL.revokeObjectURL(prevThumb);
-    setFile(null);
-    setThumb(null);
-    setImgErr({ blocking: [], warnings: [] });
+    setFile(null); setThumb(null); setImgErr({ blocking: [], warnings: [] });
   };
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -642,34 +524,28 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
 
   const handleNext = () => {
     const errs = validateStep(step, data, idFiles, imgErrors);
-    if (Object.keys(errs).length) {
-      setErrors(errs);
-      return;
-    }
+    if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
     setCompletedSteps((s) => new Set([...s, step]));
     setStep((s) => s + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleBack = () => {
     setErrors({});
-    setStep((s) => s - 1);
+    if (step === 0) {
+      router.push("/profile");
+    } else {
+      setStep((s) => s - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   };
 
   const handleStepClick = (idx: number) => {
     if (completedSteps.has(idx) || idx === step) {
       setErrors({});
       setStep(idx);
-    }
-  };
-
-  const attemptClose = () => {
-    const hasDraft = !!loadDraft();
-    const isDirty = !!data.name || !!data.storeName || step > 0;
-    if (hasDraft || isDirty) {
-      setDiscardOpen(true);
-    } else {
-      onClose();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -680,7 +556,6 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
     setServerError(null);
 
     try {
-      // Upload identity documents
       if (idFront || idBack || idSelfie) {
         const fd = new FormData();
         if (idFront) fd.append("id_front", idFront);
@@ -693,7 +568,6 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
         }
       }
 
-      // PUT profile
       const payload = {
         name: data.name.trim(),
         email: data.email.trim(),
@@ -747,11 +621,7 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
       });
 
       if (!res.ok) {
-        const body = (await res.json()) as {
-          detail?: string;
-          errors?: Record<string, string>;
-        };
-        // Route to the offending step on 422
+        const body = (await res.json()) as { detail?: string; errors?: Record<string, string> };
         if (res.status === 422 && body.errors) {
           for (const [field, msg] of Object.entries(body.errors)) {
             const stepIdx = FIELD_TO_STEP[field];
@@ -768,10 +638,8 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
 
       clearDraft();
       setSubmitSuccess(true);
-      setTimeout(() => {
-        onClose();
-        onSuccess();
-      }, 2200);
+      await update();
+      setTimeout(() => router.push("/profile"), 2400);
     } catch (err) {
       setServerError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
     } finally {
@@ -782,211 +650,121 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
   // ── Step content ───────────────────────────────────────────────────────────
 
   const steps: React.ReactNode[] = [
-    /* 0: Get Started */
+    /* 0 */
     <Stack key="s0" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
-        Let us know who you are. This name and email will be visible on your store.
+        Let us know who you are. This name and email will appear on your store.
       </Typography>
-      <TextField
-        label="Display name"
-        value={data.name}
+      <TextField label="Display name" value={data.name} required fullWidth autoFocus
         onChange={(e) => { updateField("name")(e); clearError("name"); }}
-        error={!!errors.name}
-        helperText={errors.name}
-        required
-        fullWidth
-        autoFocus
-        inputProps={{ "aria-invalid": !!errors.name, "aria-describedby": errors.name ? "err-name" : undefined }}
-      />
-      <TextField
-        label="Email address"
-        type="email"
-        value={data.email}
+        error={!!errors.name} helperText={errors.name}
+        inputProps={{ "aria-invalid": !!errors.name }} />
+      <TextField label="Email address" type="email" value={data.email} required fullWidth
         onChange={(e) => { updateField("email")(e); clearError("email"); }}
-        error={!!errors.email}
-        helperText={errors.email}
-        required
-        fullWidth
-        inputProps={{ "aria-invalid": !!errors.email }}
-      />
+        error={!!errors.email} helperText={errors.email}
+        inputProps={{ "aria-invalid": !!errors.email }} />
     </Stack>,
 
-    /* 1: Your Store */
+    /* 1 */
     <Stack key="s1" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
         What is your store called, and what do you sell?
       </Typography>
-      <TextField
-        label="Store name"
-        value={data.storeName}
+      <TextField label="Store name" value={data.storeName} required fullWidth autoFocus
         onChange={(e) => { updateField("storeName")(e); clearError("storeName"); }}
-        error={!!errors.storeName}
-        helperText={errors.storeName}
-        required
-        fullWidth
-        autoFocus
-      />
-      <TextField
-        label="Store tagline"
-        value={data.storeTagline}
-        onChange={updateField("storeTagline")}
-        placeholder="One line that sums up your shop"
-        fullWidth
-      />
+        error={!!errors.storeName} helperText={errors.storeName} />
+      <TextField label="Store tagline" value={data.storeTagline} fullWidth
+        onChange={updateField("storeTagline")} placeholder="One line that sums up your shop" />
       <FormControl fullWidth>
         <InputLabel>Sell as</InputLabel>
-        <Select
-          label="Sell as"
-          value={data.sellerType}
+        <Select label="Sell as" value={data.sellerType}
           onChange={(e) => setField("sellerType", e.target.value as SellerType)}
-          MenuProps={{ sx: MENU_SX }}
-        >
+          MenuProps={{ sx: MENU_SX }}>
           <MenuItem value="retail">Retail seller</MenuItem>
           <MenuItem value="wholesale">Wholesale seller</MenuItem>
         </Select>
       </FormControl>
-      <TextField
-        label="Store description"
-        value={data.storeDescription}
+      <TextField label="Store description" value={data.storeDescription} required multiline minRows={3} fullWidth
         onChange={(e) => { updateField("storeDescription")(e); clearError("storeDescription"); }}
-        error={!!errors.storeDescription}
-        helperText={errors.storeDescription}
-        required
-        multiline
-        minRows={3}
-        fullWidth
-        placeholder="What do you sell? Who is your store for?"
-      />
+        error={!!errors.storeDescription} helperText={errors.storeDescription}
+        placeholder="What do you sell? Who is your store for?" />
     </Stack>,
 
-    /* 2: Store Location */
+    /* 2 */
     <Stack key="s2" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
         Where is your store based? This helps buyers know where orders ship from.
       </Typography>
-      <TextField
-        label="Store address"
-        value={data.storeAddressLine1}
+      <TextField label="Store address" value={data.storeAddressLine1} required fullWidth autoFocus
         onChange={(e) => { updateField("storeAddressLine1")(e); clearError("storeAddressLine1"); }}
-        error={!!errors.storeAddressLine1}
-        helperText={errors.storeAddressLine1}
-        required
-        fullWidth
-        autoFocus
-      />
-      <TextField
-        label="City"
-        value={data.storeCity}
+        error={!!errors.storeAddressLine1} helperText={errors.storeAddressLine1} />
+      <TextField label="City" value={data.storeCity} required fullWidth
         onChange={(e) => { updateField("storeCity")(e); clearError("storeCity"); }}
-        error={!!errors.storeCity}
-        helperText={errors.storeCity}
-        required
-        fullWidth
-      />
-      <CountrySelect
-        value={data.storeCountry}
-        onChange={(v) => {
-          setData((d) => ({ ...d, storeCountry: v, storeState: "" }));
-          clearError("storeCountry");
-        }}
-        error={errors.storeCountry}
-        required
-      />
-      <RegionSelect
-        country={data.storeCountry || "Ghana"}
-        value={data.storeState}
+        error={!!errors.storeCity} helperText={errors.storeCity} />
+      <CountrySelect value={data.storeCountry}
+        onChange={(v) => { setData((d) => ({ ...d, storeCountry: v, storeState: "" })); clearError("storeCountry"); }}
+        error={errors.storeCountry} required />
+      <RegionSelect country={data.storeCountry || "Ghana"} value={data.storeState}
         onChange={(v) => { setData((d) => ({ ...d, storeState: v })); clearError("storeState"); }}
-        error={errors.storeState}
-        required
-      />
-      <TextField
-        label="Postal code (optional)"
-        value={data.storePostalCode}
-        onChange={updateField("storePostalCode")}
-        fullWidth
-      />
+        error={errors.storeState} required />
+      <TextField label="Postal code (optional)" value={data.storePostalCode} fullWidth
+        onChange={updateField("storePostalCode")} />
     </Stack>,
 
-    /* 3: Business Details */
+    /* 3 */
     <Stack key="s3" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
         How should buyers and Spree reach you for business matters?
       </Typography>
-      <TextField
-        label="Business email (optional)"
-        type="email"
-        value={data.businessEmail}
-        onChange={updateField("businessEmail")}
-        fullWidth
-        autoFocus
-      />
+      <TextField label="Business email (optional)" type="email" value={data.businessEmail} fullWidth autoFocus
+        onChange={updateField("businessEmail")} />
       <Box>
-        <PhoneInput
-          label="Business phone"
-          value={data.businessPhone}
-          onChange={(v) => { setData((d) => ({ ...d, businessPhone: v })); clearError("businessPhone"); }}
-          required
-        />
+        <PhoneInput label="Business phone" value={data.businessPhone} required
+          onChange={(v) => { setData((d) => ({ ...d, businessPhone: v })); clearError("businessPhone"); }} />
         {errors.businessPhone && (
           <Typography variant="caption" color="error" sx={{ mt: 0.5, display: "block" }}>
             {errors.businessPhone}
           </Typography>
         )}
       </Box>
-      <PhoneInput
-        label="WhatsApp (optional)"
-        value={data.whatsapp}
-        onChange={(v) => setData((d) => ({ ...d, whatsapp: v }))}
-      />
-      <TextField
-        label="Business registration number (optional)"
-        value={data.registrationNumber}
-        onChange={updateField("registrationNumber")}
-        fullWidth
-        helperText="Leave blank for sole traders"
-      />
+      <PhoneInput label="WhatsApp (optional)" value={data.whatsapp}
+        onChange={(v) => setData((d) => ({ ...d, whatsapp: v }))} />
+      <TextField label="Business registration number (optional)" value={data.registrationNumber} fullWidth
+        onChange={updateField("registrationNumber")} helperText="Leave blank for sole traders" />
     </Stack>,
 
-    /* 4: Shipping Information */
+    /* 4 */
     <Stack key="s4" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
         Where should orders be sent for dispatching? You can update this later.
       </Typography>
-      <TextField label="Full name" value={data.shipFullName} onChange={updateField("shipFullName")} fullWidth autoFocus />
-      <TextField label="Address line 1" value={data.shipAddressLine1} onChange={updateField("shipAddressLine1")} fullWidth />
-      <TextField label="Address line 2 (optional)" value={data.shipAddressLine2} onChange={updateField("shipAddressLine2")} fullWidth />
-      <TextField label="City" value={data.shipCity} onChange={updateField("shipCity")} fullWidth />
-      <CountrySelect
-        value={data.shipCountry}
-        onChange={(v) => setData((d) => ({ ...d, shipCountry: v, shipState: "" }))}
-      />
-      <RegionSelect
-        country={data.shipCountry || "Ghana"}
-        value={data.shipState}
-        onChange={(v) => setData((d) => ({ ...d, shipState: v }))}
-      />
-      <TextField label="Postal code (optional)" value={data.shipPostalCode} onChange={updateField("shipPostalCode")} fullWidth />
+      <TextField label="Full name" value={data.shipFullName} fullWidth autoFocus onChange={updateField("shipFullName")} />
+      <TextField label="Address line 1" value={data.shipAddressLine1} fullWidth onChange={updateField("shipAddressLine1")} />
+      <TextField label="Address line 2 (optional)" value={data.shipAddressLine2} fullWidth onChange={updateField("shipAddressLine2")} />
+      <TextField label="City" value={data.shipCity} fullWidth onChange={updateField("shipCity")} />
+      <CountrySelect value={data.shipCountry}
+        onChange={(v) => setData((d) => ({ ...d, shipCountry: v, shipState: "" }))} />
+      <RegionSelect country={data.shipCountry || "Ghana"} value={data.shipState}
+        onChange={(v) => setData((d) => ({ ...d, shipState: v }))} />
+      <TextField label="Postal code (optional)" value={data.shipPostalCode} fullWidth onChange={updateField("shipPostalCode")} />
     </Stack>,
 
-    /* 5: Payment Information */
+    /* 5 */
     <Stack key="s5" spacing={2.5}>
       <Alert severity="info" icon={false} sx={{ borderRadius: 2 }}>
-        Save reference details only — Spree never stores full card numbers or secrets. Payouts are handled via Paystack.
+        Save reference details only — Spree never stores full card numbers. Payouts are handled via Paystack.
       </Alert>
       <FormControl fullWidth>
         <InputLabel>Preferred payment method</InputLabel>
-        <Select
-          label="Preferred payment method"
-          value={data.paymentMethod}
+        <Select label="Preferred payment method" value={data.paymentMethod}
           onChange={(e) => setField("paymentMethod", e.target.value as WizardData["paymentMethod"])}
-          MenuProps={{ sx: MENU_SX }}
-        >
+          MenuProps={{ sx: MENU_SX }}>
           <MenuItem value="card">Card</MenuItem>
           <MenuItem value="paypal">PayPal</MenuItem>
           <MenuItem value="bank-transfer">Bank transfer</MenuItem>
         </Select>
       </FormControl>
-      <TextField label="Cardholder / account name" value={data.cardholderName} onChange={updateField("cardholderName")} fullWidth />
+      <TextField label="Cardholder / account name" value={data.cardholderName} fullWidth onChange={updateField("cardholderName")} />
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(2, 1fr)" }}>
         <TextField label="Card last 4" value={data.cardLast4} onChange={updateField("cardLast4")} inputProps={{ maxLength: 4 }} />
         <TextField label="Billing postal code" value={data.billingPostalCode} onChange={updateField("billingPostalCode")} />
@@ -995,76 +773,42 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
       </Box>
     </Stack>,
 
-    /* 6: Identity Verification */
+    /* 6 */
     <Stack key="s6" spacing={2.5}>
       <Typography variant="body2" color="text.secondary">
         We verify every seller before product publishing is enabled. Documents are reviewed privately by our team.
       </Typography>
       <FormControl fullWidth required error={!!errors.governmentIdType}>
         <InputLabel>Government ID type</InputLabel>
-        <Select
-          label="Government ID type"
-          value={data.governmentIdType}
-          onChange={(e) => {
-            setField("governmentIdType", e.target.value as GovernmentIdType);
-            clearError("governmentIdType");
-          }}
-          MenuProps={{ sx: MENU_SX }}
-        >
-          {GHANA_ID_TYPES.map((id) => (
-            <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>
-          ))}
+        <Select label="Government ID type" value={data.governmentIdType}
+          onChange={(e) => { setField("governmentIdType", e.target.value as GovernmentIdType); clearError("governmentIdType"); }}
+          MenuProps={{ sx: MENU_SX }}>
+          {GHANA_ID_TYPES.map((id) => <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>)}
         </Select>
         {errors.governmentIdType && <FormHelperText>{errors.governmentIdType}</FormHelperText>}
       </FormControl>
-
-      <TextField
-        label="ID number"
-        value={data.governmentIdNumber}
+      <TextField label="ID number" value={data.governmentIdNumber} required fullWidth
         onChange={(e) => { updateField("governmentIdNumber")(e); clearError("governmentIdNumber"); }}
         error={!!errors.governmentIdNumber}
         helperText={errors.governmentIdNumber || "Kept private — visible to admins only."}
-        required
-        fullWidth
-        inputProps={{ "aria-invalid": !!errors.governmentIdNumber }}
-      />
-
+        inputProps={{ "aria-invalid": !!errors.governmentIdNumber }} />
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
-        <IdDropzone
-          label="ID front"
-          icon={<BadgeRounded fontSize="inherit" />}
-          file={idFront}
-          thumbnail={thumbFront}
-          checking={checkingFront}
+        <IdDropzone label="ID front" icon={<BadgeRounded fontSize="inherit" />}
+          file={idFront} thumbnail={thumbFront} checking={checkingFront}
           error={errors.idFront ?? (errFront.blocking[0] ?? undefined)}
           warning={errFront.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("front", f)}
-          onClear={() => clearIdFile("front")}
-        />
-        <IdDropzone
-          label="ID back"
-          icon={<BadgeRounded fontSize="inherit" />}
-          file={idBack}
-          thumbnail={thumbBack}
-          checking={checkingBack}
+          onFile={(f) => handleIdFile("front", f)} onClear={() => clearIdFile("front")} />
+        <IdDropzone label="ID back" icon={<BadgeRounded fontSize="inherit" />}
+          file={idBack} thumbnail={thumbBack} checking={checkingBack}
           error={errors.idBack ?? (errBack.blocking[0] ?? undefined)}
           warning={errBack.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("back", f)}
-          onClear={() => clearIdFile("back")}
-        />
-        <IdDropzone
-          label="Selfie with ID"
-          icon={<CloudUploadRounded fontSize="inherit" />}
-          file={idSelfie}
-          thumbnail={thumbSelfie}
-          checking={checkingSelfie}
+          onFile={(f) => handleIdFile("back", f)} onClear={() => clearIdFile("back")} />
+        <IdDropzone label="Selfie with ID" icon={<CloudUploadRounded fontSize="inherit" />}
+          file={idSelfie} thumbnail={thumbSelfie} checking={checkingSelfie}
           error={errors.selfie ?? (errSelfie.blocking[0] ?? undefined)}
           warning={errSelfie.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("selfie", f)}
-          onClear={() => clearIdFile("selfie")}
-        />
+          onFile={(f) => handleIdFile("selfie", f)} onClear={() => clearIdFile("selfie")} />
       </Box>
-
       {(errFront.warnings.length > 0 || errBack.warnings.length > 0 || errSelfie.warnings.length > 0) &&
        !errFront.blocking.length && !errBack.blocking.length && !errSelfie.blocking.length && (
         <Alert severity="warning" icon={<WarningAmberRounded />} sx={{ borderRadius: 2 }}>
@@ -1073,71 +817,26 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
       )}
     </Stack>,
 
-    /* 7: Review & Submit */
+    /* 7 — Review */
     <Stack key="s7" spacing={2}>
       <Typography variant="body2" color="text.secondary">
-        Review your application below. Click any section to make changes before submitting.
+        Review your application before submitting. Click any section to make changes.
       </Typography>
-
       {serverError && <Alert severity="error" sx={{ borderRadius: 2 }}>{serverError}</Alert>}
-      {submitSuccess && <Alert severity="success" sx={{ borderRadius: 2 }}>Application submitted! Taking you back to your profile…</Alert>}
-
-      {([
-        {
-          title: "Account", stepIdx: 0,
-          rows: [["Display name", data.name], ["Email", data.email]],
-        },
-        {
-          title: "Store", stepIdx: 1,
-          rows: [
-            ["Store name", data.storeName],
-            ["Tagline", data.storeTagline],
-            ["Sell as", data.sellerType === "retail" ? "Retail seller" : "Wholesale seller"],
-            ["Description", data.storeDescription.slice(0, 80) + (data.storeDescription.length > 80 ? "…" : "")],
-          ],
-        },
-        {
-          title: "Location", stepIdx: 2,
-          rows: [
-            ["Address", data.storeAddressLine1],
-            ["City", data.storeCity],
-            ["Region", data.storeState],
-            ["Country", data.storeCountry],
-          ],
-        },
-        {
-          title: "Business", stepIdx: 3,
-          rows: [
-            ["Business phone", data.businessPhone],
-            ["Business email", data.businessEmail],
-            ["WhatsApp", data.whatsapp],
-          ],
-        },
-        {
-          title: "Identity", stepIdx: 6,
-          rows: [
-            ["ID type", GHANA_ID_TYPES.find((t) => t.value === data.governmentIdType)?.label ?? ""],
-            ["ID number", data.governmentIdNumber ? "••••••••" : ""],
-            ["Documents", [idFront && "ID front", idBack && "ID back", idSelfie && "Selfie"].filter(Boolean).join(", ") || "None uploaded"],
-          ],
-        },
-      ] as const).map(({ title, stepIdx, rows }) => (
-        <Box
-          key={title}
-          sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}
-        >
-          <Stack
-            direction="row" justifyContent="space-between" alignItems="center"
-            sx={{ px: 2, py: 1, bgcolor: "action.hover" }}
-          >
+      {submitSuccess && <Alert severity="success" sx={{ borderRadius: 2 }}>Application submitted! Returning to your profile…</Alert>}
+      {[
+        { title: "Account", idx: 0, rows: [["Display name", data.name], ["Email", data.email]] },
+        { title: "Store", idx: 1, rows: [["Store name", data.storeName], ["Tagline", data.storeTagline], ["Sell as", data.sellerType === "retail" ? "Retail seller" : "Wholesale seller"], ["Description", data.storeDescription.slice(0, 80) + (data.storeDescription.length > 80 ? "…" : "")]] },
+        { title: "Location", idx: 2, rows: [["Address", data.storeAddressLine1], ["City", data.storeCity], ["Region", data.storeState], ["Country", data.storeCountry]] },
+        { title: "Business", idx: 3, rows: [["Business phone", data.businessPhone], ["Business email", data.businessEmail], ["WhatsApp", data.whatsapp]] },
+        { title: "Identity", idx: 6, rows: [["ID type", GHANA_ID_TYPES.find((t) => t.value === data.governmentIdType)?.label ?? ""], ["ID number", data.governmentIdNumber ? "••••••••" : ""], ["Documents", [idFront && "Front", idBack && "Back", idSelfie && "Selfie"].filter(Boolean).join(", ") || "None uploaded"]] },
+      ].map(({ title, idx, rows }) => (
+        <Box key={title} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center"
+            sx={{ px: 2, py: 1, bgcolor: "action.hover" }}>
             <Typography variant="subtitle2" fontWeight={700}>{title}</Typography>
-            <Button
-              size="small"
-              onClick={() => handleStepClick(stepIdx)}
-              sx={{ textTransform: "none", fontWeight: 700 }}
-            >
-              Edit
-            </Button>
+            <Button size="small" onClick={() => handleStepClick(idx)}
+              sx={{ textTransform: "none", fontWeight: 700 }}>Edit</Button>
           </Stack>
           <Stack spacing={1.25} sx={{ px: 2, py: 1.5 }}>
             {rows.filter(([, v]) => v).map(([label, value]) => (
@@ -1153,66 +852,85 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
   ];
 
   const isLastStep = step === STEP_LABELS.length - 1;
+  const progressPct = Math.round((step / (STEP_LABELS.length - 1)) * 100);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <Dialog
-        open={open}
-        onClose={attemptClose}
-        fullScreen={fullScreen}
-        maxWidth="sm"
-        fullWidth
-        aria-modal="true"
-        aria-labelledby="wizard-dialog-title"
-        PaperProps={{
-          sx: {
-            borderRadius: fullScreen ? 0 : 3,
-            maxHeight: fullScreen ? "100%" : "90vh",
-          },
-        }}
-      >
-        {/* Header + Stepper */}
-        <DialogTitle
-          id="wizard-dialog-title"
-          component="div"
-          sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, sm: 2.5 }, pb: 1.5 }}
-        >
-          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
-            <Box>
-              <Typography variant="overline" color="primary.main" fontWeight={800} lineHeight={1} display="block">
-                Seller Application
-              </Typography>
-              <Typography variant="h6" fontWeight={800} sx={{ mt: 0.25 }}>
-                {STEP_LABELS[step]}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
+    <Box sx={(theme) => ({
+      minHeight: "100%",
+      py: { xs: 3, md: 5 },
+      background: theme.palette.mode === "dark"
+        ? `radial-gradient(circle at top left, rgba(101,90,255,0.12) 0%, transparent 50%)`
+        : `radial-gradient(circle at top left, rgba(101,90,255,0.06) 0%, transparent 50%)`,
+    })}>
+      <Container maxWidth="md">
+
+        {/* Page header */}
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: { xs: 3, md: 4 } }}>
+          <Box>
+            <Typography variant="overline" color="primary.main" fontWeight={800} lineHeight={1} display="block">
+              Seller Application
+            </Typography>
+            <Typography variant="h4" fontWeight={900} sx={{ mt: 0.25, lineHeight: 1.1 }}>
+              Become a Seller
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+              Complete all steps to submit your store for review.
+            </Typography>
+          </Box>
+          <IconButton
+            component={Link}
+            href="/profile"
+            aria-label="Back to profile"
+            sx={{ mt: 0.5 }}
+          >
+            <CloseRounded />
+          </IconButton>
+        </Stack>
+
+        {/* ── Stepper ── */}
+
+        {/* Mobile: linear progress bar + step label */}
+        {isMobile && (
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={700}>
                 Step {step + 1} of {STEP_LABELS.length}
               </Typography>
-            </Box>
-            <IconButton aria-label="Close wizard" onClick={attemptClose} size="small" sx={{ mt: -0.25, mr: -0.5 }}>
-              <CloseRounded />
-            </IconButton>
-          </Stack>
+              <Typography variant="caption" color="primary.main" fontWeight={700}>
+                {STEP_LABELS[step]}
+              </Typography>
+            </Stack>
+            <LinearProgress
+              variant="determinate"
+              value={progressPct}
+              sx={{ height: 6, borderRadius: 3 }}
+            />
+          </Box>
+        )}
 
-          {/* Horizontal stepper — scrolls on narrow screens */}
-          <Box sx={{ overflowX: "auto", pb: 0.5, mx: -0.5 }}>
-            <Stepper
-              activeStep={step}
-              nonLinear
-              sx={{ minWidth: 500, px: 0.5 }}
-            >
+        {/* Desktop: full alternativeLabel stepper */}
+        {!isMobile && (
+          <Box sx={{ mb: 4 }}>
+            <Stepper activeStep={step} alternativeLabel nonLinear>
               {STEP_LABELS.map((label, idx) => (
                 <Step key={label} completed={completedSteps.has(idx)}>
                   <StepButton
                     onClick={() => handleStepClick(idx)}
                     disabled={!completedSteps.has(idx) && idx !== step}
-                    sx={{ py: 0.5, px: 0 }}
+                    sx={{ py: 0.5, borderRadius: 2 }}
                   >
                     <StepLabel
                       sx={{
-                        "& .MuiStepLabel-label": { fontSize: "0.62rem", whiteSpace: "nowrap" },
+                        "& .MuiStepLabel-label": {
+                          fontSize: "0.72rem",
+                          fontWeight: completedSteps.has(idx) || idx === step ? 700 : 500,
+                          lineHeight: 1.3,
+                          mt: "4px !important",
+                          whiteSpace: "nowrap",
+                        },
+                        "& .MuiStepLabel-iconContainer": { pb: 0 },
                       }}
                     >
                       {label}
@@ -1222,99 +940,103 @@ export function SellerApplicationWizard({ open, onClose, profile, onSuccess }: S
               ))}
             </Stepper>
           </Box>
-        </DialogTitle>
+        )}
 
-        {/* Step body */}
-        <DialogContent
-          sx={{ px: { xs: 2, sm: 3 }, pt: 1, pb: 0, overflowX: "hidden" }}
-          role="region"
-          aria-live="polite"
-        >
-          {steps[step]}
-        </DialogContent>
-
-        {/* Navigation */}
-        <DialogActions
+        {/* Step card */}
+        <Paper
+          elevation={0}
           sx={{
-            px: { xs: 2, sm: 3 },
-            py: { xs: 1.75, sm: 2 },
-            borderTop: "1px solid",
+            p: { xs: 2.5, sm: 4 },
+            borderRadius: 3,
+            border: "1px solid",
             borderColor: "divider",
-            justifyContent: "space-between",
           }}
         >
-          <Button
-            variant="outlined"
-            startIcon={<ArrowBackRounded />}
-            onClick={handleBack}
-            disabled={step === 0 || submitting}
-            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
-          >
-            Back
-          </Button>
+          {/* Step heading inside card */}
+          <Box sx={{ mb: 3 }}>
+            <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 0.5 }}>
+              <Box sx={(theme) => ({
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                bgcolor: alpha(theme.palette.primary.main, 0.12),
+                color: "primary.main",
+                fontSize: 18,
+                flexShrink: 0,
+              })}>
+                {STEP_ICONS[step]}
+              </Box>
+              <Typography variant="h5" fontWeight={800}>
+                {STEP_LABELS[step]}
+              </Typography>
+            </Stack>
+            {isMobile && (
+              <Typography variant="caption" color="text.secondary">
+                Step {step + 1} of {STEP_LABELS.length}
+              </Typography>
+            )}
+          </Box>
 
-          {isLastStep ? (
+          {/* Step body */}
+          <Box role="region" aria-live="polite">
+            {steps[step]}
+          </Box>
+
+          {/* Navigation */}
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mt: 4, pt: 3, borderTop: "1px solid", borderColor: "divider" }}
+          >
             <Button
-              variant="contained"
-              disableElevation
-              onClick={handleSubmit}
-              disabled={submitting || submitSuccess}
-              startIcon={
-                submitting
-                  ? <CircularProgress size={15} color="inherit" />
-                  : <SendRounded sx={{ fontSize: "16px !important" }} />
-              }
+              variant="outlined"
+              startIcon={<ArrowBackRounded />}
+              onClick={handleBack}
+              disabled={submitting}
               sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
             >
-              {submitting ? "Submitting…" : "Submit Application"}
+              {step === 0 ? "Back to profile" : "Back"}
             </Button>
-          ) : (
-            <Button
-              variant="contained"
-              disableElevation
-              endIcon={<ArrowForwardRounded />}
-              onClick={handleNext}
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
-            >
-              Next
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
 
-      {/* Discard confirmation */}
-      <Dialog
-        open={discardOpen}
-        onClose={() => setDiscardOpen(false)}
-        aria-labelledby="discard-dialog-title"
-        PaperProps={{ sx: { borderRadius: 3 } }}
-      >
-        <DialogTitle id="discard-dialog-title" sx={{ fontWeight: 800 }}>
-          Leave seller application?
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            Your draft is saved locally. If you discard now, all progress will be deleted.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => setDiscardOpen(false)}
-            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
-          >
-            Continue editing
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            disableElevation
-            onClick={() => { clearDraft(); setDiscardOpen(false); onClose(); }}
-            sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
-          >
-            Discard draft
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+            {isLastStep ? (
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={handleSubmit}
+                disabled={submitting || submitSuccess}
+                startIcon={
+                  submitting
+                    ? <CircularProgress size={15} color="inherit" />
+                    : <SendRounded sx={{ fontSize: "16px !important" }} />
+                }
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+              >
+                {submitting ? "Submitting…" : "Submit Application"}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                disableElevation
+                endIcon={<ArrowForwardRounded />}
+                onClick={handleNext}
+                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+              >
+                Next
+              </Button>
+            )}
+          </Stack>
+        </Paper>
+
+        {/* Draft notice */}
+        <Typography variant="caption" color="text.disabled" textAlign="center" display="block" sx={{ mt: 2 }}>
+          Your progress is saved automatically. You can come back any time.
+        </Typography>
+
+      </Container>
+    </Box>
   );
 }
