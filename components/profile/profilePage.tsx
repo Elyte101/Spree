@@ -11,15 +11,12 @@ import {
   BadgeRounded,
   CameraAltRounded,
   CheckCircleOutlined,
-  ContactPhoneRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
   PaymentRounded,
   PhoneAndroidRounded,
-  PlaceRounded,
   SaveRounded,
-  StoreRounded,
   StorefrontRounded,
   UploadFileRounded,
 } from "@mui/icons-material";
@@ -32,13 +29,11 @@ import {
   CircularProgress,
   Divider,
   FormControl,
-  FormControlLabel,
   InputLabel,
   MenuItem,
   Paper,
   Select,
   Stack,
-  Switch,
   TextField,
   Typography,
 } from "@mui/material";
@@ -47,7 +42,7 @@ import { api, ApiClientError } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
 import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
-import { GHANA_ID_TYPES, COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
+import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -61,9 +56,7 @@ const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const router = useRouter();
   const { update } = useSession();
-  const sellerSectionRef = React.useRef<HTMLDivElement | null>(null);
   const [profile, setProfile] = React.useState(initialProfile);
-  const [sellerMode, setSellerMode] = React.useState(initialProfile.role === "seller");
 
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -93,68 +86,15 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
   const isAdmin = profile.role === "admin";
-  const sellerSwitchChecked = isAdmin || sellerMode;
+  const sellerSwitchChecked = isAdmin || profile.role === "seller";
   const savedSellerAccess =
     isAdmin || (canCreateProductsRole(profile.role) && profile.sellerStatus === "active");
 
   const updateProfileField =
-    (
-      field:
-        | "name"
-        | "email"
-        | "phone"
-        | "storeName"
-        | "sellerType"
-        | "storeTagline"
-        | "storeDescription"
-    ) =>
+    (field: "name" | "email" | "phone") =>
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const value = event.target.value;
       setProfile((current) => ({ ...current, [field]: value }));
-    };
-
-  const updateSellerIdentityField =
-    (field: keyof UserProfile["sellerIdentity"]) =>
-    (
-      event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-    ) => {
-      const value = event.target.value;
-      setProfile((current) => ({
-        ...current,
-        ...(field === "storeTagline" ? { storeTagline: value } : null),
-        ...(field === "governmentIdType" ? { governmentIdType: value as UserProfile["governmentIdType"] } : null),
-        ...(field === "governmentIdNumber" ? { governmentIdNumber: value } : null),
-        sellerIdentity: {
-          ...current.sellerIdentity,
-          [field]: value,
-        },
-      }));
-    };
-
-  const updateStoreLocationField =
-    (field: keyof UserProfile["storeLocation"]) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value;
-      setProfile((current) => ({
-        ...current,
-        storeLocation: {
-          ...current.storeLocation,
-          [field]: value,
-        },
-      }));
-    };
-
-  const updateSellerContactField =
-    (field: keyof UserProfile["sellerContact"]) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value;
-      setProfile((current) => ({
-        ...current,
-        sellerContact: {
-          ...current.sellerContact,
-          [field]: value,
-        },
-      }));
     };
 
   const updateShippingField =
@@ -194,20 +134,11 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         name: profile.name,
         email: profile.email,
         phone: profile.phone,
-        isSeller: sellerMode || isAdmin,
-        storeName: profile.storeName,
-        sellerType: profile.sellerType,
-        storeTagline: profile.storeTagline,
-        storeDescription: profile.storeDescription,
-        storeLocation: profile.storeLocation,
-        sellerContact: profile.sellerContact,
-        sellerIdentity: profile.sellerIdentity,
         shippingAddress: profile.shippingAddress,
         paymentInfo: profile.paymentInfo,
       });
 
       setProfile(updatedProfile);
-      setSellerMode(updatedProfile.role === "seller" || updatedProfile.role === "admin");
       await update({
         id: updatedProfile.id,
         name: updatedProfile.name,
@@ -275,7 +206,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const canUploadDocs = sellerMode && !isAdmin;
+  const canUploadDocs = profile.role === "seller" && !isAdmin;
 
   return (
     <Box
@@ -422,274 +353,40 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               </Stack>
             </Paper>
 
-            <Paper
-              ref={sellerSectionRef}
-              elevation={0}
-              sx={{
-                p: 2.5,
-                borderRadius: 2,
-                border: "1px solid",
-                borderColor: "divider",
-              }}
-            >
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <StoreRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Seller onboarding
-                  </Typography>
-                </Stack>
-
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={sellerSwitchChecked}
-                      onChange={(event) => setSellerMode(event.target.checked)}
-                      disabled={isAdmin}
-                    />
-                  }
-                  label={
-                    isAdmin
-                      ? "This admin account can also run a store"
-                      : "Apply to become a seller"
-                  }
-                />
-
-                <Alert severity="info">
-                  Seller applications go to admin review before product publishing is enabled. Seller accounts can still shop and check out as buyers.
-                </Alert>
-
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                  }}
-                >
-                  <TextField
-                    label="Store name"
-                    value={profile.storeName}
-                    onChange={updateProfileField("storeName")}
-                    disabled={!sellerSwitchChecked && !isAdmin}
-                    required={sellerMode}
-                  />
-                  <TextField
-                    label="Store tagline"
-                    value={profile.storeTagline}
-                    onChange={updateProfileField("storeTagline")}
-                    disabled={!sellerSwitchChecked && !isAdmin}
-                  />
-                  <TextField
-                    select
-                    label="Sell as"
-                    value={profile.sellerType}
-                    onChange={updateProfileField("sellerType")}
-                    disabled={!sellerSwitchChecked && !isAdmin}
-                  >
-                    <MenuItem value="retail">Retail seller</MenuItem>
-                    <MenuItem value="wholesale">Wholesale seller</MenuItem>
-                  </TextField>
-                  <TextField
-                    label="Store status"
-                    value={
-                      sellerSwitchChecked
-                        ? profile.sellerStatus === "suspended"
-                          ? "Suspended by admin"
-                          : profile.sellerStatus === "removed"
-                            ? "Removed by admin"
-                            : profile.sellerStatus === "pending"
-                              ? "Pending admin approval"
-                            : savedSellerAccess
-                              ? "Ready to sell"
-                              : "Save to submit your seller application"
-                        : "Buyer only"
-                    }
-                    InputProps={{ readOnly: true }}
-                  />
-                </Box>
-
-                <TextField
-                  label="Store description"
-                  value={profile.storeDescription}
-                  onChange={updateProfileField("storeDescription")}
-                  multiline
-                  minRows={3}
-                  disabled={!sellerSwitchChecked && !isAdmin}
-                />
-
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <PlaceRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                      Store location
+            {profile.role !== "seller" && !isAdmin && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2.5,
+                  borderRadius: 2,
+                  border: "1px solid",
+                  borderColor: "divider",
+                }}
+              >
+                <Stack spacing={2} alignItems="center" sx={{ textAlign: "center", py: 1 }}>
+                  <AddBusinessRounded color="primary" sx={{ fontSize: 48 }} />
+                  <Box>
+                    <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                      Want to sell on Spree?
                     </Typography>
-                  </Stack>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gap: 2,
-                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                    }}
-                  >
-                    <TextField
-                      label="Store address"
-                      value={profile.storeLocation.addressLine1}
-                      onChange={updateStoreLocationField("addressLine1")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      required={sellerMode}
-                    />
-                    <TextField
-                      label="City"
-                      value={profile.storeLocation.city}
-                      onChange={updateStoreLocationField("city")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      required={sellerMode}
-                    />
-                    {(() => {
-                      const country = profile.storeLocation.country || "Ghana";
-                      const regions = getRegionsForCountry(country);
-                      const label = getRegionLabel(country);
-                      const disabled = !sellerSwitchChecked && !isAdmin;
-                      return regions ? (
-                        <FormControl required={sellerMode} disabled={disabled}>
-                          <InputLabel>{label}</InputLabel>
-                          <Select
-                            label={label}
-                            value={profile.storeLocation.state}
-                            onChange={(e) => setProfile((current) => ({
-                              ...current,
-                              storeLocation: { ...current.storeLocation, state: e.target.value },
-                            }))}
-                          >
-                            {regions.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
-                          </Select>
-                        </FormControl>
-                      ) : (
-                        <TextField
-                          label={label}
-                          value={profile.storeLocation.state}
-                          onChange={updateStoreLocationField("state")}
-                          disabled={disabled}
-                          required={sellerMode}
-                        />
-                      );
-                    })()}
-                    <FormControl required={sellerMode} disabled={!sellerSwitchChecked && !isAdmin}>
-                      <InputLabel>Country</InputLabel>
-                      <Select
-                        label="Country"
-                        value={profile.storeLocation.country || "Ghana"}
-                        onChange={(e) => setProfile((current) => ({
-                          ...current,
-                          storeLocation: { ...current.storeLocation, country: e.target.value, state: "" },
-                        }))}
-                      >
-                        {COUNTRY_LIST.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                      </Select>
-                    </FormControl>
-                    <TextField
-                      label="Postal code"
-                      value={profile.storeLocation.postalCode}
-                      onChange={updateStoreLocationField("postalCode")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                    />
-                  </Box>
-                </Stack>
-
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <ContactPhoneRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                      Seller business details
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      Set up your store in minutes with our guided application.
                     </Typography>
-                  </Stack>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gap: 2,
-                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                    }}
-                  >
-                    <TextField
-                      label="Business email"
-                      type="email"
-                      value={profile.sellerContact.businessEmail}
-                      onChange={updateSellerContactField("businessEmail")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                    />
-                    <PhoneInput
-                      label="Business phone"
-                      value={profile.sellerContact.businessPhone}
-                      onChange={(val) => setProfile((c) => ({
-                        ...c,
-                        sellerContact: { ...c.sellerContact, businessPhone: val },
-                      }))}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      required={sellerMode && !profile.phone}
-                    />
-                    <PhoneInput
-                      label="WhatsApp"
-                      value={profile.sellerContact.whatsapp}
-                      onChange={(val) => setProfile((c) => ({
-                        ...c,
-                        sellerContact: { ...c.sellerContact, whatsapp: val },
-                      }))}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                    />
-                    <TextField
-                      label="Business registration number"
-                      value={profile.sellerContact.registrationNumber}
-                      onChange={updateSellerContactField("registrationNumber")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                    />
                   </Box>
-                </Stack>
-
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <BadgeRounded color="primary" />
-                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
-                      Seller verification
-                    </Typography>
-                  </Stack>
-                  <Box
-                    sx={{
-                      display: "grid",
-                      gap: 2,
-                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
-                    }}
+                  <Button
+                    component={Link}
+                    href="/seller/apply"
+                    variant="contained"
+                    size="large"
+                    startIcon={<AddBusinessRounded />}
+                    fullWidth
+                    sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, py: 1.5 }}
                   >
-                    <TextField
-                      select
-                      label="Government ID"
-                      value={profile.sellerIdentity.governmentIdType}
-                      onChange={updateSellerIdentityField("governmentIdType")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                    >
-                      {GHANA_ID_TYPES.map((id) => (
-                        <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>
-                      ))}
-                    </TextField>
-                    <TextField
-                      label="ID number"
-                      value={profile.sellerIdentity.governmentIdNumber}
-                      onChange={updateSellerIdentityField("governmentIdNumber")}
-                      disabled={!sellerSwitchChecked && !isAdmin}
-                      helperText="This stays private to admins and seller review."
-                    />
-                  </Box>
-
-                  {profile.sellerNotice ? (
-                    <Alert severity="warning">{profile.sellerNotice}</Alert>
-                  ) : null}
-                  {profile.sellerBadge ? (
-                    <Alert severity="success">
-                      Store badge: {profile.sellerBadge}
-                    </Alert>
-                  ) : null}
+                    Apply to become a seller
+                  </Button>
                 </Stack>
-              </Stack>
-            </Paper>
+              </Paper>
+            )}
 
             <Paper
               elevation={0}
@@ -899,8 +596,8 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       : profile.sellerStatus === "removed"
                         ? "Your seller access was removed. Buyer features still work, but product publishing is disabled."
                     : sellerSwitchChecked
-                      ? "Save your store, description, and Ghana Card details to activate seller access."
-                      : "Stay as a buyer, or turn on selling when you are ready to open a store."}
+                      ? "Your application is in review. An admin will activate your store soon."
+                      : "Apply to become a seller to start publishing products on Spree."}
                 </Typography>
                 <Button
                   component={Link}
@@ -1056,7 +753,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             )}
 
             {/* ── PAYOUT INFO ── */}
-            {(sellerMode || isAdmin) && (
+            {(profile.role === "seller" || isAdmin) && (
               <Paper
                 elevation={0}
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}

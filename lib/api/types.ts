@@ -64,20 +64,20 @@ export interface UpdateProfilePayload {
   name: string;
   email: string;
   phone: string;
-  isSeller: boolean;
-  storeName: string;
-  sellerType: SellerType;
-  storeTagline: string;
-  storeDescription: string;
-  storeLocation: StoreLocation;
-  sellerContact: SellerContact;
-  sellerIdentity: {
+  shippingAddress: ShippingAddress;
+  paymentInfo: PaymentInfo;
+  isSeller?: boolean;
+  storeName?: string;
+  sellerType?: SellerType;
+  storeTagline?: string;
+  storeDescription?: string;
+  storeLocation?: StoreLocation;
+  sellerContact?: SellerContact;
+  sellerIdentity?: {
     governmentIdType: "ghana-card" | "voters-id" | "drivers-license" | "passport" | "ecowas-card" | "ssnit";
     governmentIdNumber: string;
     storeTagline: string;
   };
-  shippingAddress: ShippingAddress;
-  paymentInfo: PaymentInfo;
 }
 
 export interface UpdateProductPayload {
