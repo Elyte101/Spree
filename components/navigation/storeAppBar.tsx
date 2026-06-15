@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { SpreeIcon } from "@/components/ui/spreeIcon";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
@@ -144,27 +144,17 @@ export function StoreAppBar() {
           <Stack direction="row" spacing={1.25} alignItems="center">
             <Box
               sx={(theme) => ({
-                position: "relative",
-                width: { xs: 36, sm: 40 },
-                height: { xs: 36, sm: 40 },
                 borderRadius: 2,
                 overflow: "hidden",
-                bgcolor: "#F5F4FF",
+                flexShrink: 0,
+                lineHeight: 0,
                 boxShadow:
                   theme.palette.mode === "dark"
                     ? "0 0 0 1.5px rgba(101,90,255,0.35)"
                     : "none",
-                flexShrink: 0,
               })}
             >
-              <Image
-                src="/spreelogo.png"
-                alt="Spree logo"
-                fill
-                sizes="40px"
-                style={{ objectFit: "contain", padding: 4 }}
-                priority
-              />
+              <SpreeIcon size={40} />
             </Box>
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
               <Typography
