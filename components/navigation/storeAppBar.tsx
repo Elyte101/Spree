@@ -141,26 +141,49 @@ export function StoreAppBar() {
             flexShrink: 0,
           }}
         >
-          <Box
-            sx={{
-              position: "relative",
-              width: { xs: 108, sm: 128 },
-              height: { xs: 32, sm: 36 },
-              borderRadius: 1.5,
-              overflow: "hidden",
-              bgcolor: "#0a0a0a",
-              flexShrink: 0,
-            }}
-          >
-            <Image
-              src="/spreelogo.jpg"
-              alt="Spree"
-              fill
-              sizes="128px"
-              style={{ objectFit: "contain" }}
-              priority
-            />
-          </Box>
+          <Stack direction="row" spacing={1.25} alignItems="center">
+            <Box
+              sx={(theme) => ({
+                position: "relative",
+                width: { xs: 36, sm: 40 },
+                height: { xs: 36, sm: 40 },
+                borderRadius: 2,
+                overflow: "hidden",
+                bgcolor: "#F5F4FF",
+                boxShadow:
+                  theme.palette.mode === "dark"
+                    ? "0 0 0 1.5px rgba(101,90,255,0.35)"
+                    : "none",
+                flexShrink: 0,
+              })}
+            >
+              <Image
+                src="/spreelogo.png"
+                alt="Spree logo"
+                fill
+                sizes="40px"
+                style={{ objectFit: "contain", padding: 4 }}
+                priority
+              />
+            </Box>
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  lineHeight: 1,
+                  fontWeight: 800,
+                  color: "text.primary",
+                  fontSize: "1.1rem",
+                  letterSpacing: "-0.02em",
+                }}
+              >
+                Spree
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
+                Shop with ease
+              </Typography>
+            </Box>
+          </Stack>
         </Box>
 
         <Box sx={{ flexGrow: 1 }} />
