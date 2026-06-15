@@ -299,14 +299,25 @@ export function LandingPage({
                         : `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.08)}, ${alpha(theme.palette.secondary.main, 0.05)})`,
                   })}
                 >
-                  <Image
-                    src="/spreelogo.png"
-                    alt="Spree"
-                    width={110}
-                    height={110}
-                    style={{ objectFit: "contain", borderRadius: 16 }}
-                    priority
-                  />
+                  <Box
+                    sx={{
+                      position: "relative",
+                      width: 200,
+                      height: 78,
+                      borderRadius: 2,
+                      overflow: "hidden",
+                      bgcolor: "#0a0a0a",
+                    }}
+                  >
+                    <Image
+                      src="/spreelogo.jpg"
+                      alt="Spree"
+                      fill
+                      sizes="200px"
+                      style={{ objectFit: "contain" }}
+                      priority
+                    />
+                  </Box>
                   <Chip
                     icon={<SecurityRounded sx={{ fontSize: "14px !important", color: "#22C55E !important" }} />}
                     label="Escrow protected"
@@ -1021,19 +1032,16 @@ export function LandingPage({
             <Box
               sx={{
                 position: "relative",
-                width: 64,
-                height: 64,
-                borderRadius: 3,
+                width: 180,
+                height: 60,
+                borderRadius: 2,
                 mx: "auto",
                 mb: 3.5,
-                border: "1px solid",
-                borderColor: alpha("#fff", 0.22),
-                background: alpha("#fff", 0.12),
-                backdropFilter: "blur(10px)",
                 overflow: "hidden",
+                bgcolor: "#0a0a0a",
               }}
             >
-              <Image src="/spreelogo.png" alt="Spree" fill sizes="64px" style={{ objectFit: "contain", padding: 10 }} />
+              <Image src="/spreelogo.jpg" alt="Spree" fill sizes="180px" style={{ objectFit: "contain" }} />
             </Box>
 
             <Typography variant="h2" fontWeight={800} lineHeight={1.08} mb={2} sx={{ color: "#fff", fontSize: { xs: "1.5rem", md: "1.875rem" } }}>
