@@ -44,6 +44,14 @@ app.middleware("http")(security_headers_middleware)
 app.middleware("http")(request_logging_middleware)
 
 
+_FAVICON = Path(__file__).parent / "static" / "favicon.ico"
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(content=_FAVICON.read_bytes(), media_type="image/x-icon")
+
+
 @app.get("/healthz")
 def healthcheck():
     return {"status": "ok", "environment": settings.environment}
