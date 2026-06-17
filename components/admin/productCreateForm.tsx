@@ -23,10 +23,18 @@ import {
   Typography,
 } from "@mui/material";
 
+import { InfoOutlined } from "@mui/icons-material";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
 import { Brand, Category, Collection } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
+
+function getCommissionRate(sellerPrice: number): number {
+  if (sellerPrice <= 500) return 0.08;
+  if (sellerPrice <= 2000) return 0.05;
+  if (sellerPrice <= 5000) return 0.03;
+  return 0.01;
+}
 
 interface ProductCreateFormProps {
   categories: Category[];
@@ -134,6 +142,9 @@ export function ProductCreateForm({
   const previewSlug = slugify(slug || name) || "product-handle";
   const previewPrice = Number(price) || 0;
   const previewDiscount = Number(discount) || 0;
+  const commissionRate = previewPrice > 0 ? getCommissionRate(previewPrice) : 0;
+  const commissionAmount = Math.round(previewPrice * commissionRate * 100) / 100;
+  const buyerPrice = Math.round((previewPrice + commissionAmount) * 100) / 100;
   const compareAtPrice =
     previewDiscount > 0 && previewDiscount < 100
       ? previewPrice / (1 - previewDiscount / 100)
@@ -485,7 +496,7 @@ export function ProductCreateForm({
                   }}
                 >
                   <TextField
-                    label="Price"
+                    label="Price (your payout)"
                     type="number"
                     value={price}
                     onChange={(event) => setPrice(event.target.value)}
@@ -509,6 +520,52 @@ export function ProductCreateForm({
                     required
                   />
                 </Box>
+
+                {previewPrice > 0 && (
+                  <Box
+                    sx={(theme) => ({
+                      p: 2,
+                      borderRadius: 2,
+                      bgcolor: theme.palette.mode === "dark"
+                        ? "rgba(101,90,255,0.08)"
+                        : "rgba(101,90,255,0.05)",
+                      border: "1px solid",
+                      borderColor: "rgba(101,90,255,0.2)",
+                    })}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={0.75} mb={1.5}>
+                      <InfoOutlined sx={{ fontSize: 16, color: "primary.main" }} />
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>
+                        Pricing breakdown
+                      </Typography>
+                    </Stack>
+                    <Stack spacing={0.75}>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">Your payout</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {formatPrice(previewPrice)}
+                        </Typography>
+                      </Stack>
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" color="text.secondary">
+                          Spree commission ({(commissionRate * 100).toFixed(0)}%)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          + {formatPrice(commissionAmount)}
+                        </Typography>
+                      </Stack>
+                      <Divider sx={{ my: 0.25 }} />
+                      <Stack direction="row" justifyContent="space-between">
+                        <Typography variant="body2" sx={{ fontWeight: 900 }}>
+                          Customer pays
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 900, color: "primary.main" }}>
+                          {formatPrice(buyerPrice)}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </Box>
+                )}
               </Stack>
             </Paper>
 
@@ -698,7 +755,7 @@ export function ProductCreateForm({
 
                   <Box>
                     <Typography variant="body2" color="text.secondary">
-                      Price
+                      Your payout
                     </Typography>
                     <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {previewPrice > 0 ? formatPrice(previewPrice) : "Not set yet"}
@@ -709,6 +766,39 @@ export function ProductCreateForm({
                       </Typography>
                     ) : null}
                   </Box>
+
+                  {previewPrice > 0 && (
+                    <Box
+                      sx={(theme) => ({
+                        p: 1.5,
+                        borderRadius: 1.5,
+                        bgcolor: theme.palette.mode === "dark"
+                          ? "rgba(101,90,255,0.08)"
+                          : "rgba(101,90,255,0.05)",
+                        border: "1px solid",
+                        borderColor: "rgba(101,90,255,0.2)",
+                      })}
+                    >
+                      <Stack spacing={0.5}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">
+                            Commission ({(commissionRate * 100).toFixed(0)}%)
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            +{formatPrice(commissionAmount)}
+                          </Typography>
+                        </Stack>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                            Customer pays
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: "primary.main" }}>
+                            {formatPrice(buyerPrice)}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </Box>
+                  )}
 
                   <Box>
                     <Typography variant="body2" color="text.secondary">
