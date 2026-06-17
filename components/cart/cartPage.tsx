@@ -26,7 +26,6 @@ import { motion } from "motion/react";
 
 import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
-import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { Product } from "@/types/types";
 
 interface CartPageProps {
@@ -307,26 +306,26 @@ export function CartPage({ recommendations }: CartPageProps) {
             </Stack>
 
             {/* ── Order summary ── */}
-            <ResponsiveDisclosurePanel
-              title="Order summary"
-              titleVariant="h5"
-              action={
+            <Paper
+              elevation={0}
+              sx={{
+                position: { xl: "sticky" },
+                top: { xl: 96 },
+                borderRadius: 3,
+                border: "1.5px solid",
+                borderColor: "divider",
+                p: { xs: 2, sm: 2.5 },
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2.5}>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>Order summary</Typography>
                 <Chip
                   label={formatPrice(total)}
                   size="small"
                   color="primary"
                   sx={{ borderRadius: 999, fontWeight: 700 }}
                 />
-              }
-              collapseBelow="xl"
-              paperSx={{
-                position: { xl: "sticky" },
-                top: { xl: 96 },
-                borderRadius: 3,
-                border: "1.5px solid",
-                borderColor: "divider",
-              }}
-            >
+              </Stack>
               <Stack spacing={2.5}>
 
                 {/* Line items */}
@@ -386,7 +385,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                   </Typography>
                 </Stack>
               </Stack>
-            </ResponsiveDisclosurePanel>
+            </Paper>
           </Box>
         )}
 
