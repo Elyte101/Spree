@@ -434,7 +434,7 @@ export function LandingPage({
               <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Browse</Typography>
-                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Shop by category</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1} color="text.primary">Shop by category</Typography>
                 </Box>
                 <Button component={Link} href="/products" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 700 }}>
                   All products
@@ -551,7 +551,7 @@ export function LandingPage({
                 textAlign: "center",
               }}
             >
-              <Typography variant="h6" fontWeight={700} mb={0.5}>Coming soon</Typography>
+              <Typography variant="h6" fontWeight={700} mb={0.5} color="text.primary">Coming soon</Typography>
               <Typography variant="body2" color="text.secondary">
                 Featured products will appear here as sellers list items.
               </Typography>
@@ -745,7 +745,7 @@ export function LandingPage({
               <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Just in</Typography>
-                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Fresh arrivals</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1} color="text.primary">Fresh arrivals</Typography>
                 </Box>
                 <Button component={Link} href="/products?sort=newest" endIcon={<ArrowForwardRounded />} sx={{ fontWeight: 700 }}>
                   All new
@@ -839,7 +839,7 @@ export function LandingPage({
               <Stack direction="row" justifyContent="space-between" alignItems="flex-end" mb={2.5}>
                 <Box>
                   <Typography variant="overline" color="primary.main" fontWeight={700}>Curated</Typography>
-                  <Typography variant="h3" fontWeight={800} lineHeight={1}>Collections</Typography>
+                  <Typography variant="h3" fontWeight={800} lineHeight={1} color="text.primary">Collections</Typography>
                 </Box>
               </Stack>
             </motion.div>
@@ -882,7 +882,7 @@ export function LandingPage({
                         <Image src={collection.image} alt={collection.name} fill sizes="52px" style={{ objectFit: "contain" }} />
                       </Box>
                       <Box>
-                        <Typography variant="h6" fontWeight={700}>{collection.name}</Typography>
+                        <Typography variant="h6" fontWeight={700} color="text.primary">{collection.name}</Typography>
                         <Typography variant="body2" color="text.secondary" mt={0.5} lineHeight={1.6}>
                           {collection.description}
                         </Typography>
