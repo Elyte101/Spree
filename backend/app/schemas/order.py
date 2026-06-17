@@ -30,7 +30,7 @@ class OrderCreateIn(BaseModel):
     country: str = Field(min_length=1, max_length=120)
 
     shippingMethod: Literal["standard", "express"] = "standard"
-    paymentMethod: Literal["paystack", "card", "paypal", "wallet"] = "paystack"
+    paymentMethod: Literal["paystack", "card", "wallet"] = "paystack"
 
     subtotal: float = Field(ge=0)
     shippingCost: float = Field(ge=0)

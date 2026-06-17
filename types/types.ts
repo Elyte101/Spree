@@ -6,7 +6,7 @@ export type CatalogSort =
   | "rating";
 
 export type UserRole = "customer" | "seller" | "admin";
-export type PaymentMethod = "card" | "paypal" | "bank-transfer";
+export type PaymentMethod = "card" | "bank-transfer";
 export type SellerStatus =
   | "buyer"
   | "incomplete"

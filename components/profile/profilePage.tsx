@@ -512,7 +512,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     onChange={updatePaymentField("method")}
                   >
                     <MenuItem value="card">Card</MenuItem>
-                    <MenuItem value="paypal">PayPal</MenuItem>
                     <MenuItem value="bank-transfer">Bank transfer</MenuItem>
                   </TextField>
                   <TextField

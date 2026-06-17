@@ -55,7 +55,7 @@ class ShippingAddress(BaseModel):
 
 
 class PaymentInfo(BaseModel):
-    method: Literal["card", "paypal", "bank-transfer"] = "card"
+    method: Literal["card", "bank-transfer"] = "card"
     cardholderName: str = Field(default="", max_length=120)
     cardLast4: str = Field(default="", max_length=4)
     expiryMonth: str = Field(default="", max_length=2)

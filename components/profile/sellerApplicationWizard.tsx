@@ -74,7 +74,7 @@ interface WizardData {
   shipState: string;
   shipPostalCode: string;
   shipCountry: string;
-  paymentMethod: "card" | "paypal" | "bank-transfer";
+  paymentMethod: "card" | "bank-transfer";
   cardholderName: string;
   cardLast4: string;
   expiryMonth: string;
@@ -760,7 +760,6 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
           onChange={(e) => setField("paymentMethod", e.target.value as WizardData["paymentMethod"])}
           MenuProps={{ sx: MENU_SX }}>
           <MenuItem value="card">Card</MenuItem>
-          <MenuItem value="paypal">PayPal</MenuItem>
           <MenuItem value="bank-transfer">Bank transfer</MenuItem>
         </Select>
       </FormControl>
