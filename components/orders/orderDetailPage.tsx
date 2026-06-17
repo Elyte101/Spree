@@ -631,7 +631,7 @@ export function OrderDetailPage({
                       Shipping ({order.shippingMethod})
                     </Typography>
                     <Typography variant="body2">
-                      {order.shippingCost === 0 ? "Free" : formatPrice(order.shippingCost)}
+                      {formatPrice(order.shippingCost)}
                     </Typography>
                   </Stack>
                   {order.tax > 0 && (

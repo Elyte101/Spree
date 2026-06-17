@@ -42,10 +42,9 @@ def get_cart_summary(db: Session) -> dict:
     subtotal = sum(
         Decimal(str(item["price"])) * item["quantity"] for item in items
     ).quantize(_q)
-    free_threshold = Decimal(str(settings.free_shipping_threshold))
     std_shipping = Decimal(str(float(cart.standard_shipping)))
-    shipping = Decimal("0") if not items or subtotal >= free_threshold else std_shipping
-    tax = Decimal("0") if not items else (subtotal * Decimal("0.08")).quantize(_q)
+    shipping = Decimal("0") if not items else std_shipping
+    tax = Decimal("2.00") if items else Decimal("0")
     total = (subtotal + shipping + tax).quantize(_q)
 
     return {

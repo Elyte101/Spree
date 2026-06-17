@@ -642,7 +642,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       Delivery fee ({shippingMethod})
                     </Typography>
                     <Typography fontWeight={600}>
-                      {shipping === 0 ? "Free" : formatPrice(shipping)}
+                      {formatPrice(shipping)}
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
