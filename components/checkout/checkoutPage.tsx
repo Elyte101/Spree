@@ -88,7 +88,7 @@ const shippingOptions = [
   {
     value: "express",
     label: "Express",
-    detail: "1–2 business days",
+    detail: "2 business days",
     price: 18,
   },
 ];

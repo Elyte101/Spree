@@ -104,7 +104,7 @@ def _seller_location_label(seller: User | None) -> str | None:
     return label or None
 
 
-_SPREE_MARKUP = Decimal("1.10")
+_SPREE_MARKUP = Decimal("1.05")
 
 
 def _product_to_dict(product: Product) -> dict:

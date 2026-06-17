@@ -15,8 +15,8 @@ from app.services.notifications import create_notification
 
 logger = logging.getLogger(__name__)
 
-# Buyers pay seller_price * 1.10; seller receives seller_price back on delivery.
-_MARKUP = Decimal("1.10")
+# Buyers pay seller_price * 1.05; seller receives seller_price back on delivery.
+_MARKUP = Decimal("1.05")
 _TAX_RATE = Decimal("0.08")
 _TOTAL_TOLERANCE = Decimal("0.50")  # max allowed $ difference between client and server total
 
