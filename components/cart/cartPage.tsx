@@ -6,7 +6,6 @@ import {
   AddRounded,
   ArrowForwardRounded,
   DeleteOutlineRounded,
-  LocalShippingRounded,
   RemoveRounded,
   SecurityRounded,
   ShoppingBagOutlined,
@@ -18,7 +17,7 @@ import {
   Chip,
   Divider,
   IconButton,
-  LinearProgress,
+
   Paper,
   Stack,
   Typography,
@@ -37,16 +36,11 @@ interface CartPageProps {
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(price);
 
-const FREE_SHIPPING_THRESHOLD = 200;
 const ease = [0.22, 1, 0.36, 1] as const;
 
 export function CartPage({ recommendations }: CartPageProps) {
   const { cart, itemCount, updateQuantity, removeItem } = useCart();
   const { items, shipping, subtotal, tax, total } = cart;
-
-  const toFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const freeShippingProgress = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
-  const hasFreeShipping = shipping === 0;
 
   return (
     <Box
@@ -335,59 +329,16 @@ export function CartPage({ recommendations }: CartPageProps) {
             >
               <Stack spacing={2.5}>
 
-                {/* Free shipping progress */}
-                <Paper
-                  sx={(theme) => ({
-                    p: 2,
-                    borderRadius: 2,
-                    border: "1px solid",
-                    borderColor: hasFreeShipping
-                      ? alpha("#22C55E", 0.3)
-                      : theme.palette.divider,
-                    bgcolor: hasFreeShipping
-                      ? alpha("#22C55E", 0.06)
-                      : alpha(theme.palette.primary.main, 0.04),
-                  })}
-                >
-                  <Stack direction="row" alignItems="center" spacing={1} mb={1}>
-                    <LocalShippingRounded
-                      sx={{ fontSize: 18, color: hasFreeShipping ? "#22C55E" : "text.secondary" }}
-                    />
-                    <Typography variant="body2" fontWeight={700} color={hasFreeShipping ? "#16A34A" : "text.primary"}>
-                      {hasFreeShipping
-                        ? "You've unlocked free shipping!"
-                        : `${formatPrice(toFreeShipping)} away from free shipping`}
-                    </Typography>
-                  </Stack>
-                  <LinearProgress
-                    variant="determinate"
-                    value={freeShippingProgress}
-                    sx={(theme) => ({
-                      borderRadius: 999,
-                      height: 6,
-                      bgcolor: alpha(theme.palette.primary.main, 0.12),
-                      "& .MuiLinearProgress-bar": {
-                        borderRadius: 999,
-                        bgcolor: hasFreeShipping ? "#22C55E" : "primary.main",
-                      },
-                    })}
-                  />
-                </Paper>
-
                 {/* Line items */}
                 <Stack spacing={1.25}>
                   {[
                     { label: "Subtotal", value: formatPrice(subtotal) },
-                    {
-                      label: "Shipping",
-                      value: shipping === 0 ? "Free" : formatPrice(shipping),
-                      valueColor: shipping === 0 ? "#22C55E" : undefined,
-                    },
-                    { label: "Estimated tax", value: formatPrice(tax) },
-                  ].map(({ label, value, valueColor }) => (
+                    { label: "Shipping", value: formatPrice(shipping) },
+                    { label: "Processing fee", value: formatPrice(tax) },
+                  ].map(({ label, value }) => (
                     <Stack key={label} direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">{label}</Typography>
-                      <Typography variant="body2" fontWeight={700} color={valueColor ?? "text.primary"}>
+                      <Typography variant="body2" fontWeight={700}>
                         {value}
                       </Typography>
                     </Stack>

@@ -59,8 +59,8 @@ const normalizeCart = (cart: CartSummary, standardShipping: number): CartSummary
     cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0).toFixed(2)
   );
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
-  const shipping = cart.items.length === 0 ? 0 : subtotal >= 200 ? 0 : standardShipping;
-  const tax = cart.items.length === 0 ? 0 : Number((subtotal * 0.08).toFixed(2));
+  const shipping = cart.items.length === 0 ? 0 : standardShipping;
+  const tax = cart.items.length === 0 ? 0 : 2;
   const total = Number((subtotal + shipping + tax).toFixed(2));
 
   return {

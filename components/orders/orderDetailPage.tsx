@@ -637,7 +637,7 @@ export function OrderDetailPage({
                   {order.tax > 0 && (
                     <Stack direction="row" justifyContent="space-between">
                       <Typography variant="body2" color="text.secondary">
-                        Tax
+                        Processing fee
                       </Typography>
                       <Typography variant="body2">{formatPrice(order.tax)}</Typography>
                     </Stack>

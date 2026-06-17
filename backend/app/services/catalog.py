@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core import pricing
 from app.db.models import Brand, Category, Collection, Product, PromoBanner, SellerReport, User
 from app.schemas.catalog import ProductCreateIn, ProductUpdateIn
 
@@ -104,14 +105,11 @@ def _seller_location_label(seller: User | None) -> str | None:
     return label or None
 
 
-_SPREE_MARKUP = Decimal("1.05")
-
-
 def _product_to_dict(product: Product) -> dict:
     images = product.images or ["/product-placeholder.svg"]
     variants = product.variants or []
     seller_price = Decimal(str(product.price))
-    listed_price = (seller_price * _SPREE_MARKUP).quantize(Decimal("0.01"))
+    listed_price = pricing.buyer_price(seller_price)
     discount = Decimal(str(product.discount_percentage))
 
     return {

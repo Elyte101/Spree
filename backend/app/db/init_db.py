@@ -26,6 +26,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("notifications", "event_type", "VARCHAR(64)", "TEXT"),
     ("notifications", "channel", "VARCHAR(16) NOT NULL DEFAULT 'in_app'", "TEXT NOT NULL DEFAULT 'in_app'"),
     ("notifications", "is_sent", "BOOLEAN NOT NULL DEFAULT TRUE", "INTEGER NOT NULL DEFAULT 1"),
+    # Tiered commission rate recorded per order item for accurate seller payout
+    ("order_items", "commission_rate", "NUMERIC(5,4)", "REAL"),
 ]
 
 

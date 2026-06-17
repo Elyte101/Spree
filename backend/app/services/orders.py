@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core import pricing as pricing_svc
 from app.core.config import settings
 from app.db.models import Order, OrderItem, Product, User
 from app.schemas.order import OrderCreateIn, OrderTrackingIn
@@ -15,9 +16,7 @@ from app.services.notifications import create_notification
 
 logger = logging.getLogger(__name__)
 
-# Buyers pay seller_price * 1.05; seller receives seller_price back on delivery.
-_MARKUP = Decimal("1.05")
-_TAX_RATE = Decimal("0.08")
+_PROCESSING_FEE = Decimal("2.00")
 _TOTAL_TOLERANCE = Decimal("0.50")  # max allowed $ difference between client and server total
 
 
@@ -29,14 +28,13 @@ def _server_totals(
     """
     Recompute (subtotal, shipping_cost, tax, total, item_prices) entirely from DB.
 
-    item_prices is a list of (product_id, listed_price) so callers can store
-    the authoritative price rather than the client-supplied one.
+    item_prices is a list of (product_id, listed_price, commission_rate) so callers
+    can store the authoritative price and the rate used for later payout calculation.
 
     Raises HTTP 404 if any productId doesn't exist in the DB.
     """
     standard_rate = Decimal(str(settings.default_shipping_rate))
     express_rate = Decimal(str(settings.express_shipping_rate))
-    free_threshold = Decimal(str(settings.free_shipping_threshold))
 
     subtotal = Decimal("0")
     item_prices: list[tuple] = []
@@ -48,25 +46,28 @@ def _server_totals(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Product '{item.productId}' not found",
                 )
-            listed_price = (Decimal(str(product.price)) * _MARKUP).quantize(Decimal("0.01"))
+            seller_price = Decimal(str(product.price))
+            rate = pricing_svc.commission_rate(seller_price)
+            listed_price = pricing_svc.buyer_price(seller_price)
         else:
             # Guest / external item with no productId — accept client price
             listed_price = Decimal(str(item.price)).quantize(Decimal("0.01"))
-        item_prices.append((item.productId, listed_price))
+            rate = None
+        item_prices.append((item.productId, listed_price, rate))
         subtotal += listed_price * item.quantity
 
     subtotal = subtotal.quantize(Decimal("0.01"))
 
-    if not items or subtotal >= free_threshold:
+    if not items:
         shipping_cost = Decimal("0")
     elif shipping_method == "express":
         shipping_cost = express_rate
     else:
         shipping_cost = standard_rate
 
-    tax = (subtotal * _TAX_RATE).quantize(Decimal("0.01"))
-    total = (subtotal + shipping_cost + tax).quantize(Decimal("0.01"))
-    return subtotal, shipping_cost, tax, total, item_prices
+    processing_fee = _PROCESSING_FEE if items else Decimal("0")
+    total = (subtotal + shipping_cost + processing_fee).quantize(Decimal("0.01"))
+    return subtotal, shipping_cost, processing_fee, total, item_prices
 
 
 def _check_stock(db: Session, items: list) -> None:
@@ -221,7 +222,7 @@ def _build_pending_order(
     )
     db.add(order)
 
-    for idx, (item, (product_id, listed_price)) in enumerate(zip(payload.items, item_prices)):
+    for idx, (item, (product_id, listed_price, rate)) in enumerate(zip(payload.items, item_prices)):
         seller_id: str | None = None
         if item.productId:
             product = db.get(Product, item.productId)
@@ -239,6 +240,7 @@ def _build_pending_order(
                 quantity=item.quantity,
                 color=item.color,
                 size=item.size,
+                commission_rate=rate,
             )
         )
     return order
@@ -507,10 +509,12 @@ def create_order(db: Session, payload: OrderCreateIn) -> dict:
 
     for idx, item in enumerate(payload.items):
         seller_id: str | None = None
+        item_rate: Decimal | None = None
         if item.productId:
             product = db.get(Product, item.productId)
             if product:
                 seller_id = product.seller_id
+                item_rate = pricing_svc.commission_rate(Decimal(str(product.price)))
 
         db.add(
             OrderItem(
@@ -524,6 +528,7 @@ def create_order(db: Session, payload: OrderCreateIn) -> dict:
                 quantity=item.quantity,
                 color=item.color,
                 size=item.size,
+                commission_rate=item_rate,
             )
         )
 
@@ -667,14 +672,14 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
     order.delivered_at = now
     order.payout_released_at = now
 
-    # Payout = listed_price / markup = seller's original price
     seller_payouts: dict[str, Decimal] = {}
     total_payout = Decimal("0")
 
     for item in order.items:
         item_payout = (
-            Decimal(str(item.price)) / _MARKUP * item.quantity
-        ).quantize(Decimal("0.01"))
+            pricing_svc.seller_payout_from_listed(Decimal(str(item.price)), item.commission_rate)
+            * item.quantity
+        )
         total_payout += item_payout
         if item.seller_id:
             seller_payouts[item.seller_id] = (

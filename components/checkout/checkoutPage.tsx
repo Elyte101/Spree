@@ -646,7 +646,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">Tax (8%)</Typography>
+                    <Typography color="text.secondary">Processing fee</Typography>
                     <Typography fontWeight={600}>{formatPrice(cart.tax)}</Typography>
                   </Stack>
                 </Stack>
