@@ -31,11 +31,7 @@ export const metadata: Metadata = {
   title: "Spree — Shop Safe. Pay Smart. Delivered.",
   description: "Ghana's trusted marketplace with escrow protection, verified sellers, and Mobile Money payments.",
   icons: {
-    icon: [
-      { url: "/spree-logo.png", type: "image/png" },
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
+    icon: [{ url: "/spree-logo.png", type: "image/png" }],
   },
 };
 
