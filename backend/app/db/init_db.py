@@ -27,7 +27,14 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("notifications", "channel", "VARCHAR(16) NOT NULL DEFAULT 'in_app'", "TEXT NOT NULL DEFAULT 'in_app'"),
     ("notifications", "is_sent", "BOOLEAN NOT NULL DEFAULT TRUE", "INTEGER NOT NULL DEFAULT 1"),
     # Tiered commission rate recorded per order item for accurate seller payout
-    ("order_items", "commission_rate", "NUMERIC(5,4)", "REAL"),
+    ("order_items", "commission_rate", "NUMERIC(12,8)", "REAL"),
+]
+
+# Column type upgrades for columns that already exist but need wider precision.
+# Each entry: (table, column, postgresql_alter_sql)
+_COLUMN_TYPE_UPGRADES: list[tuple[str, str, str]] = [
+    ("order_items", "commission_rate",
+     "ALTER TABLE order_items ALTER COLUMN commission_rate TYPE NUMERIC(12,8)"),
 ]
 
 
@@ -48,6 +55,9 @@ def _run_column_migrations(eng) -> None:
                         text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {pg_type}")
                     )
                     logger.debug("Ensured column %s.%s exists", table, column)
+                for table, column, alter_sql in _COLUMN_TYPE_UPGRADES:
+                    conn.execute(text(alter_sql))
+                    logger.debug("Upgraded column type %s.%s", table, column)
             else:
                 inspector = inspect(eng)
                 for table, column, _, sqlite_type in _COLUMN_MIGRATIONS:

@@ -26,15 +26,9 @@ import {
 import { InfoOutlined } from "@mui/icons-material";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
+import { calcCommission } from "@/lib/pricing";
 import { Brand, Category, Collection } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
-
-function getCommissionRate(sellerPrice: number): number {
-  if (sellerPrice <= 500) return 0.08;
-  if (sellerPrice <= 2000) return 0.05;
-  if (sellerPrice <= 5000) return 0.03;
-  return 0.01;
-}
 
 interface ProductCreateFormProps {
   categories: Category[];
@@ -142,9 +136,8 @@ export function ProductCreateForm({
   const previewSlug = slugify(slug || name) || "product-handle";
   const previewPrice = Number(price) || 0;
   const previewDiscount = Number(discount) || 0;
-  const commissionRate = previewPrice > 0 ? getCommissionRate(previewPrice) : 0;
-  const commissionAmount = Math.round(previewPrice * commissionRate * 100) / 100;
-  const buyerPrice = Math.round((previewPrice + commissionAmount) * 100) / 100;
+  const { commission: commissionAmount, effectiveRate: commissionRate, customerPays: buyerPrice } =
+    calcCommission(previewPrice);
   const compareAtPrice =
     previewDiscount > 0 && previewDiscount < 100
       ? previewPrice / (1 - previewDiscount / 100)
@@ -548,7 +541,7 @@ export function ProductCreateForm({
                       </Stack>
                       <Stack direction="row" justifyContent="space-between">
                         <Typography variant="body2" color="text.secondary">
-                          Spree commission ({(commissionRate * 100).toFixed(0)}%)
+                          Spree commission ({(commissionRate * 100).toFixed(1)}%)
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           + {formatPrice(commissionAmount)}
@@ -782,7 +775,7 @@ export function ProductCreateForm({
                       <Stack spacing={0.5}>
                         <Stack direction="row" justifyContent="space-between">
                           <Typography variant="caption" color="text.secondary">
-                            Commission ({(commissionRate * 100).toFixed(0)}%)
+                            Commission ({(commissionRate * 100).toFixed(1)}%)
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             +{formatPrice(commissionAmount)}

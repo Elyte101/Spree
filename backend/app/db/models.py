@@ -350,6 +350,6 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer)
     color: Mapped[str | None] = mapped_column(String(120), nullable=True)
     size: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
 
     order: Mapped[Order] = relationship(back_populates="items")

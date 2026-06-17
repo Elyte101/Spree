@@ -1,28 +1,58 @@
 from decimal import Decimal, ROUND_HALF_UP
+from typing import NamedTuple
 
-# Price tiers: (max_seller_price_inclusive, commission_rate)
-# Evaluated top-to-bottom; last entry is the floor (no upper bound).
-_TIERS: list[tuple[Decimal | None, Decimal]] = [
+# Marginal commission brackets — each rate applies only to the portion of
+# seller_price within its band. This ensures commission and buyer_price are
+# strictly monotonically increasing, removing tier-boundary gaming.
+_BRACKETS: list[tuple[Decimal | None, Decimal]] = [
     (Decimal("500"),  Decimal("0.08")),
     (Decimal("2000"), Decimal("0.05")),
     (Decimal("5000"), Decimal("0.03")),
     (None,            Decimal("0.01")),
 ]
 
-# Fallback for orders created before tiered pricing (column = NULL).
+# Fallback for orders created before tiered pricing (commission_rate column = NULL).
 LEGACY_COMMISSION_RATE = Decimal("0.05")
 
 
+class CommissionResult(NamedTuple):
+    amount: Decimal
+    effective_rate: Decimal
+
+
+def calc_commission(seller_price: Decimal) -> CommissionResult:
+    """Marginal-bracket commission. Returns (amount, effective_rate).
+
+    effective_rate = amount / seller_price, stored on OrderItem so payout
+    can be recovered as listed_price / (1 + effective_rate).
+    """
+    if seller_price <= Decimal("0"):
+        return CommissionResult(Decimal("0"), Decimal("0"))
+
+    total = Decimal("0")
+    prev = Decimal("0")
+    for ceiling, rate in _BRACKETS:
+        if seller_price <= prev:
+            break
+        top = seller_price if ceiling is None else min(seller_price, ceiling)
+        total += (top - prev) * rate
+        if ceiling is None:
+            break
+        prev = ceiling
+
+    amount = total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    effective_rate = (amount / seller_price).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
+    return CommissionResult(amount, effective_rate)
+
+
 def commission_rate(seller_price: Decimal) -> Decimal:
-    for ceiling, rate in _TIERS:
-        if ceiling is None or seller_price <= ceiling:
-            return rate
-    return _TIERS[-1][1]
+    """Effective commission rate — stored per OrderItem for accurate payout reversal."""
+    return calc_commission(seller_price).effective_rate
 
 
 def buyer_price(seller_price: Decimal) -> Decimal:
-    rate = commission_rate(seller_price)
-    return (seller_price * (Decimal("1") + rate)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    commission = calc_commission(seller_price).amount
+    return (seller_price + commission).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def seller_payout_from_listed(listed_price: Decimal, rate: Decimal | None) -> Decimal:
