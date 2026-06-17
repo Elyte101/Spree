@@ -332,8 +332,8 @@ export function CartPage({ recommendations }: CartPageProps) {
                 <Stack spacing={1.25}>
                   {[
                     { label: "Subtotal", value: formatPrice(subtotal) },
-                    { label: "Shipping", value: formatPrice(shipping) },
-                    { label: "Processing fee", value: formatPrice(tax) },
+                    { label: "Delivery", value: formatPrice(shipping) },
+                    { label: "Processing", value: formatPrice(tax) },
                   ].map(({ label, value }) => (
                     <Stack key={label} direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">{label}</Typography>
@@ -347,8 +347,8 @@ export function CartPage({ recommendations }: CartPageProps) {
                 <Divider />
 
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="h6" fontWeight={800}>Total</Typography>
-                  <Typography variant="h6" fontWeight={800} color="primary.main">
+                  <Typography variant="h6" fontWeight={800} color="#22C55E">Total</Typography>
+                  <Typography variant="h6" fontWeight={800} color="#22C55E">
                     {formatPrice(total)}
                   </Typography>
                 </Stack>
