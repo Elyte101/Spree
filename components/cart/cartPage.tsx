@@ -197,7 +197,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                       {/* Product image */}
                       <Box
                         component={Link}
-                        href={`/products/${item.id}`}
+                        href={`/products/${item.productId ?? item.id}`}
                         sx={{
                           position: "relative",
                           width: { xs: "100%", sm: 128 },

@@ -125,6 +125,38 @@ def refund_transaction(reference: str, amount_minor: int | None = None) -> dict:
     return result.get("data", {})
 
 
+def charge(
+    amount_minor: int,
+    email: str,
+    reference: str,
+    currency: str = "GHS",
+    mobile_money: dict | None = None,
+) -> dict:
+    """Initiate a direct charge via Paystack Charge API. Returns the charge data dict."""
+    payload: dict = {
+        "amount": amount_minor,
+        "email": email,
+        "reference": reference,
+        "currency": currency,
+    }
+    if mobile_money:
+        payload["mobile_money"] = mobile_money
+    result = _request("POST", "/charge", payload)
+    return result.get("data", {})
+
+
+def submit_otp(otp: str, reference: str) -> dict:
+    """Submit OTP for a pending MoMo charge. Returns updated charge data."""
+    result = _request("POST", "/charge/submit_otp", {"otp": otp, "reference": reference})
+    return result.get("data", {})
+
+
+def check_charge(reference: str) -> dict:
+    """Poll the current status of a pending charge. Returns charge data dict."""
+    result = _request("GET", f"/charge/{reference}")
+    return result.get("data", {})
+
+
 def verify_webhook_signature(payload_bytes: bytes, signature: str) -> bool:
     """Return True if the webhook signature matches the secret key."""
     if not settings.paystack_secret_key:

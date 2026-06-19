@@ -19,12 +19,12 @@ const validOrder = {
   postalCode: "GA-123",
   country: "Ghana",
   shippingMethod: "standard",
-  paymentMethod: "paystack",
+  paymentMethod: "momo",
   subtotal: 29.99,
   shippingCost: 12,
   tax: 2.4,
   total: 44.39,
-  currency: "$",
+  currency: "GHS",
   items: [validItem],
 };
 

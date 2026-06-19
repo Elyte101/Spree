@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { handlers } from "@/auth";
-import { checkRateLimit, recordFailedAttempt } from "@/lib/rateLimit";
+import { checkRateLimit, clearFailedAttempts, recordFailedAttempt } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,8 +42,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    recordFailedAttempt(ipKey);
-    if (email) recordFailedAttempt(email);
+    const response = await handlers.POST(request);
+    // Auth.js redirects to a URL containing "error=" on failed credential auth.
+    // Only penalize actual failures so successful logins never exhaust the counter.
+    const location = response.headers.get("Location") ?? "";
+    if (location.includes("error=")) {
+      recordFailedAttempt(ipKey);
+      if (email) recordFailedAttempt(email);
+    } else {
+      clearFailedAttempts(ipKey);
+      if (email) clearFailedAttempts(email);
+    }
+    return response;
   }
 
   return handlers.POST(request);

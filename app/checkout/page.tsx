@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { auth } from "@/auth";
 import { getUserProfile } from "@/lib/serverApi";
@@ -11,13 +12,15 @@ export const metadata: Metadata = {
 
 export default async function CheckoutRoute() {
   const session = await auth();
-  const profile = session?.user
-    ? await getUserProfile(session.user.id, {
-        name: session.user.name ?? undefined,
-        email: session.user.email ?? undefined,
-        role: session.user.role,
-      })
-    : null;
+  if (!session?.user) {
+    redirect("/login?callbackUrl=/checkout");
+  }
+
+  const profile = await getUserProfile(session.user.id, {
+    name: session.user.name ?? undefined,
+    email: session.user.email ?? undefined,
+    role: session.user.role,
+  });
 
   return <CheckoutPage initialProfile={profile} />;
 }

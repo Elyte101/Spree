@@ -30,7 +30,7 @@ class OrderCreateIn(BaseModel):
     country: str = Field(min_length=1, max_length=120)
 
     shippingMethod: Literal["standard", "express"] = "standard"
-    paymentMethod: Literal["paystack", "card", "momo", "wallet"] = "paystack"
+    paymentMethod: Literal["momo", "card"] = "momo"
 
     subtotal: float = Field(ge=0)
     shippingCost: float = Field(ge=0)
@@ -47,10 +47,28 @@ class OrderTrackingIn(BaseModel):
     estimatedDeliveryDays: int | None = Field(default=None, ge=1, le=365)
 
 
+class ChargeMomoIn(OrderCreateIn):
+    momoPhone: str = Field(min_length=10, max_length=20)
+    momoProvider: Literal["mtn", "vod", "atl"]
+
+
+class SubmitOtpIn(BaseModel):
+    otp: str = Field(min_length=1, max_length=10)
+    reference: str = Field(min_length=1, max_length=128)
+
+
+class ChargeMomoOut(BaseModel):
+    orderId: str
+    reference: str
+    status: str
+    displayText: str
+
+
 class PaymentInitOut(BaseModel):
     orderId: str
     reference: str
     authorizationUrl: str
+    accessCode: str = ""
 
 
 class PaymentVerifyOut(BaseModel):

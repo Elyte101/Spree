@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core import pricing as pricing_svc
 from app.core.config import settings
 from app.db.models import Order, OrderItem, Product, User
-from app.schemas.order import OrderCreateIn, OrderTrackingIn
+from app.schemas.order import ChargeMomoIn, OrderCreateIn, OrderTrackingIn
 from app.services import paystack as paystack_svc
 from app.services.notifications import create_notification
 
@@ -324,6 +324,7 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
         "orderId": order_id,
         "reference": reference,
         "authorizationUrl": ps_data.get("authorization_url", ""),
+        "accessCode": ps_data.get("access_code", ""),
     }
 
 
@@ -397,6 +398,123 @@ def verify_payment(db: Session, reference: str) -> dict:
     return _order_to_dict(order)
 
 
+def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
+    """
+    Create a pending order and initiate MoMo payment via Paystack Charge API.
+    Returns {orderId, reference, status, displayText}.
+    """
+    if payload.idempotencyKey:
+        existing = db.scalar(select(Order).where(Order.idempotency_key == payload.idempotencyKey))
+        if existing:
+            return {
+                "orderId": existing.id,
+                "reference": existing.paystack_reference or "",
+                "status": "pending",
+                "displayText": "Processing your payment...",
+            }
+
+    server_subtotal, server_shipping, server_tax, server_total, item_prices = _server_totals(
+        db, payload.items, payload.shippingMethod
+    )
+    _check_stock(db, payload.items)
+
+    order_id = f"order-{uuid4().hex[:16]}"
+    reference = f"spree-{order_id}-{uuid4().hex[:8]}"
+
+    order = _build_pending_order(
+        db, payload, order_id,
+        subtotal=server_subtotal,
+        shipping_cost=server_shipping,
+        tax=server_tax,
+        total=server_total,
+        item_prices=item_prices,
+    )
+    order.paystack_reference = reference
+    if payload.idempotencyKey:
+        order.idempotency_key = payload.idempotencyKey
+    db.commit()
+    db.refresh(order)
+
+    if not settings.paystack_secret_key:
+        return {
+            "orderId": order_id,
+            "reference": reference,
+            "status": "send_otp",
+            "displayText": "[Dev mode] Enter any digits as the OTP",
+        }
+
+    # Normalize to Ghana local format (e.g. "0551234987") for Paystack Charge API
+    phone = payload.momoPhone.strip()
+    if phone.startswith("+233"):
+        local = phone[4:].lstrip()
+        phone = local if local.startswith("0") else "0" + local
+    elif phone.startswith("233") and not phone.startswith("0"):
+        local = phone[3:].lstrip()
+        phone = local if local.startswith("0") else "0" + local
+
+    amount_minor = int(server_total * 100)
+    try:
+        charge_data = paystack_svc.charge(
+            amount_minor=amount_minor,
+            email=payload.email.strip().lower(),
+            reference=reference,
+            currency=payload.currency,
+            mobile_money={"phone": phone, "provider": payload.momoProvider},
+        )
+    except RuntimeError as exc:
+        db.delete(order)
+        db.commit()
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    charge_status = charge_data.get("status", "")
+    display_text = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
+    return {
+        "orderId": order_id,
+        "reference": reference,
+        "status": charge_status,
+        "displayText": display_text,
+    }
+
+
+def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
+    """Submit OTP for a pending MoMo charge. Returns {status, displayText}."""
+    order = db.scalar(
+        select(Order).where(Order.paystack_reference == reference).with_for_update()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found for this reference")
+    if order.status != "pending":
+        raise HTTPException(status_code=409, detail=f"Order is not pending (status: {order.status})")
+
+    if not settings.paystack_secret_key:
+        _mark_order_paid(db, order)
+        return {"status": "success", "displayText": "[Dev mode] Payment confirmed"}
+
+    try:
+        charge_data = paystack_svc.submit_otp(otp=otp, reference=reference)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    charge_status = charge_data.get("status", "")
+    display_text = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
+    return {"status": charge_status, "displayText": display_text}
+
+
+def check_momo_charge(reference: str) -> dict:
+    """Poll Paystack for the current status of a pending MoMo charge."""
+    if not settings.paystack_secret_key:
+        return {"status": "success", "displayText": "[Dev mode] Payment confirmed"}
+
+    try:
+        charge_data = paystack_svc.check_charge(reference=reference)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    charge_status = charge_data.get("status", "")
+    display_text = charge_data.get("display_text") or charge_data.get("message") or "Checking..."
+    return {"status": charge_status, "displayText": display_text}
+
+
 def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
     """Process Paystack webhook events. Called only after signature is verified."""
     if event == "charge.success":
@@ -423,7 +541,6 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
         )
         if order and order.status == "pending":
             order.status = "cancelled"
-            db.commit()
             logger.info("Webhook: cancelled order %s — charge failed (ref=%s)", order.id, reference)
             if order.user_id:
                 create_notification(
@@ -437,6 +554,7 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
                     href="/orders",
                     recipient_id=order.user_id,
                 )
+            db.commit()
 
     elif event == "transfer.success":
         # Paystack confirmed the seller payout transfer
@@ -459,7 +577,7 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
                 db,
                 title="Payout failed — action required",
                 body=(
-                    f"We couldn't send your payout of {seller.payout_info.get('currency', '$')} "
+                    f"We couldn't send your payout of {(seller.payout_info or {}).get('currency', 'GHS')} "
                     f"{amount:.2f}. Please update your payout account details in your profile "
                     "so we can retry."
                 ),

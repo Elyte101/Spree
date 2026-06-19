@@ -1,12 +1,20 @@
-import hashlib
-import hmac
+import json
 import logging
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 
 from app.api.deps import DBSession, InternalAPIKey
-from app.schemas.order import OrderCreateIn, PaymentInitOut, PaymentVerifyOut
-from app.services.orders import handle_paystack_webhook, initialize_payment, refund_order, verify_payment
+from app.schemas.order import ChargeMomoIn, ChargeMomoOut, OrderCreateIn, PaymentInitOut, PaymentVerifyOut, SubmitOtpIn
+from app.services.orders import (
+    charge_momo_payment,
+    check_momo_charge,
+    handle_paystack_webhook,
+    initialize_payment,
+    refund_order,
+    submit_otp_for_order,
+    verify_payment,
+)
+from app.services import paystack as paystack_svc
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -43,12 +51,7 @@ async def paystack_webhook(
     body = await request.body()
 
     if settings.paystack_secret_key:
-        computed = hmac.new(
-            settings.paystack_secret_key.encode(),
-            body,
-            hashlib.sha512,
-        ).hexdigest()
-        if not hmac.compare_digest(computed, x_paystack_signature):
+        if not paystack_svc.verify_webhook_signature(body, x_paystack_signature):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
     else:
         logger.warning(
@@ -56,7 +59,6 @@ async def paystack_webhook(
             "skipping signature check. Set the key before going to production."
         )
 
-    import json
     try:
         event_data = json.loads(body)
     except Exception:
@@ -67,6 +69,21 @@ async def paystack_webhook(
     logger.info("Paystack webhook received: %s", event)
     handle_paystack_webhook(db, event, data)
     return {"received": True}
+
+
+@router.post("/orders/charge-momo", response_model=ChargeMomoOut, status_code=status.HTTP_201_CREATED)
+def momo_charge(payload: ChargeMomoIn, db: DBSession, _: InternalAPIKey):
+    return charge_momo_payment(db, payload)
+
+
+@router.post("/orders/submit-otp", status_code=status.HTTP_200_OK)
+def otp_submit(payload: SubmitOtpIn, db: DBSession, _: InternalAPIKey):
+    return submit_otp_for_order(db, payload.otp, payload.reference)
+
+
+@router.get("/orders/check-charge", status_code=status.HTTP_200_OK)
+def charge_check(reference: str = Query(..., min_length=1), _: InternalAPIKey = ...):
+    return check_momo_charge(reference)
 
 
 @router.post("/orders/{order_id}/refund", status_code=status.HTTP_200_OK)

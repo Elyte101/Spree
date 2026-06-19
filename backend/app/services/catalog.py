@@ -570,10 +570,11 @@ def list_products(db: Session, params: ProductListParams) -> dict:
     filtered = _apply_product_filters(_base_product_query(include_blacklisted=params.include_blacklisted), params)
     sorted_filtered = _sort_product_query(filtered, params.sort)
 
-    # Count via subquery to avoid double-counting from JOINs
-    total = db.scalar(
-        select(func.count(distinct(Product.id))).select_from(filtered.subquery())
-    ) or 0
+    # Count distinct product IDs matched by the filtered query.
+    # Using with_only_columns avoids the cartesian-product bug that occurs when
+    # referencing an ORM-mapped column (Product.id) outside its subquery context.
+    count_subq = filtered.with_only_columns(Product.id).distinct().subquery()
+    total = db.scalar(select(func.count()).select_from(count_subq)) or 0
 
     total_pages = max(1, ceil(total / limit)) if total else 1
     products = list(
@@ -857,6 +858,12 @@ def _resolve_product_for_actor(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only modify your own products",
+            )
+        actor = db.get(User, actor_user_id)
+        if actor and actor.seller_status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your seller account is not active right now",
             )
 
     return product

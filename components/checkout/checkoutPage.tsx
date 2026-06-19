@@ -7,7 +7,6 @@ import {
   CreditCardRounded,
   LockOutlined,
   LocalShippingRounded,
-  OpenInNewRounded,
   PhoneAndroidRounded,
   AccountBalanceRounded,
 } from "@mui/icons-material";
@@ -60,6 +59,9 @@ interface CheckoutFormState {
   country: string;
 }
 
+type MomoProvider = "mtn" | "vod" | "atl";
+type PaymentStage = "idle" | "charging" | "otp_needed" | "polling" | "verifying";
+
 function StepBadge({ n }: { n: number }) {
   return (
     <Box
@@ -83,27 +85,68 @@ function StepBadge({ n }: { n: number }) {
 }
 
 const shippingOptions = [
-  {
-    value: "standard",
-    label: "Standard",
-    detail: "3–5 business days",
-    priceKey: "standard" as const,
-  },
-  {
-    value: "express",
-    label: "Express",
-    detail: "2 business days",
-    price: 18,
-  },
+  { value: "standard", label: "Standard", detail: "3–5 business days", priceKey: "standard" as const },
+  { value: "express", label: "Express", detail: "2 business days", price: 18 },
 ];
 
+declare global {
+  interface Window {
+    PaystackPop: {
+      setup: (config: {
+        key: string;
+        email: string;
+        amount: number;
+        currency?: string;
+        ref?: string;
+        access_code?: string;
+        callback: (response: { reference: string }) => void;
+        onClose: () => void;
+      }) => { openIframe: () => void };
+    };
+  }
+}
+
+function loadPaystackJS(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (typeof window !== "undefined" && window.PaystackPop) {
+      resolve();
+      return;
+    }
+    const existing = document.getElementById("paystack-inline-js");
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      return;
+    }
+    const script = document.createElement("script");
+    script.id = "paystack-inline-js";
+    script.src = "https://js.paystack.co/v1/inline.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Paystack payment library"));
+    document.head.appendChild(script);
+  });
+}
+
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
-  const { cart } = useCart();
+  const { cart, clearCart } = useCart();
   const refreshPrices = useCartStore((s) => s.refreshPrices);
+
   const [shippingMethod, setShippingMethod] = React.useState("standard");
   const [paymentMethod, setPaymentMethod] = React.useState<"momo" | "card">("momo");
+  const [stage, setStage] = React.useState<PaymentStage>("idle");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  // MoMo fields
+  const [momoPhone, setMomoPhone] = React.useState("");
+  const [momoProvider, setMomoProvider] = React.useState<MomoProvider | "">("");
+
+  // OTP fields
+  const [otp, setOtp] = React.useState("");
+  const [momoPrompt, setMomoPrompt] = React.useState("");
+
+  // Holds reference + orderId across async steps
+  const pendingPaymentRef = React.useRef<{ reference: string; orderId: string } | null>(null);
+  const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Refresh item prices from the catalog on mount so stale localStorage prices
   // don't cause a mismatch with the server's recomputed totals.
@@ -119,8 +162,15 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         for (const p of products) priceMap[p.id] = p.price;
         refreshPrices(priceMap);
       })
-      .catch(() => {/* silently ignore — stale price is better than broken checkout */});
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Stop polling on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, []);
 
   const [form, setForm] = React.useState<CheckoutFormState>(() => {
@@ -145,7 +195,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
 
   const standardShipping = cart.standardShipping ?? cart.shipping;
   const shipping =
-    cart.items.length === 0 ? 0 : shippingMethod === "express" ? 18 : cart.shipping;
+    cart.items.length === 0 ? 0 : shippingMethod === "express" ? 18 : standardShipping;
   const total = Number((cart.subtotal + shipping + cart.tax).toFixed(2));
 
   const formIsValid =
@@ -157,61 +207,241 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
     form.postalCode.trim().length >= 1 &&
     form.country.trim().length >= 1;
 
-  const canSubmit = cart.items.length > 0 && !submitting && formIsValid;
+  const momoDetailsValid =
+    paymentMethod !== "momo" ||
+    (momoPhone.replace(/\D/g, "").length >= 9 && !!momoProvider);
 
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
-    setSubmitError(null);
-    setSubmitting(true);
+  const canSubmit =
+    cart.items.length > 0 &&
+    stage === "idle" &&
+    !submitting &&
+    formIsValid &&
+    momoDetailsValid;
 
+  const buildOrderPayload = () => ({
+    fullName: form.fullName.trim(),
+    email: form.email.trim(),
+    phone: form.phone.trim() || null,
+    addressLine1: form.addressLine1.trim(),
+    addressLine2: form.addressLine2.trim() || null,
+    city: form.city.trim(),
+    state: form.state.trim(),
+    postalCode: form.postalCode.trim(),
+    country: form.country.trim(),
+    shippingMethod,
+    paymentMethod,
+    subtotal: cart.subtotal,
+    shippingCost: shipping,
+    tax: cart.tax,
+    total,
+    currency: "GHS",
+    items: cart.items.map((item) => ({
+      productId: item.productId,
+      name: item.name,
+      image: item.image,
+      price: item.price,
+      quantity: item.quantity,
+      color: item.color ?? null,
+      size: item.size ?? null,
+    })),
+  });
+
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const verifyAndComplete = React.useCallback(async (reference: string, orderId: string) => {
+    setStage("verifying");
     try {
-      const response = await fetch("/api/orders/initialize-payment", {
+      const res = await fetch(`/api/orders/verify-payment?reference=${encodeURIComponent(reference)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "Payment verification failed");
+      }
+      clearCart();
+      window.location.href = `/checkout/success?orderId=${orderId}`;
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? `${err.message} — reference: ${reference}`
+          : `Verification failed — reference: ${reference}`
+      );
+      setSubmitting(false);
+      setStage("idle");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startPolling = React.useCallback((reference: string, orderId: string) => {
+    setStage("polling");
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/orders/check-charge?reference=${encodeURIComponent(reference)}`);
+        if (!res.ok) return;
+        const data = await res.json() as { status: string };
+        if (data.status === "success") {
+          stopPolling();
+          await verifyAndComplete(reference, orderId);
+        } else if (data.status === "failed") {
+          stopPolling();
+          setSubmitError("Payment was declined. Please try a different number or provider.");
+          setSubmitting(false);
+          setStage("idle");
+        }
+      } catch {
+        // Network error during poll — keep trying
+      }
+    }, 3000);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifyAndComplete]);
+
+  const handleOtpSubmit = async () => {
+    const { reference, orderId } = pendingPaymentRef.current ?? {};
+    if (!reference || !orderId) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/orders/submit-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          phone: form.phone.trim() || null,
-          addressLine1: form.addressLine1.trim(),
-          addressLine2: form.addressLine2.trim() || null,
-          city: form.city.trim(),
-          state: form.state.trim(),
-          postalCode: form.postalCode.trim(),
-          country: form.country.trim(),
-          shippingMethod,
-          paymentMethod,
-          subtotal: cart.subtotal,
-          shippingCost: shipping,
-          tax: cart.tax,
-          total,
-          currency: "GHS",
-          items: cart.items.map((item) => ({
-            productId: item.productId,
-            name: item.name,
-            image: item.image,
-            price: item.price,
-            quantity: item.quantity,
-            color: item.color ?? null,
-            size: item.size ?? null,
-          })),
-        }),
+        body: JSON.stringify({ otp: otp.trim(), reference }),
       });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(
-          (data as { detail?: string }).detail ?? "Order could not be placed. Please try again."
-        );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "OTP submission failed");
       }
-
-      const result = (await response.json()) as { orderId: string; authorizationUrl: string };
-      // Cart is cleared by the verify page after payment is confirmed
-      window.location.href = result.authorizationUrl;
+      const { status } = await res.json() as { status: string };
+      if (status === "pending") {
+        setOtp("");
+        startPolling(reference, orderId);
+      } else if (status === "success") {
+        await verifyAndComplete(reference, orderId);
+      } else {
+        throw new Error("OTP verification failed. Please try again.");
+      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
       setSubmitting(false);
     }
   };
+
+  const handleMomoPayment = async () => {
+    setStage("charging");
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/orders/charge-momo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...buildOrderPayload(),
+          momoPhone: momoPhone.trim(),
+          momoProvider,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "Payment initiation failed");
+      }
+      const { orderId, reference, status, displayText } = await res.json() as {
+        orderId: string;
+        reference: string;
+        status: string;
+        displayText: string;
+      };
+      pendingPaymentRef.current = { reference, orderId };
+
+      if (status === "send_otp") {
+        setMomoPrompt(displayText);
+        setStage("otp_needed");
+        setSubmitting(false);
+      } else if (status === "pending") {
+        startPolling(reference, orderId);
+      } else if (status === "success") {
+        await verifyAndComplete(reference, orderId);
+      } else {
+        throw new Error(displayText || "Payment failed. Please try again.");
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
+      setSubmitting(false);
+      setStage("idle");
+    }
+  };
+
+  const handleCardPayment = async () => {
+    setStage("charging");
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const res = await fetch("/api/orders/initialize-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildOrderPayload()),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { detail?: string }).detail ?? "Failed to initialize payment");
+      }
+      const { orderId, reference, authorizationUrl, accessCode } = await res.json() as {
+        orderId: string;
+        reference: string;
+        authorizationUrl: string;
+        accessCode: string;
+      };
+
+      const publicKey = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY;
+
+      if (!publicKey || !accessCode) {
+        // Dev mode or missing key — fall back to redirect
+        window.location.href = authorizationUrl;
+        return;
+      }
+
+      await loadPaystackJS();
+
+      window.PaystackPop.setup({
+        key: publicKey,
+        email: form.email.trim(),
+        amount: Math.round(total * 100),
+        currency: "GHS",
+        ref: reference,
+        access_code: accessCode,
+        callback: async (response) => {
+          await verifyAndComplete(response.reference, orderId);
+        },
+        onClose: () => {
+          setSubmitError("Payment was cancelled. Your order has been saved — click Pay again to complete.");
+          setSubmitting(false);
+          setStage("idle");
+        },
+      }).openIframe();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
+      setSubmitting(false);
+      setStage("idle");
+    }
+  };
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    if (paymentMethod === "momo") {
+      handleMomoPayment();
+    } else {
+      handleCardPayment();
+    }
+  };
+
+  const buttonLabel = (() => {
+    if (stage === "charging" || stage === "verifying") return "Processing...";
+    if (paymentMethod === "momo") return "Pay with Mobile Money";
+    return "Pay with Card";
+  })();
 
   const cardSx = {
     p: { xs: 2, sm: 3 },
@@ -241,12 +471,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
     >
       <Stack spacing={4}>
         {/* ── Header ── */}
-        <motion.div
-          custom={0}
-          variants={sectionVariants}
-          initial="hidden"
-          animate="visible"
-        >
+        <motion.div custom={0} variants={sectionVariants} initial="hidden" animate="visible">
           <Paper
             elevation={0}
             sx={(theme) => ({
@@ -289,7 +514,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
           </Paper>
         </motion.div>
 
-        {/* ── Error alert ── */}
+        {/* ── Error alert (top) ── */}
         <AnimatePresence>
           {submitError ? (
             <motion.div
@@ -459,15 +684,9 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                   <Stack spacing={1.5}>
                     {shippingOptions.map((option) => {
                       const isSelected = shippingMethod === option.value;
-                      const price =
-                        option.value === "express" ? 18 : standardShipping;
-
+                      const price = option.value === "express" ? 18 : standardShipping;
                       return (
-                        <motion.div
-                          key={option.value}
-                          whileTap={{ scale: 0.985 }}
-                          transition={{ duration: 0.12 }}
-                        >
+                        <motion.div key={option.value} whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
                           <Box
                             onClick={() => setShippingMethod(option.value)}
                             sx={(theme) => ({
@@ -475,17 +694,13 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                               borderRadius: 2,
                               border: "1.5px solid",
                               borderColor: isSelected ? "primary.main" : "divider",
-                              bgcolor: isSelected
-                                ? alpha(theme.palette.primary.main, 0.05)
-                                : "transparent",
+                              bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : "transparent",
                               cursor: "pointer",
                               display: "flex",
                               alignItems: "center",
                               justifyContent: "space-between",
                               transition: "border-color 0.18s, background-color 0.18s",
-                              "&:hover": {
-                                borderColor: isSelected ? "primary.main" : "text.disabled",
-                              },
+                              "&:hover": { borderColor: isSelected ? "primary.main" : "text.disabled" },
                             })}
                           >
                             <Stack direction="row" spacing={1.5} alignItems="center">
@@ -498,9 +713,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                               />
                               <Box>
                                 <Typography fontWeight={700}>{option.label}</Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {option.detail}
-                                </Typography>
+                                <Typography variant="body2" color="text.secondary">{option.detail}</Typography>
                               </Box>
                             </Stack>
                             <Typography
@@ -558,7 +771,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       return (
                         <motion.div key={opt.value} whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
                           <Box
-                            onClick={() => setPaymentMethod(opt.value)}
+                            onClick={() => { setPaymentMethod(opt.value); setStage("idle"); }}
                             sx={(theme) => ({
                               p: 2,
                               borderRadius: 2,
@@ -575,7 +788,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                           >
                             <Radio
                               checked={isSelected}
-                              onChange={() => setPaymentMethod(opt.value)}
+                              onChange={() => { setPaymentMethod(opt.value); setStage("idle"); }}
                               size="small"
                               sx={{ p: 0 }}
                               onClick={(e) => e.stopPropagation()}
@@ -608,13 +821,114 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     })}
                   </Stack>
 
-                  <Chip
-                    icon={<OpenInNewRounded fontSize="small" />}
-                    label="Redirects to Paystack — PCI-DSS compliant"
-                    color="success"
-                    variant="outlined"
-                    sx={{ width: "fit-content", borderRadius: 999 }}
-                  />
+                  {/* MoMo inline fields */}
+                  <AnimatePresence>
+                    {paymentMethod === "momo" && stage === "idle" && (
+                      <motion.div
+                        key="momo-fields"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.22, ease }}
+                      >
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gap: 2,
+                            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                            pt: 0.5,
+                          }}
+                        >
+                          <TextField
+                            label="MoMo phone number"
+                            value={momoPhone}
+                            onChange={(e) => setMomoPhone(e.target.value)}
+                            placeholder="e.g. 0551234567"
+                            required
+                            slotProps={{ htmlInput: { inputMode: "tel" } }}
+                          />
+                          <FormControl required>
+                            <InputLabel>Provider</InputLabel>
+                            <Select
+                              label="Provider"
+                              value={momoProvider}
+                              onChange={(e) => setMomoProvider(e.target.value as MomoProvider)}
+                            >
+                              <MenuItem value="mtn">MTN Mobile Money</MenuItem>
+                              <MenuItem value="vod">Vodafone Cash</MenuItem>
+                              <MenuItem value="atl">AirtelTigo Money</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Box>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* OTP input */}
+                  <AnimatePresence>
+                    {stage === "otp_needed" && (
+                      <motion.div
+                        key="otp"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 8 }}
+                        transition={{ duration: 0.22, ease }}
+                      >
+                        <Box
+                          sx={(theme) => ({
+                            p: 2,
+                            borderRadius: 2,
+                            bgcolor: alpha(theme.palette.primary.main, 0.05),
+                            border: "1px solid",
+                            borderColor: alpha(theme.palette.primary.main, 0.2),
+                          })}
+                        >
+                          <Typography variant="body2" color="text.secondary" mb={1.5}>
+                            {momoPrompt || "Enter the OTP sent to your MoMo number."}
+                          </Typography>
+                          <Stack direction="row" spacing={1.5} alignItems="center">
+                            <TextField
+                              label="One-time password"
+                              value={otp}
+                              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                              slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 8 } }}
+                              size="small"
+                              sx={{ flex: 1 }}
+                              autoFocus
+                            />
+                            <Button
+                              variant="contained"
+                              onClick={handleOtpSubmit}
+                              disabled={otp.length < 4 || submitting}
+                              size="small"
+                              sx={{ fontWeight: 700, flexShrink: 0, borderRadius: 999 }}
+                            >
+                              {submitting ? <CircularProgress size={16} color="inherit" /> : "Confirm"}
+                            </Button>
+                          </Stack>
+                        </Box>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Polling indicator */}
+                  <AnimatePresence>
+                    {stage === "polling" && (
+                      <motion.div
+                        key="polling"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                      >
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 1 }}>
+                          <CircularProgress size={20} />
+                          <Typography variant="body2" color="text.secondary">
+                            Waiting for payment confirmation from your MoMo provider…
+                          </Typography>
+                        </Stack>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </Stack>
               </Paper>
             </motion.div>
@@ -680,16 +994,9 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                           exit={{ opacity: 0, x: -16 }}
                           transition={{ delay: i * 0.04, duration: 0.3, ease }}
                         >
-                          <Stack
-                            direction="row"
-                            justifyContent="space-between"
-                            alignItems="flex-start"
-                            spacing={1.5}
-                          >
+                          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5}>
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography fontWeight={700} noWrap>
-                                {item.name}
-                              </Typography>
+                              <Typography fontWeight={700} noWrap>{item.name}</Typography>
                               <Typography variant="body2" color="text.secondary">
                                 Qty {item.quantity}
                                 {item.color ? ` · ${item.color}` : ""}
@@ -704,12 +1011,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                       ))}
                     </Stack>
                   ) : (
-                    <motion.div
-                      key="empty"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                    >
+                    <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                       <Alert severity="info" sx={{ borderRadius: 2 }}>
                         Your cart is empty. Add a product before completing checkout.
                       </Alert>
@@ -726,12 +1028,8 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     <Typography fontWeight={600}>{formatPrice(cart.subtotal)}</Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">
-                      Delivery fee ({shippingMethod})
-                    </Typography>
-                    <Typography fontWeight={600}>
-                      {formatPrice(shipping)}
-                    </Typography>
+                    <Typography color="text.secondary">Delivery fee ({shippingMethod})</Typography>
+                    <Typography fontWeight={600}>{formatPrice(shipping)}</Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
                     <Typography color="text.secondary">
@@ -744,12 +1042,8 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                 <Divider />
 
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    Total
-                  </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                    {formatPrice(total)}
-                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>Total</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 900 }}>{formatPrice(total)}</Typography>
                 </Stack>
 
                 {/* Inline error — visible without scrolling to top */}
@@ -759,34 +1053,36 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                   </Alert>
                 )}
 
-                {/* Place order */}
-                <motion.div whileTap={canSubmit ? { scale: 0.97 } : undefined}>
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    size="large"
-                    endIcon={
-                      submitting ? (
-                        <CircularProgress size={18} color="inherit" />
-                      ) : (
-                        <CreditCardRounded />
-                      )
-                    }
-                    disabled={!canSubmit}
-                    onClick={handleSubmit}
-                    sx={{
-                      borderRadius: 999,
-                      py: 1.5,
-                      textTransform: "none",
-                      fontWeight: 900,
-                      fontSize: "1rem",
-                      boxShadow: "none",
-                      "&:hover": { boxShadow: "none" },
-                    }}
-                  >
-                    {submitting ? "Placing order…" : "Place order"}
-                  </Button>
-                </motion.div>
+                {/* Place order button — hidden during OTP / polling stages */}
+                {(stage === "idle" || stage === "charging" || stage === "verifying") && (
+                  <motion.div whileTap={canSubmit ? { scale: 0.97 } : undefined}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      size="large"
+                      endIcon={
+                        submitting ? (
+                          <CircularProgress size={18} color="inherit" />
+                        ) : (
+                          <CreditCardRounded />
+                        )
+                      }
+                      disabled={!canSubmit}
+                      onClick={handleSubmit}
+                      sx={{
+                        borderRadius: 999,
+                        py: 1.5,
+                        textTransform: "none",
+                        fontWeight: 900,
+                        fontSize: "1rem",
+                        boxShadow: "none",
+                        "&:hover": { boxShadow: "none" },
+                      }}
+                    >
+                      {buttonLabel}
+                    </Button>
+                  </motion.div>
+                )}
 
                 <Button
                   component={Link}
@@ -805,12 +1101,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                 </Button>
 
                 {/* Trust signal */}
-                <Stack
-                  direction="row"
-                  spacing={0.75}
-                  alignItems="center"
-                  justifyContent="center"
-                >
+                <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
                   <LockOutlined sx={{ fontSize: 13, color: "text.disabled" }} />
                   <Typography variant="caption" color="text.disabled">
                     256-bit SSL · Secure checkout

@@ -3,7 +3,7 @@ import { z } from "zod";
 const OrderItemSchema = z.object({
   productId: z.string().min(1),
   name: z.string().min(1).max(300),
-  image: z.string().url(),
+  image: z.string().min(1),
   price: z.number().nonnegative(),
   quantity: z.number().int().positive().max(999),
   color: z.string().max(100).nullable().optional(),
@@ -21,7 +21,7 @@ export const CreateOrderSchema = z.object({
   postalCode: z.string().min(1).max(20),
   country: z.string().min(1, "Country is required").max(100),
   shippingMethod: z.string().min(1).max(50),
-  paymentMethod: z.enum(["paystack", "momo", "card", "wallet"]),
+  paymentMethod: z.enum(["momo", "card"]),
   subtotal: z.number().nonnegative(),
   shippingCost: z.number().nonnegative(),
   tax: z.number().nonnegative(),
@@ -31,3 +31,16 @@ export const CreateOrderSchema = z.object({
 });
 
 export type CreateOrderInput = z.infer<typeof CreateOrderSchema>;
+
+export const ChargeMomoSchema = CreateOrderSchema.extend({
+  momoPhone: z.string().min(10, "Phone number required").max(20),
+  momoProvider: z.enum(["mtn", "vod", "atl"]),
+});
+
+export const SubmitOtpSchema = z.object({
+  otp: z.string().min(1).max(10),
+  reference: z.string().min(1).max(128),
+});
+
+export type ChargeMomoInput = z.infer<typeof ChargeMomoSchema>;
+export type SubmitOtpInput = z.infer<typeof SubmitOtpSchema>;
