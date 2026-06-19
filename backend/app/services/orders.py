@@ -311,6 +311,12 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
         }
 
     # 3. Charge the server-computed total in pesewas (never the client value)
+    _CHANNELS_MAP = {
+        "momo": ["mobile_money"],
+        "card": ["card", "bank"],
+    }
+    channels = _CHANNELS_MAP.get(payload.paymentMethod)
+
     amount_minor = int(server_total * 100)
     try:
         ps_data = paystack_svc.initialize_transaction(
@@ -319,6 +325,7 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
             reference=reference,
             currency=payload.currency,
             callback_url=callback_url,
+            channels=channels,
         )
     except RuntimeError as exc:
         # Roll back the pending order so the cart stays intact for retry

@@ -34,7 +34,7 @@ const defaultCart: CartSummary = {
   standardShipping: DEFAULT_STANDARD_SHIPPING,
   tax: 0,
   total: 0,
-  currency: "$",
+  currency: "GHS",
 };
 
 const sanitizePart = (value: string) =>

@@ -51,8 +51,9 @@ def initialize_transaction(
     amount_minor: int,
     email: str,
     reference: str,
-    currency: str = "$",
+    currency: str = "GHS",
     callback_url: str = "",
+    channels: list[str] | None = None,
 ) -> dict:
     """Create a Paystack transaction. Returns {"authorization_url", "access_code", "reference"}."""
     payload: dict = {
@@ -63,6 +64,8 @@ def initialize_transaction(
     }
     if callback_url:
         payload["callback_url"] = callback_url
+    if channels:
+        payload["channels"] = channels
     result = _request("POST", "/transaction/initialize", payload)
     return result.get("data", {})
 
@@ -78,7 +81,7 @@ def create_transfer_recipient(
     account_number: str,
     bank_code: str = "",
     mobile_money_network: str = "",
-    currency: str = "$",
+    currency: str = "GHS",
 ) -> str:
     """Create a Paystack transfer recipient. Returns the recipient_code."""
     if mobile_money_network:

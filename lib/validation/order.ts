@@ -21,7 +21,7 @@ export const CreateOrderSchema = z.object({
   postalCode: z.string().min(1).max(20),
   country: z.string().min(1, "Country is required").max(100),
   shippingMethod: z.string().min(1).max(50),
-  paymentMethod: z.string().min(1).max(50),
+  paymentMethod: z.enum(["paystack", "momo", "card", "wallet"]),
   subtotal: z.number().nonnegative(),
   shippingCost: z.number().nonnegative(),
   tax: z.number().nonnegative(),

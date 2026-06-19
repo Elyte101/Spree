@@ -20,7 +20,8 @@ function parsePhone(full: string): { code: string; local: string } {
   // Sort longest code first so +971 beats +1 when matching "+971 ..."
   const sorted = [...COUNTRY_PHONE_CODES].sort((a, b) => b.code.length - a.code.length);
   for (const { code } of sorted) {
-    if (full === code || full.startsWith(code + " ")) {
+    // Match with space (+233 544...), without space (+233544...), or exact code only
+    if (full === code || full.startsWith(code + " ") || full.startsWith(code)) {
       return { code, local: full.slice(code.length).trim() };
     }
   }

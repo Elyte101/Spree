@@ -30,13 +30,13 @@ class OrderCreateIn(BaseModel):
     country: str = Field(min_length=1, max_length=120)
 
     shippingMethod: Literal["standard", "express"] = "standard"
-    paymentMethod: Literal["paystack", "card", "wallet"] = "paystack"
+    paymentMethod: Literal["paystack", "card", "momo", "wallet"] = "paystack"
 
     subtotal: float = Field(ge=0)
     shippingCost: float = Field(ge=0)
     tax: float = Field(ge=0)
     total: float = Field(ge=0)
-    currency: str = Field(default="$", max_length=8)
+    currency: str = Field(default="GHS", max_length=8)
 
     items: list[OrderItemIn] = Field(min_length=1)
 

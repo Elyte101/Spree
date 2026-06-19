@@ -8,6 +8,8 @@ import {
   LockOutlined,
   LocalShippingRounded,
   OpenInNewRounded,
+  PhoneAndroidRounded,
+  AccountBalanceRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -96,6 +98,7 @@ const shippingOptions = [
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
   const { cart } = useCart();
   const [shippingMethod, setShippingMethod] = React.useState("standard");
+  const [paymentMethod, setPaymentMethod] = React.useState<"momo" | "card">("momo");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
 
@@ -155,12 +158,12 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
           postalCode: form.postalCode.trim(),
           country: form.country.trim(),
           shippingMethod,
-          paymentMethod: "paystack",
+          paymentMethod,
           subtotal: cart.subtotal,
           shippingCost: shipping,
           tax: cart.tax,
           total,
-          currency: cart.currency,
+          currency: "GHS",
           items: cart.items.map((item) => ({
             productId: item.productId,
             name: item.name,
@@ -503,7 +506,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     <StepBadge n={3} />
                     <Box>
                       <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-                        Payment
+                        Payment method
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Handled securely by Paystack
@@ -514,19 +517,83 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                   <Divider />
 
                   <Stack spacing={1.5}>
-                    <Typography variant="body2" color="text.secondary">
-                      After you place your order you will be redirected to Paystack&apos;s secure
-                      payment page. Paystack accepts cards, bank transfers, and mobile money.
-                      Card details are never entered on this site.
-                    </Typography>
-                    <Chip
-                      icon={<OpenInNewRounded fontSize="small" />}
-                      label="Redirects to Paystack — PCI-DSS compliant"
-                      color="success"
-                      variant="outlined"
-                      sx={{ width: "fit-content", borderRadius: 999 }}
-                    />
+                    {(
+                      [
+                        {
+                          value: "momo" as const,
+                          label: "Mobile Money",
+                          detail: "MTN MoMo · Vodafone Cash · AirtelTigo",
+                          icon: <PhoneAndroidRounded />,
+                        },
+                        {
+                          value: "card" as const,
+                          label: "Card / Bank Transfer",
+                          detail: "Visa, Mastercard, GHIPSS instant pay",
+                          icon: <AccountBalanceRounded />,
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const isSelected = paymentMethod === opt.value;
+                      return (
+                        <motion.div key={opt.value} whileTap={{ scale: 0.985 }} transition={{ duration: 0.12 }}>
+                          <Box
+                            onClick={() => setPaymentMethod(opt.value)}
+                            sx={(theme) => ({
+                              p: 2,
+                              borderRadius: 2,
+                              border: "1.5px solid",
+                              borderColor: isSelected ? "primary.main" : "divider",
+                              bgcolor: isSelected ? alpha(theme.palette.primary.main, 0.05) : "transparent",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 2,
+                              transition: "border-color 0.18s, background-color 0.18s",
+                              "&:hover": { borderColor: isSelected ? "primary.main" : "text.disabled" },
+                            })}
+                          >
+                            <Radio
+                              checked={isSelected}
+                              onChange={() => setPaymentMethod(opt.value)}
+                              size="small"
+                              sx={{ p: 0 }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <Box
+                              sx={(theme) => ({
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                width: 36,
+                                height: 36,
+                                borderRadius: 1.5,
+                                bgcolor: isSelected
+                                  ? alpha(theme.palette.primary.main, 0.12)
+                                  : alpha(theme.palette.text.primary, 0.06),
+                                color: isSelected ? "primary.main" : "text.secondary",
+                                transition: "background-color 0.18s, color 0.18s",
+                                flexShrink: 0,
+                              })}
+                            >
+                              {opt.icon}
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography fontWeight={700}>{opt.label}</Typography>
+                              <Typography variant="body2" color="text.secondary">{opt.detail}</Typography>
+                            </Box>
+                          </Box>
+                        </motion.div>
+                      );
+                    })}
                   </Stack>
+
+                  <Chip
+                    icon={<OpenInNewRounded fontSize="small" />}
+                    label="Redirects to Paystack — PCI-DSS compliant"
+                    color="success"
+                    variant="outlined"
+                    sx={{ width: "fit-content", borderRadius: 999 }}
+                  />
                 </Stack>
               </Paper>
             </motion.div>
