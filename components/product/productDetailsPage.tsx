@@ -158,105 +158,111 @@ export function ProductDetailsPage({
             alignItems: "start",
           }}
         >
-          <Stack spacing={2}>
+          <Stack spacing={1.5}>
+            {/* ── Main image — no padding, image fills edge-to-edge ── */}
             <Paper
               elevation={0}
               sx={(theme) => ({
-                p: { xs: 1, md: 1.75 },
-                borderRadius: 2,
+                p: 0,
+                borderRadius: { xs: 2, md: 2.5 },
                 border: "1px solid",
-                borderColor: "divider",
-                background: `linear-gradient(145deg, ${alpha(
-                  theme.palette.primary.main,
-                  theme.palette.mode === "dark" ? 0.18 : 0.12
-                )}, ${alpha(
-                  theme.palette.background.default,
-                  theme.palette.mode === "dark" ? 0.92 : 0.97
-                )})`,
+                borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.16),
+                overflow: "hidden",
+                boxShadow: `0 2px 28px ${alpha(theme.palette.primary.main, 0.07)}`,
               })}
             >
               <Box
-                sx={(theme) => ({
+                sx={{
                   position: "relative",
                   width: "100%",
-                  // Cap height: 52 vh on mobile so Add-to-Cart stays visible; 480 px on desktop
-                  height: { xs: "52vh", lg: 480 },
-                  maxHeight: { xs: "52vh", lg: 480 },
-                  maxWidth: { lg: 480 },
-                  mx: { lg: "auto" },
-                  borderRadius: "18px",
-                  overflow: "hidden",
-                  backgroundColor:
-                    theme.palette.mode === "dark"
-                      ? alpha(theme.palette.primary.main, 0.08)
-                      : alpha(theme.palette.primary.main, 0.04),
-                })}
+                  // 4:3 gives compact landscape crop; maxHeight prevents
+                  // dominating the viewport on very wide containers.
+                  aspectRatio: "4 / 3",
+                  maxHeight: { xs: "72vw", md: 500 },
+                }}
               >
                 <Image
                   src={selectedImage}
                   alt={product.name}
                   fill
-                  sizes="(max-width: 1024px) 100vw, 480px"
-                  style={{
-                    objectFit: "contain",
-                    padding: "16px",
-                  }}
+                  sizes="(max-width: 1024px) 100vw, 560px"
+                  style={{ objectFit: "cover" }}
                   priority
                 />
               </Box>
             </Paper>
 
-            <Box
-              sx={{
-                display: "grid",
-                gap: 1.25,
-                gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))",
-              }}
-            >
-              {product.images.map((image) => (
-                <Paper
-                  key={image}
-                  elevation={0}
-                  onClick={() => setSelectedImage(image)}
-                  sx={(theme) => ({
-                    p: 1.25,
-                    borderRadius: 3,
-                    cursor: "pointer",
-                    border: "1px solid",
-                    borderColor:
-                      selectedImage === image ? "primary.main" : "divider",
-                    backgroundColor:
-                      selectedImage === image
-                        ? alpha(theme.palette.primary.main, 0.1)
-                        : "background.paper",
-                    transition: "border-color 0.2s ease, transform 0.2s ease",
-                    "&:hover": {
-                      borderColor: "primary.main",
-                      transform: "translateY(-2px)",
-                    },
-                  })}
-                >
+            {/* ── Thumbnails — square tiles, horizontal scroll row ── */}
+            {product.images.length > 1 && (
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 1,
+                  overflowX: "auto",
+                  // Reserve bottom space for the thin scrollbar so it doesn't
+                  // clip the bottom border of the last row.
+                  pb: "3px",
+                  scrollSnapType: "x mandatory",
+                  // Thin, unobtrusive scrollbar on webkit.
+                  "&::-webkit-scrollbar": { height: 3 },
+                  "&::-webkit-scrollbar-thumb": {
+                    borderRadius: 99,
+                    bgcolor: "divider",
+                  },
+                }}
+              >
+                {product.images.map((image, i) => (
                   <Box
-                    sx={{
+                    key={image}
+                    component="button"
+                    type="button"
+                    onClick={() => setSelectedImage(image)}
+                    aria-label={`View image ${i + 1}`}
+                    aria-pressed={selectedImage === image}
+                    sx={(theme) => ({
+                      // Fixed square — never stretches to fill a grid column.
+                      flexShrink: 0,
+                      width: { xs: 62, sm: 76, md: 88 },
+                      height: { xs: 62, sm: 76, md: 88 },
+                      // No padding — image fills the tile completely.
+                      p: 0,
                       position: "relative",
-                      width: "100%",
-                      height: 76,
-                    }}
+                      borderRadius: { xs: 1.5, md: 2 },
+                      overflow: "hidden",
+                      cursor: "pointer",
+                      scrollSnapAlign: "start",
+                      bgcolor: "background.paper",
+                      // Selected: accent border + outer ring.
+                      border: "2px solid",
+                      borderColor: selectedImage === image
+                        ? "primary.main"
+                        : alpha(theme.palette.divider, 1),
+                      outline: selectedImage === image
+                        ? `3px solid ${alpha(theme.palette.primary.main, 0.28)}`
+                        : "3px solid transparent",
+                      outlineOffset: "1px",
+                      transition: "border-color 0.18s ease, outline 0.18s ease, transform 0.18s ease",
+                      "&:hover": {
+                        borderColor: "primary.main",
+                        transform: "scale(1.06)",
+                      },
+                      "&:focus-visible": {
+                        outline: `2px solid ${theme.palette.primary.main}`,
+                        outlineOffset: "2px",
+                      },
+                    })}
                   >
                     <Image
                       src={image}
-                      alt={`${product.name} preview`}
+                      alt={`${product.name} view ${i + 1}`}
                       fill
-                      sizes="90px"
-                      style={{
-                        objectFit: "contain",
-                        padding: "6px",
-                      }}
+                      sizes="88px"
+                      style={{ objectFit: "cover" }}
                     />
                   </Box>
-                </Paper>
-              ))}
-            </Box>
+                ))}
+              </Box>
+            )}
           </Stack>
 
           <Stack spacing={2.5}>
