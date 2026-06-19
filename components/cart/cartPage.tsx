@@ -26,6 +26,7 @@ import { motion } from "motion/react";
 
 import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
+import { PROCESSING_FEE_RATE } from "@/lib/pricing";
 import { Product } from "@/types/types";
 
 interface CartPageProps {
@@ -333,7 +334,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                   {[
                     { label: "Subtotal", value: formatPrice(subtotal) },
                     { label: "Delivery", value: formatPrice(shipping) },
-                    { label: "Processing", value: formatPrice(tax) },
+                    { label: `Processing fee (${(PROCESSING_FEE_RATE * 100).toFixed(1)}%)`, value: formatPrice(tax) },
                   ].map(({ label, value }) => (
                     <Stack key={label} direction="row" justifyContent="space-between" alignItems="center">
                       <Typography variant="body2" color="text.secondary">{label}</Typography>
@@ -348,7 +349,8 @@ export function CartPage({ recommendations }: CartPageProps) {
 
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Typography variant="h6" fontWeight={800} color="#22C55E">Total</Typography>
-                  <Typography variant="h6" fontWeight={800} color="#22C55E">
+                  <Typography variant="h6" fontWeight={800} color="#22C55E
+                  ">
                     {formatPrice(total)}
                   </Typography>
                 </Stack>

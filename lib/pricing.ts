@@ -1,3 +1,9 @@
+export const PROCESSING_FEE_RATE = 0.015;
+
+export function calcProcessingFee(subtotal: number): number {
+  return Math.round(subtotal * PROCESSING_FEE_RATE * 100) / 100;
+}
+
 const BRACKETS = [
   { upTo: 500,      rate: 0.08 },
   { upTo: 2000,     rate: 0.05 },

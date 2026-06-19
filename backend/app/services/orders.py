@@ -16,8 +16,6 @@ from app.services.notifications import create_notification
 
 logger = logging.getLogger(__name__)
 
-_PROCESSING_FEE = Decimal("2.00")
-_TOTAL_TOLERANCE = Decimal("0.50")  # max allowed $ difference between client and server total
 
 
 def _server_totals(
@@ -65,7 +63,7 @@ def _server_totals(
     else:
         shipping_cost = standard_rate
 
-    processing_fee = _PROCESSING_FEE if items else Decimal("0")
+    processing_fee = pricing_svc.calc_processing_fee(subtotal) if items else Decimal("0")
     total = (subtotal + shipping_cost + processing_fee).quantize(Decimal("0.01"))
     return subtotal, shipping_cost, processing_fee, total, item_prices
 
@@ -273,17 +271,6 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
         db, payload.items, payload.shippingMethod
     )
     _check_stock(db, payload.items)
-
-    # 2. Reject if the client total is suspiciously far from the server total
-    client_total = Decimal(str(payload.total)).quantize(Decimal("0.01"))
-    if abs(server_total - client_total) > _TOTAL_TOLERANCE:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Order total mismatch: server computed {server_total}, "
-                f"client sent {client_total}. Please refresh your cart and retry."
-            ),
-        )
 
     order_id = f"order-{uuid4().hex[:16]}"
     reference = f"spree-{order_id}-{uuid4().hex[:8]}"

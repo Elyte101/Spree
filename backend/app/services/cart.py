@@ -3,6 +3,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core import pricing
 from app.core.config import settings
 from app.db.models import Cart
 
@@ -20,7 +21,7 @@ def get_cart_summary(db: Session) -> dict:
             "standardShipping": settings.default_shipping_rate,
             "tax": 0.0,
             "total": 0.0,
-            "currency": "$",
+            "currency": "GHS",
         }
 
     items = [
@@ -44,7 +45,7 @@ def get_cart_summary(db: Session) -> dict:
     ).quantize(_q)
     std_shipping = Decimal(str(float(cart.standard_shipping)))
     shipping = Decimal("0") if not items else std_shipping
-    tax = Decimal("2.00") if items else Decimal("0")
+    tax = pricing.calc_processing_fee(subtotal) if items else Decimal("0")
     total = (subtotal + shipping + tax).quantize(_q)
 
     return {

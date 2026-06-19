@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { CartItem, CartSummary, Product } from "@/types/types";
+import { calcProcessingFee } from "@/lib/pricing";
 
 interface AddToCartOptions {
   color?: string | null;
@@ -21,6 +22,7 @@ interface CartStoreState {
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
   clearCart: () => void;
+  refreshPrices: (priceMap: Record<string, number>) => void;
 }
 
 const DEFAULT_STANDARD_SHIPPING = 12;
@@ -60,7 +62,7 @@ const normalizeCart = (cart: CartSummary, standardShipping: number): CartSummary
   );
   const itemCount = cart.items.reduce((sum, item) => sum + item.quantity, 0);
   const shipping = cart.items.length === 0 ? 0 : standardShipping;
-  const tax = cart.items.length === 0 ? 0 : 2;
+  const tax = cart.items.length === 0 ? 0 : calcProcessingFee(subtotal);
   const total = Number((subtotal + shipping + tax).toFixed(2));
 
   return {
@@ -203,6 +205,17 @@ export const useCartStore = create<CartStoreState>()(
             standardShipping
           ),
         });
+      },
+      refreshPrices: (priceMap) => {
+        const currentCart = get().cart;
+        const standardShipping =
+          currentCart.standardShipping ?? currentCart.shipping ?? DEFAULT_STANDARD_SHIPPING;
+        const updatedItems = currentCart.items.map((item) =>
+          item.productId && priceMap[item.productId] !== undefined
+            ? { ...item, price: priceMap[item.productId] }
+            : item
+        );
+        set({ cart: normalizeCart({ ...currentCart, items: updatedItems }, standardShipping) });
       },
     }),
     {

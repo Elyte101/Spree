@@ -32,7 +32,9 @@ import {
 
 import { useCart } from "@/components/providers/cartProvider";
 import { PhoneInput } from "@/components/ui/phoneInput";
-import { UserProfile } from "@/types/types";
+import { useCartStore } from "@/lib/stores/cartStore";
+import { PROCESSING_FEE_RATE } from "@/lib/pricing";
+import { UserProfile, Product } from "@/types/types";
 import { formatPrice, COUNTRY_LIST, DEFAULT_COUNTRY, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -97,10 +99,29 @@ const shippingOptions = [
 
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
   const { cart } = useCart();
+  const refreshPrices = useCartStore((s) => s.refreshPrices);
   const [shippingMethod, setShippingMethod] = React.useState("standard");
   const [paymentMethod, setPaymentMethod] = React.useState<"momo" | "card">("momo");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+
+  // Refresh item prices from the catalog on mount so stale localStorage prices
+  // don't cause a mismatch with the server's recomputed totals.
+  React.useEffect(() => {
+    const ids = cart.items.map((i) => i.productId).filter(Boolean) as string[];
+    if (!ids.length) return;
+    fetch(`/api/products?ids=${ids.join(",")}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: { products?: Product[] } | null) => {
+        const products = data?.products ?? [];
+        if (!products.length) return;
+        const priceMap: Record<string, number> = {};
+        for (const p of products) priceMap[p.id] = p.price;
+        refreshPrices(priceMap);
+      })
+      .catch(() => {/* silently ignore — stale price is better than broken checkout */});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [form, setForm] = React.useState<CheckoutFormState>(() => {
     const addr = initialProfile?.shippingAddress;
@@ -713,7 +734,9 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
-                    <Typography color="text.secondary">Processing fee</Typography>
+                    <Typography color="text.secondary">
+                      Processing fee ({(PROCESSING_FEE_RATE * 100).toFixed(1)}%)
+                    </Typography>
                     <Typography fontWeight={600}>{formatPrice(cart.tax)}</Typography>
                   </Stack>
                 </Stack>
@@ -728,6 +751,13 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     {formatPrice(total)}
                   </Typography>
                 </Stack>
+
+                {/* Inline error — visible without scrolling to top */}
+                {submitError && (
+                  <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ borderRadius: 2 }}>
+                    {submitError}
+                  </Alert>
+                )}
 
                 {/* Place order */}
                 <motion.div whileTap={canSubmit ? { scale: 0.97 } : undefined}>

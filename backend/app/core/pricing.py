@@ -1,6 +1,13 @@
 from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple
 
+PROCESSING_FEE_RATE = Decimal("0.015")
+
+
+def calc_processing_fee(subtotal: Decimal) -> Decimal:
+    """Payment processing fee charged to the buyer: 1.5% of subtotal."""
+    return (subtotal * PROCESSING_FEE_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
 # Marginal commission brackets — each rate applies only to the portion of
 # seller_price within its band. This ensures commission and buyer_price are
 # strictly monotonically increasing, removing tier-boundary gaming.
