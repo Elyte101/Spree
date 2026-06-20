@@ -318,9 +318,9 @@ function buildInitialData(profile: UserProfile): WizardData {
     shipPostalCode:     d?.shipPostalCode     ?? profile.shippingAddress?.postalCode    ?? "",
     shipCountry:        (d?.shipCountry       ?? profile.shippingAddress?.country)      || "Ghana",
     paymentMethod:      (d?.paymentMethod      ?? profile.paymentInfo?.method            ?? "mobile_money") as WizardData["paymentMethod"],
-    momoProvider:       d?.momoProvider       ?? profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
-    momoNumber:         d?.momoNumber         ?? profile.payoutInfo?.mobileMoneyNumber  ?? "",
-    momoAccountName:    d?.momoAccountName    ?? profile.payoutInfo?.accountName        ?? "",
+    momoProvider:       d?.momoProvider       ?? profile.paymentInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
+    momoNumber:         d?.momoNumber         ?? profile.paymentInfo?.mobileMoneyNumber  ?? "",
+    momoAccountName:    d?.momoAccountName    ?? profile.paymentInfo?.accountName        ?? "",
     cardholderName:     d?.cardholderName     ?? profile.paymentInfo?.cardholderName    ?? "",
     cardLast4:          d?.cardLast4          ?? profile.paymentInfo?.cardLast4         ?? "",
     expiryMonth:        d?.expiryMonth        ?? profile.paymentInfo?.expiryMonth       ?? "",
@@ -965,7 +965,7 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
           <Box sx={(theme) => ({ p: 1.5, borderRadius: 2, bgcolor: theme.palette.action.hover })}>
             <Typography variant="caption" color="text.secondary" lineHeight={1.7}>
               <strong>MTN Mobile Money:</strong> 024, 054, 055, 059<br />
-              <strong>Telecel Cash (Vodafone):</strong> 020, 050<br />
+              <strong>Telecel Cash (Telecel):</strong> 020, 050<br />
               <strong>AirtelTigo Money:</strong> 026, 027, 056, 057
             </Typography>
           </Box>

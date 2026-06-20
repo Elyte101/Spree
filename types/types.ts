@@ -5,8 +5,8 @@ export type CatalogSort =
   | "price-desc"
   | "rating";
 
-export type UserRole = "customer" | "seller" | "admin";
-export type PaymentMethod = "card" | "bank-transfer";
+export type UserRole = "customer" | "vendor" | "admin";
+export type PaymentMethod = "card" | "bank-transfer" | "mobile_money";
 export type SellerStatus =
   | "buyer"
   | "incomplete"
@@ -356,6 +356,11 @@ export interface SellerContact {
 
 export interface PaymentInfo {
   method: PaymentMethod;
+  // MoMo fields (present when method === "mobile_money")
+  mobileMoneyNetwork?: string;
+  mobileMoneyNumber?: string;
+  accountName?: string;
+  // Card / bank fields
   cardholderName: string;
   cardLast4: string;
   expiryMonth: string;

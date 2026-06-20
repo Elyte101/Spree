@@ -49,8 +49,8 @@ interface ProfilePageProps {
 }
 
 const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
-  retail: "Retail seller",
-  wholesale: "Wholesale seller",
+  retail: "Retail vendor",
+  wholesale: "Wholesale vendor",
 };
 
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
@@ -81,13 +81,14 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     currency: "GHS",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
+  const [paymentFieldErrors, setPaymentFieldErrors] = React.useState<Record<string, string>>({});
   const [payoutFieldErrors, setPayoutFieldErrors] = React.useState<Record<string, string>>({});
   const [savingPayout, setSavingPayout] = React.useState(false);
   const [payoutError, setPayoutError] = React.useState<string | null>(null);
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
   const isAdmin = profile.role === "admin";
-  const sellerSwitchChecked = isAdmin || profile.role === "seller";
+  const sellerSwitchChecked = isAdmin || profile.role === "vendor";
   const savedSellerAccess =
     isAdmin || (canCreateProductsRole(profile.role) && profile.sellerStatus === "active");
 
@@ -224,7 +225,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const canUploadDocs = profile.role === "seller" && !isAdmin;
+  const canUploadDocs = profile.role === "vendor" && !isAdmin;
 
   return (
     <Box
@@ -285,12 +286,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               {!sellerSwitchChecked && !isAdmin ? (
                 <Button
                   component={Link}
-                  href="/seller/apply"
+                  href="/vendor/apply"
                   variant="contained"
                   startIcon={<AddBusinessRounded />}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
-                  Become a seller
+                  Become a vendor
                 </Button>
               ) : (
                 <Button
@@ -371,7 +372,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               </Stack>
             </Paper>
 
-            {profile.role !== "seller" && !isAdmin && (
+            {profile.role !== "vendor" && !isAdmin && (
               <Paper
                 elevation={0}
                 sx={{
@@ -393,14 +394,14 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   </Box>
                   <Button
                     component={Link}
-                    href="/seller/apply"
+                    href="/vendor/apply"
                     variant="contained"
                     size="large"
                     startIcon={<AddBusinessRounded />}
                     fullWidth
                     sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, py: 1.5 }}
                   >
-                    Apply to become a seller
+                    Apply to become a vendor
                   </Button>
                 </Stack>
               </Paper>
@@ -516,51 +517,106 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 <Alert severity="info">
                   Save reference details here, not full card numbers or sensitive payment secrets.
                 </Alert>
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                <TextField
+                  select
+                  label="Preferred method"
+                  value={profile.paymentInfo.method}
+                  onChange={(e) => {
+                    updatePaymentField("method")(e as React.ChangeEvent<HTMLInputElement>);
+                    setPaymentFieldErrors({});
                   }}
                 >
-                  <TextField
-                    select
-                    label="Preferred method"
-                    value={profile.paymentInfo.method}
-                    onChange={updatePaymentField("method")}
+                  <MenuItem value="mobile_money">
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <PhoneAndroidRounded fontSize="small" color="primary" />
+                      <span>Mobile Money (MoMo)</span>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem value="card">Card</MenuItem>
+                  <MenuItem value="bank-transfer">Bank transfer</MenuItem>
+                </TextField>
+
+                {profile.paymentInfo.method === "mobile_money" ? (
+                  <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" } }}>
+                    <TextField
+                      select
+                      label="MoMo network"
+                      value={profile.paymentInfo.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value}
+                      onChange={updatePaymentField("mobileMoneyNetwork")}
+                      fullWidth
+                    >
+                      {MOMO_NETWORKS.map((n) => (
+                        <MenuItem key={n.value} value={n.value}>{n.label}</MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      label="MoMo number"
+                      value={profile.paymentInfo.mobileMoneyNumber ?? ""}
+                      onChange={(e) => {
+                        updatePaymentField("mobileMoneyNumber")(e as React.ChangeEvent<HTMLInputElement>);
+                        const err = validateMoMoNumber(e.target.value.trim());
+                        setPaymentFieldErrors((prev) => ({ ...prev, mobileMoneyNumber: err ?? "" }));
+                      }}
+                      onBlur={() => {
+                        const num = (profile.paymentInfo.mobileMoneyNumber ?? "").trim();
+                        if (num) {
+                          const err = validateMoMoNumber(num);
+                          setPaymentFieldErrors((prev) => ({ ...prev, mobileMoneyNumber: err ?? "" }));
+                        }
+                      }}
+                      error={!!paymentFieldErrors.mobileMoneyNumber}
+                      helperText={paymentFieldErrors.mobileMoneyNumber || "10-digit Ghana number, e.g. 0241234567"}
+                      slotProps={{ htmlInput: { inputMode: "tel" as const, maxLength: 13 } }}
+                      placeholder="0241234567"
+                      fullWidth
+                    />
+                    <TextField
+                      label="Account name"
+                      value={profile.paymentInfo.accountName ?? ""}
+                      onChange={updatePaymentField("accountName")}
+                      helperText="Full name as it appears on the MoMo account"
+                      fullWidth
+                      sx={{ gridColumn: { md: "span 2" } }}
+                    />
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      display: "grid",
+                      gap: 2,
+                      gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    }}
                   >
-                    <MenuItem value="card">Card</MenuItem>
-                    <MenuItem value="bank-transfer">Bank transfer</MenuItem>
-                  </TextField>
-                  <TextField
-                    label="Cardholder / account name"
-                    value={profile.paymentInfo.cardholderName}
-                    onChange={updatePaymentField("cardholderName")}
-                  />
-                  <TextField
-                    label="Card last 4"
-                    value={profile.paymentInfo.cardLast4}
-                    onChange={updatePaymentField("cardLast4")}
-                    inputProps={{ maxLength: 4 }}
-                  />
-                  <TextField
-                    label="Expiry month"
-                    value={profile.paymentInfo.expiryMonth}
-                    onChange={updatePaymentField("expiryMonth")}
-                    inputProps={{ maxLength: 2 }}
-                  />
-                  <TextField
-                    label="Expiry year"
-                    value={profile.paymentInfo.expiryYear}
-                    onChange={updatePaymentField("expiryYear")}
-                    inputProps={{ maxLength: 4 }}
-                  />
-                  <TextField
-                    label="Billing postal code"
-                    value={profile.paymentInfo.billingPostalCode}
-                    onChange={updatePaymentField("billingPostalCode")}
-                  />
-                </Box>
+                    <TextField
+                      label="Cardholder / account name"
+                      value={profile.paymentInfo.cardholderName}
+                      onChange={updatePaymentField("cardholderName")}
+                    />
+                    <TextField
+                      label="Card last 4"
+                      value={profile.paymentInfo.cardLast4}
+                      onChange={updatePaymentField("cardLast4")}
+                      slotProps={{ htmlInput: { maxLength: 4 } }}
+                    />
+                    <TextField
+                      label="Expiry month"
+                      value={profile.paymentInfo.expiryMonth}
+                      onChange={updatePaymentField("expiryMonth")}
+                      slotProps={{ htmlInput: { maxLength: 2 } }}
+                    />
+                    <TextField
+                      label="Expiry year"
+                      value={profile.paymentInfo.expiryYear}
+                      onChange={updatePaymentField("expiryYear")}
+                      slotProps={{ htmlInput: { maxLength: 4 } }}
+                    />
+                    <TextField
+                      label="Billing postal code"
+                      value={profile.paymentInfo.billingPostalCode}
+                      onChange={updatePaymentField("billingPostalCode")}
+                    />
+                  </Box>
+                )}
               </Stack>
             </Paper>
 
@@ -609,12 +665,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     : profile.sellerStatus === "pending"
                       ? "Your storefront application is waiting for admin approval before products can go live."
                     : profile.sellerStatus === "suspended"
-                      ? "Your store is temporarily paused. Review the seller notice above before contacting admin."
+                      ? "Your store is temporarily paused. Review the vendor notice above before contacting admin."
                       : profile.sellerStatus === "removed"
-                        ? "Your seller access was removed. Buyer features still work, but product publishing is disabled."
+                        ? "Your vendor access was removed. Buyer features still work, but product publishing is disabled."
                     : sellerSwitchChecked
                       ? "Your application is in review. An admin will activate your store soon."
-                      : "Apply to become a seller to start publishing products on Spree."}
+                      : "Apply to become a vendor to start publishing products on Spree."}
                 </Typography>
                 <Button
                   component={Link}
@@ -668,7 +724,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   Marketplace model
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Buyers can browse immediately. Sellers must register a store with identity details, and admins can monitor seller health privately.
+                  Buyers can browse immediately. Sellers must register a store with identity details, and admins can monitor vendor health privately.
                   Approved sellers keep buyer checkout access while managing their storefront and product catalog.
                 </Typography>
               </Stack>
@@ -770,7 +826,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             )}
 
             {/* ── PAYOUT INFO ── */}
-            {(profile.role === "seller" || isAdmin) && (
+            {(profile.role === "vendor" || isAdmin) && (
               <Paper
                 elevation={0}
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
