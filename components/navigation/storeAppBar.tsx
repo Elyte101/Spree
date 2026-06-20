@@ -193,7 +193,7 @@ export function StoreAppBar() {
             },
           }}
         >
-          {/* Secondary items: hidden on mobile, shown on md+ */}
+          {/* Secondary items: hidden on mobile/tablet, shown on lg+ */}
           {navItems
             .filter((item) => item.ariaLabel !== "cart")
             .map((item) => (
@@ -203,7 +203,7 @@ export function StoreAppBar() {
                   color="inherit"
                   component={Link}
                   href={item.href}
-                  sx={{ ...getNavButtonSx(item.active), display: { xs: "none", md: "inline-flex" } }}
+                  sx={{ ...getNavButtonSx(item.active), display: { xs: "none", lg: "inline-flex" } }}
                 >
                   {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
                     <Badge badgeContent={item.badge} color="primary" max={99}>
@@ -239,10 +239,10 @@ export function StoreAppBar() {
               </Tooltip>
             ))}
 
-          {/* Profile — always visible */}
-          <Tooltip title="Profile">
+          {/* Profile — always visible; tooltip reflects auth state */}
+          <Tooltip title={isAuthenticated ? "Profile" : "Sign in"}>
             <IconButton
-              aria-label="profile"
+              aria-label={isAuthenticated ? "profile" : "sign in"}
               color="inherit"
               onClick={(event) => setProfileAnchorEl(event.currentTarget)}
               sx={getNavButtonSx(isProfileRoute || profileMenuOpen)}
@@ -257,19 +257,19 @@ export function StoreAppBar() {
               aria-label="settings"
               color="inherit"
               onClick={(event) => setSettingsAnchorEl(event.currentTarget)}
-              sx={{ ...getNavButtonSx(isSettingsRoute || settingsMenuOpen), display: { xs: "none", md: "inline-flex" } }}
+              sx={{ ...getNavButtonSx(isSettingsRoute || settingsMenuOpen), display: { xs: "none", lg: "inline-flex" } }}
             >
               <SettingsOutlined />
             </IconButton>
           </Tooltip>
 
-          {/* Hamburger — mobile only */}
+          {/* Hamburger — mobile/tablet only (hidden at lg+) */}
           <Tooltip title="Menu">
             <IconButton
               aria-label="open navigation menu"
               color="inherit"
               onClick={() => setMobileMenuOpen(true)}
-              sx={{ ...getNavButtonSx(mobileMenuOpen), display: { xs: "inline-flex", md: "none" } }}
+              sx={{ ...getNavButtonSx(mobileMenuOpen), display: { xs: "inline-flex", lg: "none" } }}
             >
               <MenuRounded />
             </IconButton>
@@ -277,12 +277,12 @@ export function StoreAppBar() {
         </Stack>
       </Toolbar>
 
-      {/* Mobile navigation drawer */}
+      {/* Mobile navigation drawer — hidden at lg+ to match hamburger breakpoint */}
       <Drawer
         anchor="right"
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
-        sx={{ display: { xs: "block", md: "none" } }}
+        sx={{ display: { xs: "block", lg: "none" } }}
         slotProps={{
           paper: {
             sx: (theme) => ({
@@ -347,24 +347,27 @@ export function StoreAppBar() {
             <ListItemText primary="Settings" primaryTypographyProps={{ fontWeight: 500 }} />
           </ListItemButton>
           <Divider sx={{ my: 0.5 }} />
-          {isAuthenticated ? (
-            <ListItemButton
-              onClick={() => { setMobileMenuOpen(false); void signOut({ callbackUrl: "/" }); }}
-              sx={{ py: 1.25, px: 2 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}><LogoutRounded /></ListItemIcon>
-              <ListItemText primary="Sign out" primaryTypographyProps={{ fontWeight: 500 }} />
-            </ListItemButton>
-          ) : (
-            <ListItemButton
-              component={Link}
-              href="/auth/sign-in?callbackUrl=%2Fprofile"
-              onClick={() => setMobileMenuOpen(false)}
-              sx={{ py: 1.25, px: 2 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}><LoginRounded /></ListItemIcon>
-              <ListItemText primary="Sign in" primaryTypographyProps={{ fontWeight: 500 }} />
-            </ListItemButton>
+          {/* Guard the loading state so the button never shows the wrong label */}
+          {status !== "loading" && (
+            isAuthenticated ? (
+              <ListItemButton
+                onClick={() => { setMobileMenuOpen(false); void signOut({ callbackUrl: "/" }); }}
+                sx={{ py: 1.25, px: 2 }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}><LogoutRounded /></ListItemIcon>
+                <ListItemText primary="Sign out" primaryTypographyProps={{ fontWeight: 500 }} />
+              </ListItemButton>
+            ) : (
+              <ListItemButton
+                component={Link}
+                href="/auth/sign-in?callbackUrl=%2Fprofile"
+                onClick={() => setMobileMenuOpen(false)}
+                sx={{ py: 1.25, px: 2 }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}><LoginRounded /></ListItemIcon>
+                <ListItemText primary="Sign in" primaryTypographyProps={{ fontWeight: 500 }} />
+              </ListItemButton>
+            )
           )}
         </List>
       </Drawer>

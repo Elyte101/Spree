@@ -120,6 +120,17 @@ export function LandingPage({
   const hasProducts = totalProducts > 0;
   const hero = homeFeed.hero;
 
+  // Stats — don't surface bare "1/1/1/0.0" when the catalog is just seeding.
+  // Show the real number only once it crosses a meaningful threshold.
+  const productStat = totalProducts >= 5 ? totalProducts.toLocaleString() : (totalProducts > 0 ? "New" : "—");
+  const productLabel = totalProducts >= 5 ? "Products" : "Marketplace";
+  const categoryStat = homeFeed.categories.length >= 3 ? homeFeed.categories.length.toString() : "Curated";
+  const categoryLabel = "Categories";
+  const collectionStat = homeFeed.collections.length >= 2 ? homeFeed.collections.length.toString() : "Handpicked";
+  const collectionLabel = homeFeed.collections.length >= 2 ? "Collections" : "Selection";
+  const ratingStat = (hasProducts && averageRating >= 0.1) ? `${averageRating.toFixed(1)} ★` : "New";
+  const ratingLabel = "Avg rating";
+
   return (
     <Box component="main" sx={{ minHeight: "100vh", overflowX: "hidden" }}>
 
@@ -127,7 +138,7 @@ export function LandingPage({
       <Box
         sx={(theme) => ({
           position: "relative",
-          pt: { xs: 5, md: 6 },
+          pt: { xs: 6, md: 7 },
           pb: { xs: 4, md: 5 },
           overflow: "hidden",
           background:
@@ -186,7 +197,8 @@ export function LandingPage({
                   variant="h1"
                   sx={{
                     fontWeight: 900,
-                    lineHeight: 0.93,
+                    // 1.1 gives ascenders enough room — 0.93 clipped Rubik 900 glyphs
+                    lineHeight: 1.1,
                     fontSize: { xs: "1.75rem", sm: "2.125rem", md: "2.5rem" },
                     letterSpacing: "-0.03em",
                     color: "text.primary",
@@ -321,13 +333,13 @@ export function LandingPage({
                   />
                 </Box>
 
-                {/* Stats grid */}
+                {/* Stats grid — smart labels hide bare "1/1/0.0" values */}
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
                   {[
-                    { label: "Products", value: totalProducts.toLocaleString() },
-                    { label: "Categories", value: homeFeed.categories.length.toString() },
-                    { label: "Collections", value: homeFeed.collections.length.toString() },
-                    { label: "Avg rating", value: hasProducts ? `${averageRating.toFixed(1)} ★` : "—" },
+                    { label: productLabel, value: productStat },
+                    { label: categoryLabel, value: categoryStat },
+                    { label: collectionLabel, value: collectionStat },
+                    { label: ratingLabel, value: ratingStat },
                   ].map((stat, i) => (
                     <Box
                       key={stat.label}
