@@ -871,8 +871,9 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
             <Typography variant="overline" color="primary.main" fontWeight={800} lineHeight={1} display="block">
               Seller Application
             </Typography>
-            <Typography variant="h4" fontWeight={900} sx={{ mt: 0.25, lineHeight: 1.1 }}>
-              Become a Seller
+            <Typography variant="h4" fontWeight={900} color="text.primary" sx={{ mt: 0.25, lineHeight: 1.1, letterSpacing: "-0.025em" }}>
+              Become a{" "}
+              <Box component="span" sx={{ color: "primary.main" }}>Seller</Box>
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
               Complete all steps to submit your store for review.
