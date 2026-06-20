@@ -889,7 +889,10 @@ def update_product(
     if payload.images is not None:
         images = [img.strip() for img in payload.images if img.strip()]
         if images:
+            removed = list(set(product.images or []) - set(images))
             product.images = images
+            if removed:
+                _refresh_stale_cover_images(db, removed)
     if payload.stock is not None:
         product.stock = max(payload.stock, 0)
     if payload.badge is not None:
@@ -923,6 +926,50 @@ def update_product(
     return _product_to_dict(refreshed)
 
 
+_PLACEHOLDER_IMAGE = "/product-placeholder.svg"
+
+
+def _refresh_stale_cover_images(
+    db: Session,
+    removed_images: list[str],
+    exclude_product_id: str | None = None,
+) -> None:
+    """Re-point categories/collections whose cover image was one of *removed_images*.
+
+    Called after a product's image list shrinks (update) or the product is deleted so
+    that no Category or Collection is left pointing at a URL that no longer exists.
+    """
+    if not removed_images:
+        return
+    removed_set = set(removed_images)
+
+    # --- categories ---
+    stale_cats = db.scalars(
+        select(Category).where(Category.image.in_(removed_set))
+    ).all()
+    for cat in stale_cats:
+        q = select(Product).where(Product.category_id == cat.id, Product.images != None)
+        if exclude_product_id:
+            q = q.where(Product.id != exclude_product_id)
+        donor = db.scalar(q.limit(1))
+        imgs: list[str] = donor.images if donor else []
+        cat.image = imgs[0] if imgs else _PLACEHOLDER_IMAGE
+        db.add(cat)
+
+    # --- collections ---
+    stale_cols = db.scalars(
+        select(Collection).where(Collection.image.in_(removed_set))
+    ).all()
+    for col in stale_cols:
+        q = select(Product).where(Product.collection_id == col.id, Product.images != None)
+        if exclude_product_id:
+            q = q.where(Product.id != exclude_product_id)
+        donor = db.scalar(q.limit(1))
+        imgs = donor.images if donor else []
+        col.image = imgs[0] if imgs else _PLACEHOLDER_IMAGE
+        db.add(col)
+
+
 def delete_product(
     db: Session,
     product_id: str,
@@ -930,6 +977,7 @@ def delete_product(
     actor_role: str,
 ) -> None:
     product = _resolve_product_for_actor(db, product_id, actor_user_id, actor_role)
+    _refresh_stale_cover_images(db, list(product.images or []), exclude_product_id=product.id)
     db.delete(product)
     db.commit()
 

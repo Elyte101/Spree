@@ -57,6 +57,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1", "localhost"],
 
   images: {
+    // Cache optimised image variants for 1 year. The default 60 s causes
+    // the optimizer to re-process the same image on nearly every request.
+    minimumCacheTTL: 31536000,
     remotePatterns: [
       { protocol: "https", hostname: "api.escuelajs.co" },
       { protocol: "https", hostname: "i.imgur.com" },

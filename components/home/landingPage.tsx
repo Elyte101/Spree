@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import Image from "next/image";
+import { ProductImage } from "@/components/ui/productImage";
 import { SpreeIcon } from "@/components/ui/spreeIcon";
 import { motion } from "motion/react";
 import {
@@ -497,7 +497,7 @@ export function LandingPage({
                     })}
                   >
                     <Box sx={{ position: "relative", width: 52, height: 52 }}>
-                      <Image src={category.image} alt={category.name} fill sizes="52px" style={{ objectFit: "cover" }} />
+                      <ProductImage src={category.image} alt={category.name} sizes="52px" />
                     </Box>
                     <Typography variant="body2" fontWeight={700} textAlign="center" lineHeight={1.3} fontSize="0.8rem">
                       {category.name}
@@ -812,13 +812,7 @@ export function LandingPage({
                         borderColor: "divider",
                       })}
                     >
-                      <Image
-                        src={product.image}
-                        alt={product.name}
-                        fill
-                        sizes="80px"
-                        style={{ objectFit: "cover" }}
-                      />
+                      <ProductImage src={product.image} alt={product.name} sizes="80px" />
                     </Box>
                     <Stack gap={0.3} minWidth={0}>
                       <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "0.62rem" }}>
@@ -891,7 +885,7 @@ export function LandingPage({
                   >
                     <Stack gap={2}>
                       <Box sx={{ position: "relative", width: 52, height: 52 }}>
-                        <Image src={collection.image} alt={collection.name} fill sizes="52px" style={{ objectFit: "cover" }} />
+                        <ProductImage src={collection.image} alt={collection.name} sizes="52px" />
                       </Box>
                       <Box>
                         <Typography variant="h6" fontWeight={700} color="text.primary">{collection.name}</Typography>

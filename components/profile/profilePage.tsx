@@ -42,7 +42,7 @@ import { api, ApiClientError } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
 import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
-import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
+import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel, MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -72,15 +72,16 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
 
   // Payout info state
   const [payout, setPayout] = React.useState({
-    method: (profile.payoutInfo?.method ?? "bank") as "bank" | "mobile_money",
+    method: (profile.payoutInfo?.method ?? "mobile_money") as "bank" | "mobile_money",
     bankName: profile.payoutInfo?.bankName ?? "",
-    accountNumber: profile.payoutInfo?.accountNumber ?? profile.payoutInfo?.mobileMoneyNumber ?? "",
+    accountNumber: profile.payoutInfo?.accountNumber ?? "",
     bankCode: profile.payoutInfo?.bankCode ?? "",
-    mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? "",
+    mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
     mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
-    currency: profile.payoutInfo?.currency ?? "$",
+    currency: "GHS",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
+  const [payoutFieldErrors, setPayoutFieldErrors] = React.useState<Record<string, string>>({});
   const [savingPayout, setSavingPayout] = React.useState(false);
   const [payoutError, setPayoutError] = React.useState<string | null>(null);
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
@@ -185,6 +186,22 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   };
 
   const handleSavePayout = async () => {
+    // Client-side validation before hitting the network
+    const fieldErrs: Record<string, string> = {};
+    if (!payout.accountName.trim()) fieldErrs.accountName = "Account name is required";
+    if (payout.method === "mobile_money") {
+      if (!payout.mobileMoneyNumber.trim()) {
+        fieldErrs.mobileMoneyNumber = "Mobile money number is required";
+      } else {
+        const momoErr = validateMoMoNumber(payout.mobileMoneyNumber);
+        if (momoErr) fieldErrs.mobileMoneyNumber = momoErr;
+      }
+    } else {
+      if (!payout.accountNumber.trim()) fieldErrs.accountNumber = "Account number is required";
+    }
+    setPayoutFieldErrors(fieldErrs);
+    if (Object.keys(fieldErrs).length > 0) return;
+
     setPayoutError(null);
     setPayoutSuccess(null);
     setSavingPayout(true);
@@ -192,13 +209,14 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
       const res = await fetch("/api/auth/payout-info", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payout),
+        body: JSON.stringify({ ...payout, currency: "GHS" }),
       });
       if (!res.ok) {
         const d = (await res.json()) as { detail?: string };
         throw new Error(d.detail ?? "Could not save payout info");
       }
       setPayoutSuccess("Payout account saved. Funds will be sent here after delivery confirmation.");
+      setPayoutFieldErrors({});
     } catch (err) {
       setPayoutError(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -789,16 +807,20 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
 
                   <Divider />
 
+                  {/* Account name — shared by both methods */}
+                  <TextField
+                    label="Account name"
+                    value={payout.accountName}
+                    onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
+                    error={!!payoutFieldErrors.accountName}
+                    helperText={payoutFieldErrors.accountName || "Full name as it appears on the account"}
+                    size="small"
+                    fullWidth
+                  />
+
                   {payout.method === "bank" ? (
                     <Stack spacing={2}>
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                        <TextField
-                          label="Account name"
-                          value={payout.accountName}
-                          onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
-                          size="small"
-                          fullWidth
-                        />
                         <TextField
                           label="Bank name"
                           value={payout.bankName}
@@ -806,35 +828,29 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                           size="small"
                           fullWidth
                         />
-                      </Stack>
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                         <TextField
                           label="Account number"
                           value={payout.accountNumber}
                           onChange={(e) => setPayout((p) => ({ ...p, accountNumber: e.target.value }))}
+                          error={!!payoutFieldErrors.accountNumber}
+                          helperText={payoutFieldErrors.accountNumber}
                           size="small"
                           fullWidth
-                          inputProps={{ maxLength: 20 }}
-                        />
-                        <TextField
-                          label="Bank code (GHIPSS / sort code)"
-                          value={payout.bankCode}
-                          onChange={(e) => setPayout((p) => ({ ...p, bankCode: e.target.value }))}
-                          size="small"
-                          fullWidth
-                          inputProps={{ maxLength: 10 }}
+                          slotProps={{ htmlInput: { maxLength: 20 } }}
                         />
                       </Stack>
+                      <TextField
+                        label="Bank code / sort code (optional)"
+                        value={payout.bankCode}
+                        onChange={(e) => setPayout((p) => ({ ...p, bankCode: e.target.value }))}
+                        size="small"
+                        fullWidth
+                        helperText="Some banks require this for transfers"
+                        slotProps={{ htmlInput: { maxLength: 10 } }}
+                      />
                     </Stack>
                   ) : (
                     <Stack spacing={2}>
-                      <TextField
-                        label="Account name"
-                        value={payout.accountName}
-                        onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
-                        size="small"
-                        fullWidth
-                      />
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                         <TextField
                           select
@@ -842,45 +858,42 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                           value={payout.mobileMoneyNetwork}
                           onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNetwork: e.target.value }))}
                           size="small"
-                          sx={{ minWidth: 160 }}
+                          sx={{ minWidth: 180 }}
                         >
-                          {["MTN", "Vodafone", "AirtelTigo"].map((n) => (
-                            <MenuItem key={n} value={n}>{n}</MenuItem>
+                          {MOMO_NETWORKS.map((n) => (
+                            <MenuItem key={n.value} value={n.value}>{n.label}</MenuItem>
                           ))}
                         </TextField>
                         <TextField
                           label="Mobile money number"
                           value={payout.mobileMoneyNumber}
                           onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNumber: e.target.value }))}
+                          onBlur={() => {
+                            if (payout.mobileMoneyNumber.trim()) {
+                              const err = validateMoMoNumber(payout.mobileMoneyNumber.trim());
+                              setPayoutFieldErrors((prev) => ({ ...prev, mobileMoneyNumber: err ?? "" }));
+                            }
+                          }}
+                          error={!!payoutFieldErrors.mobileMoneyNumber}
+                          helperText={payoutFieldErrors.mobileMoneyNumber || "10-digit Ghana number, e.g. 0241234567"}
                           size="small"
                           fullWidth
-                          inputProps={{ maxLength: 15 }}
+                          placeholder="0241234567"
+                          slotProps={{ htmlInput: { inputMode: "tel", maxLength: 13 } }}
                         />
                       </Stack>
                     </Stack>
                   )}
 
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <TextField
-                      select
-                      label="Currency"
-                      value={payout.currency}
-                      onChange={(e) => setPayout((p) => ({ ...p, currency: e.target.value }))}
-                      size="small"
-                      sx={{ width: 120 }}
-                    >
-                      {["₵", "GHS"].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                    </TextField>
-                    <Button
-                      variant="contained"
-                      onClick={handleSavePayout}
-                      disabled={savingPayout}
-                      startIcon={savingPayout ? <CircularProgress size={16} color="inherit" /> : <SaveRounded />}
-                      sx={{ borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
-                    >
-                      {savingPayout ? "Saving…" : "Save payout account"}
-                    </Button>
-                  </Stack>
+                  <Button
+                    variant="contained"
+                    onClick={handleSavePayout}
+                    disabled={savingPayout}
+                    startIcon={savingPayout ? <CircularProgress size={16} color="inherit" /> : <SaveRounded />}
+                    sx={{ alignSelf: "flex-start", borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
+                  >
+                    {savingPayout ? "Saving…" : "Save payout account"}
+                  </Button>
                 </Stack>
               </Paper>
             )}

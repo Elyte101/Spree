@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import NextLink from "next/link";
-import Image from "next/image";
+import { ProductImage } from "@/components/ui/productImage";
 import {
   ArrowBackRounded,
   CheckCircleRounded,
@@ -181,12 +181,10 @@ export function ProductDetailsPage({
                   maxHeight: { xs: "72vw", md: 500 },
                 }}
               >
-                <Image
+                <ProductImage
                   src={selectedImage}
                   alt={product.name}
-                  fill
                   sizes="(max-width: 1024px) 100vw, 560px"
-                  style={{ objectFit: "cover" }}
                   priority
                 />
               </Box>
@@ -252,12 +250,10 @@ export function ProductDetailsPage({
                       },
                     })}
                   >
-                    <Image
+                    <ProductImage
                       src={image}
                       alt={`${product.name} view ${i + 1}`}
-                      fill
                       sizes="88px"
-                      style={{ objectFit: "cover" }}
                     />
                   </Box>
                 ))}

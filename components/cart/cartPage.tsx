@@ -1,7 +1,7 @@
 'use client';
 
 import Link from "next/link";
-import Image from "next/image";
+import { ProductImage } from "@/components/ui/productImage";
 import {
   AddRounded,
   ArrowForwardRounded,
@@ -212,12 +212,10 @@ export function CartPage({ recommendations }: CartPageProps) {
                           textDecoration: "none",
                         }}
                       >
-                        <Image
+                        <ProductImage
                           src={item.image}
                           alt={item.name}
-                          fill
                           sizes="(max-width: 600px) 100vw, 128px"
-                          style={{ objectFit: "cover" }}
                         />
                       </Box>
 

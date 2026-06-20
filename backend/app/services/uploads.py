@@ -20,6 +20,12 @@ _EXT_MAP = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 _SAFE_SEGMENT = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
+def _is_heic(data: bytes) -> bool:
+    # ISO Base Media File Format box: bytes 4-7 are 'ftyp'.
+    # HEIC, AVIF, HEIF, and some MP4/MOV files all share this signature.
+    return len(data) >= 8 and data[4:8] == b"ftyp"
+
+
 def _uploads_root() -> Path:
     if settings.uploads_dir:
         root = Path(settings.uploads_dir)
@@ -48,6 +54,12 @@ def save_upload(file: UploadFile, user_id: str, slot: str) -> str:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
     if len(content) > _MAX_BYTES:
         raise HTTPException(status_code=413, detail="File must be under 10 MB")
+
+    if _is_heic(content):
+        raise HTTPException(
+            status_code=400,
+            detail="HEIC/HEIF images are not accepted. Please convert to JPEG, PNG, or WebP before uploading.",
+        )
 
     ext = _EXT_MAP[content_type]
     filename = f"{slot}_{uuid.uuid4().hex[:8]}{ext}"

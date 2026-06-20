@@ -217,6 +217,96 @@ export const GHANA_ID_TYPES: { value: string; label: string }[] = [
 ];
 
 /**
+ * Per-ID-type format specifications for seller identity verification.
+ * Each entry carries a placeholder, a human-readable format hint shown
+ * below the input, and a validate() function that returns null on success
+ * or an actionable error string on failure.
+ */
+export const GHANA_ID_SPECS: Record<
+  string,
+  { placeholder: string; formatHint: string; validate: (v: string) => string | null }
+> = {
+  "ghana-card": {
+    placeholder: "GHA-000000000-0",
+    formatHint: "Format: GHA-XXXXXXXXX-X  (GHA‑ prefix, 9 digits, dash, 1 check digit)",
+    validate: (v) =>
+      /^GHA-\d{9}-\d$/.test(v.trim())
+        ? null
+        : "Enter the Ghana Card number exactly as printed — e.g. GHA-123456789-0",
+  },
+  "voters-id": {
+    placeholder: "e.g. B0123456789",
+    formatHint: "7–14 alphanumeric characters as printed on your Voter's ID card",
+    validate: (v) => {
+      const s = v.trim();
+      if (s.length < 7) return "Voter's ID must be at least 7 characters";
+      if (s.length > 14) return "Voter's ID must be at most 14 characters";
+      if (!/^[A-Z0-9]+$/.test(s)) return "Only letters (A-Z) and digits are allowed";
+      return null;
+    },
+  },
+  "drivers-license": {
+    placeholder: "e.g. DVL-000000",
+    formatHint: "As printed on your DVLA license — letters, digits, and hyphens",
+    validate: (v) => {
+      const s = v.trim();
+      if (s.length < 5) return "Driver's license number must be at least 5 characters";
+      if (s.length > 20) return "Driver's license number must be at most 20 characters";
+      if (!/^[A-Z0-9/ -]+$/.test(s)) return "Only letters, digits, spaces, and hyphens are allowed";
+      return null;
+    },
+  },
+  passport: {
+    placeholder: "e.g. G1234567",
+    formatHint: "Format: one letter followed by 7–8 digits  (e.g. G1234567)",
+    validate: (v) =>
+      /^[A-Z]\d{7,8}$/.test(v.trim())
+        ? null
+        : "Passport number: one letter then 7–8 digits (e.g. G1234567)",
+  },
+  "ecowas-card": {
+    placeholder: "e.g. GH-000000000",
+    formatHint: "As printed on your ECOWAS card — letters, digits, and hyphens",
+    validate: (v) => {
+      const s = v.trim();
+      if (s.length < 6) return "ECOWAS card number must be at least 6 characters";
+      if (s.length > 20) return "ECOWAS card number must be at most 20 characters";
+      if (!/^[A-Z0-9-]+$/.test(s)) return "Only letters, digits, and hyphens are allowed";
+      return null;
+    },
+  },
+  ssnit: {
+    placeholder: "e.g. C012345678901",
+    formatHint: "Format: C or P followed by 10–11 digits  (e.g. C012345678901)",
+    validate: (v) =>
+      /^[CP]\d{10,11}$/i.test(v.trim())
+        ? null
+        : "SSNIT number: starts with C or P, then 10–11 digits (e.g. C012345678901)",
+  },
+};
+
+/** Validates a Ghana mobile money number (10 digits starting with 0, or +233 followed by 9 digits). */
+export function validateMoMoNumber(v: string): string | null {
+  const s = v.trim();
+  if (/^0\d{9}$/.test(s) || /^\+233\d{9}$/.test(s)) return null;
+  return "Enter a valid 10-digit Ghana number (e.g. 0241234567)";
+}
+
+/** Normalises a Ghana mobile money number to the local 10-digit format (strips +233 prefix). */
+export function normalizeMoMoNumber(v: string): string {
+  const s = v.trim();
+  if (s.startsWith("+233") && s.length === 13) return "0" + s.slice(4);
+  return s;
+}
+
+/** Consistent mobile network options used across onboarding and profile. */
+export const MOMO_NETWORKS = [
+  { value: "MTN Mobile Money", label: "MTN Mobile Money" },
+  { value: "Vodafone Cash", label: "Vodafone Cash" },
+  { value: "AirtelTigo Money", label: "AirtelTigo Money" },
+];
+
+/**
  * Format a number as $ currency (or any other ISO currency).
  * Uses en-GH locale so the cedi symbol and separators are correct.
  */

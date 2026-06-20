@@ -5,24 +5,30 @@ import {
   Alert,
   Box,
   Button,
-  ButtonBase,
   CircularProgress,
   FormHelperText,
+  IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import {
   ArrowForwardRounded,
   BadgeRounded,
   CameraAltRounded,
   CheckCircleRounded,
+  CloseRounded,
+  FlipCameraAndroidRounded,
+  PhotoCameraRounded,
   UploadFileRounded,
+  VideocamOffRounded,
 } from "@mui/icons-material";
 
 import { api, ApiClientError } from "@/lib/api";
-import { GHANA_ID_TYPES } from "@/lib/ghana";
+import { GHANA_ID_TYPES, GHANA_ID_SPECS } from "@/lib/ghana";
 import type { GovernmentIdType } from "@/types/types";
 import type { StepProps } from "../SellerOnboardingWizard";
 import type { OnboardingStep4Payload } from "@/lib/api/types";
@@ -35,23 +41,239 @@ interface UploadSlotState {
   error: string | null;
 }
 
-const SLOT_LABELS: Record<Slot, { label: string; hint: string; icon: React.ReactNode }> = {
+const SLOT_META: Record<Slot, { label: string; hint: string; icon: React.ReactNode; facing: "environment" | "user" }> = {
   id_front: {
-    label: "ID front",
-    hint: "Clear photo of the front of your ID",
-    icon: <BadgeRounded sx={{ fontSize: 32, color: "text.disabled" }} />,
+    label: "ID card — front",
+    hint: "Clear photo of the front of your ID. Make sure all text is readable.",
+    icon: <BadgeRounded sx={{ fontSize: 36, color: "text.disabled" }} />,
+    facing: "environment",
   },
   id_back: {
-    label: "ID back",
-    hint: "Clear photo of the back of your ID",
-    icon: <BadgeRounded sx={{ fontSize: 32, color: "text.disabled", transform: "scaleX(-1)" }} />,
+    label: "ID card — back",
+    hint: "Clear photo of the back of your ID.",
+    icon: <BadgeRounded sx={{ fontSize: 36, color: "text.disabled", transform: "scaleX(-1)" }} />,
+    facing: "environment",
   },
   selfie: {
     label: "Selfie with ID",
-    hint: "Hold your ID next to your face",
-    icon: <CameraAltRounded sx={{ fontSize: 32, color: "text.disabled" }} />,
+    hint: "Hold your ID next to your face so both are clearly visible.",
+    icon: <CameraAltRounded sx={{ fontSize: 36, color: "text.disabled" }} />,
+    facing: "user",
   },
 };
+
+// ---------------------------------------------------------------------------
+// Camera view component
+// ---------------------------------------------------------------------------
+
+function CameraView({
+  facingMode: initialFacing,
+  onCapture,
+  onClose,
+}: {
+  facingMode: "environment" | "user";
+  onCapture: (file: File) => void;
+  onClose: () => void;
+}) {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  const [camState, setCamState] = React.useState<"starting" | "ready" | "error">("starting");
+  const [errMsg, setErrMsg] = React.useState("");
+  const [facing, setFacing] = React.useState(initialFacing);
+
+  const startCamera = React.useCallback(async (mode: "environment" | "user") => {
+    // Stop any existing stream before starting a new one
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setCamState("starting");
+    setErrMsg("");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: mode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCamState("ready");
+    } catch (err) {
+      let msg = "Unable to access camera. Please use the file upload option instead.";
+      if (err instanceof DOMException) {
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          msg = "Camera access denied. Please allow camera access in your browser or device settings, then try again.";
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+          msg = "No camera found on this device. Please use the file upload option.";
+        } else if (err.name === "NotSupportedError" || err.name === "InsecureContextError") {
+          msg = "Camera access requires a secure (HTTPS) connection.";
+        } else if (err.name === "OverconstrainedError") {
+          // Fallback: try without facing constraint
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            streamRef.current = stream;
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              await videoRef.current.play();
+            }
+            setCamState("ready");
+            return;
+          } catch {
+            msg = "Unable to start camera. Please use the file upload option.";
+          }
+        }
+      }
+      setErrMsg(msg);
+      setCamState("error");
+    }
+  }, []);
+
+  React.useEffect(() => {
+    startCamera(facing);
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleFlip() {
+    const next = facing === "environment" ? "user" : "environment";
+    setFacing(next);
+    startCamera(next);
+  }
+
+  function handleCapture() {
+    const video = videoRef.current;
+    if (!video || camState !== "ready") return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        const file = new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" });
+        onCapture(file);
+      },
+      "image/jpeg",
+      0.92,
+    );
+  }
+
+  return (
+    <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden", bgcolor: "#000", aspectRatio: "4/3", width: "100%" }}>
+      {/* Loading */}
+      {camState === "starting" && (
+        <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ position: "absolute", inset: 0 }}>
+          <CircularProgress sx={{ color: "white" }} size={36} />
+          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.8)" }}>Starting camera…</Typography>
+        </Stack>
+      )}
+
+      {/* Error */}
+      {camState === "error" && (
+        <Stack alignItems="center" justifyContent="center" spacing={2} sx={{ position: "absolute", inset: 0, p: 3 }}>
+          <VideocamOffRounded sx={{ fontSize: 44, color: "grey.500" }} />
+          <Typography variant="body2" textAlign="center" sx={{ color: "rgba(255,255,255,0.75)" }}>
+            {errMsg}
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={onClose}
+            sx={{ color: "white", borderColor: "rgba(255,255,255,0.4)", "&:hover": { borderColor: "white" } }}
+          >
+            Use file upload instead
+          </Button>
+        </Stack>
+      )}
+
+      {/* Live feed */}
+      <video
+        ref={videoRef}
+        playsInline
+        muted
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          display: camState === "ready" ? "block" : "none",
+          transform: facing === "user" ? "scaleX(-1)" : "none",
+        }}
+      />
+
+      {/* Overlay controls */}
+      {camState === "ready" && (
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            p: { xs: 2, sm: 2.5 },
+            background: "linear-gradient(transparent, rgba(0,0,0,0.72))",
+          }}
+        >
+          <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
+            <Button
+              variant="text"
+              size="small"
+              onClick={onClose}
+              sx={{ color: "rgba(255,255,255,0.75)", minWidth: 72 }}
+            >
+              Cancel
+            </Button>
+            <IconButton
+              onClick={handleCapture}
+              sx={{
+                width: 64,
+                height: 64,
+                bgcolor: "white",
+                color: "grey.900",
+                border: "4px solid rgba(255,255,255,0.5)",
+                "&:hover": { bgcolor: "grey.100", transform: "scale(1.05)" },
+                transition: "transform 0.15s ease",
+              }}
+            >
+              <PhotoCameraRounded sx={{ fontSize: 28 }} />
+            </IconButton>
+            <Tooltip title="Flip camera">
+              <IconButton
+                size="small"
+                onClick={handleFlip}
+                sx={{ color: "rgba(255,255,255,0.75)", minWidth: 72 }}
+              >
+                <FlipCameraAndroidRounded />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Box>
+      )}
+
+      {/* Top-right close */}
+      <IconButton
+        size="small"
+        onClick={onClose}
+        sx={{
+          position: "absolute",
+          top: 8,
+          right: 8,
+          color: "white",
+          bgcolor: "rgba(0,0,0,0.45)",
+          "&:hover": { bgcolor: "rgba(0,0,0,0.65)" },
+        }}
+      >
+        <CloseRounded fontSize="small" />
+      </IconButton>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Upload tile component — drag & drop + file pick + camera
+// ---------------------------------------------------------------------------
 
 function UploadTile({
   slot,
@@ -63,61 +285,134 @@ function UploadTile({
   onFileSelect: (slot: Slot, file: File) => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const meta = SLOT_LABELS[slot];
+  const [showCamera, setShowCamera] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const meta = SLOT_META[slot];
   const done = !!state.path && !state.uploading;
 
+  // Feature-detect getUserMedia (won't be available on some old Android WebViews)
+  const hasCamera =
+    typeof navigator !== "undefined" &&
+    typeof navigator.mediaDevices?.getUserMedia === "function";
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    if (!isDragging) setIsDragging(true);
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false);
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file?.type.startsWith("image/")) onFileSelect(slot, file);
+  }
+
+  if (showCamera) {
+    return (
+      <Box>
+        <Typography variant="body2" fontWeight={700} color="text.secondary" mb={1}>
+          {meta.label}
+        </Typography>
+        <CameraView
+          facingMode={meta.facing}
+          onCapture={(file) => { setShowCamera(false); onFileSelect(slot, file); }}
+          onClose={() => setShowCamera(false)}
+        />
+      </Box>
+    );
+  }
+
   return (
-    <Box>
-      <ButtonBase
-        sx={{
-          width: "100%",
+    <Box onDragOver={handleDragOver} onDragEnter={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      <Box
+        sx={(theme) => ({
           border: "2px dashed",
-          borderColor: done ? "success.main" : state.error ? "error.main" : "divider",
+          borderColor: done
+            ? "success.main"
+            : isDragging
+              ? "primary.main"
+              : state.error
+                ? "error.main"
+                : theme.palette.divider,
           borderRadius: 2,
-          p: 3,
+          p: { xs: 2, sm: 2.5 },
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           gap: 1,
-          bgcolor: done ? "success.50" : "transparent",
-          cursor: "pointer",
-          transition: "border-color 0.2s",
-          "&:hover": { borderColor: "primary.main" },
-        }}
-        onClick={() => inputRef.current?.click()}
-        disabled={state.uploading}
+          bgcolor: isDragging
+            ? alpha(theme.palette.primary.main, 0.06)
+            : done
+              ? alpha(theme.palette.success.main, 0.05)
+              : "transparent",
+          transition: "border-color 0.15s ease, background-color 0.15s ease",
+          cursor: state.uploading ? "default" : "pointer",
+        })}
+        onClick={() => { if (!state.uploading && !done) inputRef.current?.click(); }}
       >
         {state.uploading ? (
-          <CircularProgress size={32} />
+          <>
+            <CircularProgress size={32} />
+            <Typography variant="body2" color="text.secondary">Uploading…</Typography>
+          </>
         ) : done ? (
-          <CheckCircleRounded sx={{ fontSize: 32, color: "success.main" }} />
+          <>
+            <CheckCircleRounded sx={{ fontSize: 36, color: "success.main" }} />
+            <Typography variant="body2" fontWeight={700}>Uploaded ✓</Typography>
+            <Typography variant="caption" color="text.secondary" textAlign="center">
+              {isDragging ? "Drop to replace" : "Drag a new photo here, or use the buttons below to replace"}
+            </Typography>
+          </>
         ) : (
-          meta.icon
+          <>
+            {meta.icon}
+            <Typography variant="body2" fontWeight={700}>{meta.label}</Typography>
+            <Typography variant="caption" color="text.secondary" textAlign="center">
+              {isDragging ? "Drop to upload" : meta.hint}
+            </Typography>
+            <Typography variant="caption" color="primary.main" fontWeight={600}>
+              {isDragging ? "" : "Drag & drop, choose file, or take a photo"}
+            </Typography>
+          </>
         )}
-        <Typography variant="body2" fontWeight={600}>
-          {done ? "Uploaded" : meta.label}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" textAlign="center">
-          {done ? "Tap to replace" : meta.hint}
-        </Typography>
-        {!done && !state.uploading && (
-          <Button
-            component="span"
-            variant="outlined"
-            size="small"
-            startIcon={<UploadFileRounded />}
-            sx={{ mt: 0.5, pointerEvents: "none" }}
-          >
-            Choose file
-          </Button>
+
+        {!state.uploading && (
+          <Stack direction="row" spacing={1} mt={0.5} onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<UploadFileRounded />}
+              onClick={() => inputRef.current?.click()}
+              sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+            >
+              {done ? "Replace" : "Choose file"}
+            </Button>
+            {hasCamera && (
+              <Button
+                variant="outlined"
+                size="small"
+                color="secondary"
+                startIcon={<CameraAltRounded />}
+                onClick={() => setShowCamera(true)}
+                sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
+              >
+                Take photo
+              </Button>
+            )}
+          </Stack>
         )}
-      </ButtonBase>
-      {state.error && <FormHelperText error>{state.error}</FormHelperText>}
+      </Box>
+
+      {state.error && (
+        <FormHelperText error sx={{ mt: 0.5, mx: 0.25 }}>{state.error}</FormHelperText>
+      )}
+
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -129,6 +424,10 @@ function UploadTile({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main Step4Identity component
+// ---------------------------------------------------------------------------
+
 export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
   const [idType, setIdType] = React.useState<GovernmentIdType>(
     (profile?.governmentIdType as GovernmentIdType) || "ghana-card"
@@ -136,28 +435,34 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
   const [idNumber, setIdNumber] = React.useState(profile?.governmentIdNumber || "");
   const [uploads, setUploads] = React.useState<Record<Slot, UploadSlotState>>({
     id_front: { path: profile?.idFrontUrl || null, uploading: false, error: null },
-    id_back: { path: profile?.idBackUrl || null, uploading: false, error: null },
-    selfie: { path: profile?.selfieUrl || null, uploading: false, error: null },
+    id_back:  { path: profile?.idBackUrl  || null, uploading: false, error: null },
+    selfie:   { path: profile?.selfieUrl  || null, uploading: false, error: null },
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
+  // Reset ID number when type changes so stale formats don't carry over
+  const prevIdType = React.useRef(idType);
+  React.useEffect(() => {
+    if (idType !== prevIdType.current) {
+      setIdNumber("");
+      setErrors((e) => ({ ...e, idNumber: "" }));
+      prevIdType.current = idType;
+    }
+  }, [idType]);
+
+  const spec = GHANA_ID_SPECS[idType];
+
   async function handleFileSelect(slot: Slot, file: File) {
-    setUploads((prev) => ({
-      ...prev,
-      [slot]: { ...prev[slot], uploading: true, error: null },
-    }));
+    setUploads((prev) => ({ ...prev, [slot]: { ...prev[slot], uploading: true, error: null } }));
     try {
       const { uploadUrl, path } = await api.getUploadUrl(slot);
       const res = await fetch(uploadUrl, {
         method: "PUT",
         body: file,
-        headers: { "Content-Type": file.type },
+        headers: { "Content-Type": file.type || "image/jpeg" },
       });
       if (!res.ok) throw new Error("Upload failed");
-      setUploads((prev) => ({
-        ...prev,
-        [slot]: { path, uploading: false, error: null },
-      }));
+      setUploads((prev) => ({ ...prev, [slot]: { path, uploading: false, error: null } }));
     } catch (err) {
       setUploads((prev) => ({
         ...prev,
@@ -172,10 +477,18 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!idNumber.trim()) e.idNumber = "ID number is required";
+
+    if (!idNumber.trim()) {
+      e.idNumber = "ID number is required";
+    } else {
+      const formatError = spec?.validate(idNumber.trim().toUpperCase());
+      if (formatError) e.idNumber = formatError;
+    }
+
     if (!uploads.id_front.path) e.id_front = "Please upload the front of your ID";
-    if (!uploads.id_back.path) e.id_back = "Please upload the back of your ID";
-    if (!uploads.selfie.path) e.selfie = "Please upload a selfie with your ID";
+    if (!uploads.id_back.path)  e.id_back  = "Please upload the back of your ID";
+    if (!uploads.selfie.path)   e.selfie   = "Please upload a selfie holding your ID";
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -185,10 +498,10 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
     if (!validate()) return;
     const payload: OnboardingStep4Payload = {
       governmentIdType: idType,
-      governmentIdNumber: idNumber.trim(),
+      governmentIdNumber: idNumber.trim().toUpperCase(),
       idFrontUrl: uploads.id_front.path!,
-      idBackUrl: uploads.id_back.path!,
-      selfieUrl: uploads.selfie.path!,
+      idBackUrl:  uploads.id_back.path!,
+      selfieUrl:  uploads.selfie.path!,
     };
     await onSubmit(payload);
   }
@@ -201,15 +514,16 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
         Identity verification
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
-        We verify every seller to keep Spree safe. Your documents are stored securely and only
-        seen by our review team.
+        We verify every seller to keep Spree safe. Your documents are stored securely
+        and seen only by our review team.
       </Typography>
 
       <Stack spacing={2.5}>
         <Alert severity="info" icon={false} sx={{ borderRadius: 2 }}>
-          Make sure your ID is valid and the photos are clear and well-lit.
+          Make sure your ID is valid, not expired, and the photos are clear and well-lit.
         </Alert>
 
+        {/* ID type selector */}
         <TextField
           select
           label="ID type"
@@ -223,22 +537,31 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
           ))}
         </TextField>
 
+        {/* ID number with per-type format hint */}
         <TextField
           label="ID number"
           value={idNumber}
           onChange={(e) => setIdNumber(e.target.value.toUpperCase())}
+          onBlur={() => {
+            if (idNumber.trim() && spec) {
+              const err = spec.validate(idNumber.trim().toUpperCase());
+              setErrors((prev) => ({ ...prev, idNumber: err ?? "" }));
+            }
+          }}
           error={!!errors.idNumber}
-          helperText={errors.idNumber || (idType === "ghana-card" ? "e.g. GHA-123456789-0" : undefined)}
+          helperText={errors.idNumber || spec?.formatHint}
+          placeholder={spec?.placeholder}
           fullWidth
           required
-          inputProps={{ style: { textTransform: "uppercase" } }}
+          inputProps={{ style: { textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.04em" } }}
         />
 
+        {/* Photo uploads */}
         <Box>
-          <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
+          <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
             Upload photos
           </Typography>
-          <Stack spacing={1.5}>
+          <Stack spacing={2}>
             {(["id_front", "id_back", "selfie"] as Slot[]).map((slot) => (
               <UploadTile
                 key={slot}
@@ -250,7 +573,7 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
           </Stack>
           {(errors.id_front || errors.id_back || errors.selfie) && (
             <FormHelperText error sx={{ mt: 1 }}>
-              Please upload all three photos to continue
+              All three photos are required to continue
             </FormHelperText>
           )}
         </Box>
