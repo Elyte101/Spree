@@ -218,9 +218,8 @@ export const GHANA_ID_TYPES: { value: string; label: string }[] = [
 
 /**
  * Per-ID-type format specifications for seller identity verification.
- * Each entry carries a placeholder, a human-readable format hint shown
- * below the input, and a validate() function that returns null on success
- * or an actionable error string on failure.
+ * Patterns verified against: NIA (Ghana Card), EC Ghana (Voter's ID),
+ * DVLA Ghana (Driver's License), GIS (Passport/ECOWAS), SSNIT.
  */
 export const GHANA_ID_SPECS: Record<
   string,
@@ -228,62 +227,104 @@ export const GHANA_ID_SPECS: Record<
 > = {
   "ghana-card": {
     placeholder: "GHA-000000000-0",
-    formatHint: "Format: GHA-XXXXXXXXX-X  (GHA‑ prefix, 9 digits, dash, 1 check digit)",
+    formatHint: "Format: GHA-XXXXXXXXX-X  (GHA prefix, 9 digits, dash, 1 check digit)",
     validate: (v) =>
       /^GHA-\d{9}-\d$/.test(v.trim())
         ? null
         : "Enter the Ghana Card number exactly as printed — e.g. GHA-123456789-0",
   },
   "voters-id": {
-    placeholder: "e.g. B0123456789",
-    formatHint: "7–14 alphanumeric characters as printed on your Voter's ID card",
+    placeholder: "0000000000",
+    formatHint: "10-digit number exactly as printed on your Voter's ID card",
+    validate: (v) =>
+      /^\d{10}$/.test(v.trim())
+        ? null
+        : "Voter's ID must be exactly 10 digits (e.g. 0123456789)",
+  },
+  "drivers-license": {
+    placeholder: "e.g. DL123456789",
+    formatHint: "6–15 letters and digits as printed on your DVLA license",
     validate: (v) => {
       const s = v.trim();
-      if (s.length < 7) return "Voter's ID must be at least 7 characters";
-      if (s.length > 14) return "Voter's ID must be at most 14 characters";
+      if (s.length < 6) return "Driver's license number must be at least 6 characters";
+      if (s.length > 15) return "Driver's license number must be at most 15 characters";
       if (!/^[A-Z0-9]+$/.test(s)) return "Only letters (A-Z) and digits are allowed";
       return null;
     },
   },
-  "drivers-license": {
-    placeholder: "e.g. DVL-000000",
-    formatHint: "As printed on your DVLA license — letters, digits, and hyphens",
-    validate: (v) => {
-      const s = v.trim();
-      if (s.length < 5) return "Driver's license number must be at least 5 characters";
-      if (s.length > 20) return "Driver's license number must be at most 20 characters";
-      if (!/^[A-Z0-9/ -]+$/.test(s)) return "Only letters, digits, spaces, and hyphens are allowed";
-      return null;
-    },
-  },
   passport: {
-    placeholder: "e.g. G1234567",
-    formatHint: "Format: one letter followed by 7–8 digits  (e.g. G1234567)",
+    placeholder: "G1234567",
+    formatHint: "Format: G followed by 7–8 digits  (e.g. G1234567)",
     validate: (v) =>
-      /^[A-Z]\d{7,8}$/.test(v.trim())
+      /^G\d{7,8}$/.test(v.trim())
         ? null
-        : "Passport number: one letter then 7–8 digits (e.g. G1234567)",
+        : "Ghana passport: starts with G, then 7–8 digits (e.g. G1234567)",
   },
   "ecowas-card": {
-    placeholder: "e.g. GH-000000000",
-    formatHint: "As printed on your ECOWAS card — letters, digits, and hyphens",
+    placeholder: "e.g. GH12345678",
+    formatHint: "8–12 letters and digits as printed on your ECOWAS Identity Card",
     validate: (v) => {
       const s = v.trim();
-      if (s.length < 6) return "ECOWAS card number must be at least 6 characters";
-      if (s.length > 20) return "ECOWAS card number must be at most 20 characters";
-      if (!/^[A-Z0-9-]+$/.test(s)) return "Only letters, digits, and hyphens are allowed";
+      if (s.length < 8) return "ECOWAS card number must be at least 8 characters";
+      if (s.length > 12) return "ECOWAS card number must be at most 12 characters";
+      if (!/^[A-Z0-9]+$/.test(s)) return "Only letters (A-Z) and digits are allowed";
       return null;
     },
   },
   ssnit: {
-    placeholder: "e.g. C012345678901",
-    formatHint: "Format: C or P followed by 10–11 digits  (e.g. C012345678901)",
+    placeholder: "e.g. P0123456789012",
+    formatHint: "Format: one letter followed by 12–13 digits  (e.g. P0123456789012)",
     validate: (v) =>
-      /^[CP]\d{10,11}$/i.test(v.trim())
+      /^[A-Z]\d{12,13}$/.test(v.trim())
         ? null
-        : "SSNIT number: starts with C or P, then 10–11 digits (e.g. C012345678901)",
+        : "SSNIT number: one letter then 12–13 digits (e.g. P0123456789012)",
   },
 };
+
+/**
+ * Filter and auto-format ID input per type.
+ * Strips invalid characters, enforces character-class rules, and auto-inserts
+ * Ghana Card dashes so the user only types digits.
+ */
+export function applyIdFormat(raw: string, type: string): string {
+  const up = raw.toUpperCase();
+  switch (type) {
+    case "ghana-card": {
+      const stripped = up.replace(/[^A-Z0-9]/g, "");
+      const body = stripped.startsWith("GHA") ? stripped.slice(3) : stripped;
+      const digits = body.replace(/\D/g, "").slice(0, 10);
+      if (!digits) return "GHA-";
+      if (digits.length <= 9) return `GHA-${digits}`;
+      return `GHA-${digits.slice(0, 9)}-${digits.slice(9)}`;
+    }
+    case "passport": {
+      const stripped = up.replace(/[^A-Z0-9]/g, "");
+      if (!stripped) return "";
+      const first = stripped[0] === "G" ? "G" : "";
+      return first + stripped.slice(first ? 1 : 0).replace(/\D/g, "").slice(0, 8);
+    }
+    case "ssnit": {
+      const stripped = up.replace(/[^A-Z0-9]/g, "");
+      if (!stripped) return "";
+      const prefix = /^[A-Z]$/.test(stripped[0]) ? stripped[0] : "";
+      return prefix + stripped.slice(prefix ? 1 : 0).replace(/\D/g, "").slice(0, 13);
+    }
+    case "voters-id":
+      return up.replace(/\D/g, "").slice(0, 10);
+    case "ecowas-card":
+      return up.replace(/[^A-Z0-9]/g, "").slice(0, 12);
+    case "drivers-license":
+      return up.replace(/[^A-Z0-9]/g, "").slice(0, 15);
+    default:
+      return up;
+  }
+}
+
+/** Starting value for the ID number field — pre-fills Ghana Card prefix. */
+export function initialIdValue(type: string, existing: string): string {
+  if (existing) return existing;
+  return type === "ghana-card" ? "GHA-" : "";
+}
 
 /** Validates a Ghana mobile money number (10 digits starting with 0, or +233 followed by 9 digits). */
 export function validateMoMoNumber(v: string): string | null {

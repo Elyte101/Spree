@@ -8,6 +8,7 @@ import {
   ArrowBackRounded,
   ArrowForwardRounded,
   BadgeRounded,
+  CameraAltRounded,
   CheckRounded,
   CloseRounded,
   CloudUploadRounded,
@@ -15,6 +16,8 @@ import {
   DeleteOutlineRounded,
   LocalShippingRounded,
   PaymentRounded,
+  PhoneAndroidRounded,
+  PhotoCameraRounded,
   PlaceRounded,
   SendRounded,
   StoreRounded,
@@ -46,7 +49,11 @@ import {
   useTheme,
 } from "@mui/material";
 import { PhoneInput } from "@/components/ui/phoneInput";
-import { GHANA_ID_TYPES, COUNTRY_LIST, getRegionsForCountry, getRegionLabel } from "@/lib/ghana";
+import {
+  GHANA_ID_TYPES, GHANA_ID_SPECS, applyIdFormat, initialIdValue,
+  COUNTRY_LIST, getRegionsForCountry, getRegionLabel,
+  MOMO_NETWORKS, validateMoMoNumber,
+} from "@/lib/ghana";
 import { GovernmentIdType, SellerType, UserProfile } from "@/types/types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -74,7 +81,10 @@ interface WizardData {
   shipState: string;
   shipPostalCode: string;
   shipCountry: string;
-  paymentMethod: "card" | "bank-transfer";
+  paymentMethod: "card" | "bank-transfer" | "mobile_money";
+  momoProvider: string;
+  momoNumber: string;
+  momoAccountName: string;
   cardholderName: string;
   cardLast4: string;
   expiryMonth: string;
@@ -93,7 +103,7 @@ interface ImgCheckResult {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DRAFT_KEY = "spree-seller-wizard-draft";
+const DRAFT_KEY = "spree-vendor-wizard-draft";
 
 const STEP_LABELS = [
   "Get Started",
@@ -252,9 +262,24 @@ function validateStep(
   if (step === 3) {
     if (!data.businessPhone.trim()) e.businessPhone = "Business phone is required.";
   }
+  if (step === 5 && data.paymentMethod === "mobile_money") {
+    if (!data.momoNumber.trim()) {
+      e.momoNumber = "MoMo number is required.";
+    } else {
+      const momoErr = validateMoMoNumber(data.momoNumber.trim());
+      if (momoErr) e.momoNumber = momoErr;
+    }
+  }
   if (step === 6) {
     if (!data.governmentIdType) e.governmentIdType = "Select your ID type.";
-    if (!data.governmentIdNumber.trim()) e.governmentIdNumber = "ID number is required.";
+    const idTrimmed = data.governmentIdNumber.trim();
+    if (!idTrimmed || idTrimmed === "GHA-") {
+      e.governmentIdNumber = "ID number is required.";
+    } else {
+      const spec = GHANA_ID_SPECS[data.governmentIdType];
+      const fmtErr = spec?.validate(idTrimmed);
+      if (fmtErr) e.governmentIdNumber = fmtErr;
+    }
     if (!idFiles.front) e.idFront = "Upload the front of your ID.";
     else if (imgErrors.front.blocking.length) e.idFront = imgErrors.front.blocking[0];
     if (!idFiles.back) e.idBack = "Upload the back of your ID.";
@@ -292,14 +317,20 @@ function buildInitialData(profile: UserProfile): WizardData {
     shipState:          d?.shipState          ?? profile.shippingAddress?.state         ?? "",
     shipPostalCode:     d?.shipPostalCode     ?? profile.shippingAddress?.postalCode    ?? "",
     shipCountry:        (d?.shipCountry       ?? profile.shippingAddress?.country)      || "Ghana",
-    paymentMethod:      d?.paymentMethod      ?? profile.paymentInfo?.method            ?? "card",
+    paymentMethod:      (d?.paymentMethod      ?? profile.paymentInfo?.method            ?? "mobile_money") as WizardData["paymentMethod"],
+    momoProvider:       d?.momoProvider       ?? profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
+    momoNumber:         d?.momoNumber         ?? profile.payoutInfo?.mobileMoneyNumber  ?? "",
+    momoAccountName:    d?.momoAccountName    ?? profile.payoutInfo?.accountName        ?? "",
     cardholderName:     d?.cardholderName     ?? profile.paymentInfo?.cardholderName    ?? "",
     cardLast4:          d?.cardLast4          ?? profile.paymentInfo?.cardLast4         ?? "",
     expiryMonth:        d?.expiryMonth        ?? profile.paymentInfo?.expiryMonth       ?? "",
     expiryYear:         d?.expiryYear         ?? profile.paymentInfo?.expiryYear        ?? "",
     billingPostalCode:  d?.billingPostalCode  ?? profile.paymentInfo?.billingPostalCode ?? "",
     governmentIdType:   d?.governmentIdType   ?? profile.governmentIdType               ?? "ghana-card",
-    governmentIdNumber: d?.governmentIdNumber ?? profile.governmentIdNumber             ?? "",
+    governmentIdNumber: initialIdValue(
+      d?.governmentIdType ?? profile.governmentIdType ?? "ghana-card",
+      d?.governmentIdNumber ?? profile.governmentIdNumber ?? "",
+    ),
   };
 }
 
@@ -344,6 +375,98 @@ function RegionSelect({ country, value, onChange, error, required }: {
   );
 }
 
+// ── Camera capture component ───────────────────────────────────────────────────
+
+function CameraCapture({ onCapture, onClose }: { onCapture: (f: File) => void; onClose: () => void }) {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const streamRef = React.useRef<MediaStream | null>(null);
+  const [state, setState] = React.useState<"starting" | "ready" | "error">("starting");
+  const [errMsg, setErrMsg] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } })
+      .then((stream) => {
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) { videoRef.current.srcObject = stream; void videoRef.current.play(); }
+        setState("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        let msg = "Unable to access camera. Please use file upload instead.";
+        if (err instanceof DOMException) {
+          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")
+            msg = "Camera access denied. Allow camera access in your browser settings and try again.";
+          else if (err.name === "NotFoundError")
+            msg = "No camera found on this device. Please use file upload instead.";
+        }
+        setErrMsg(msg);
+        setState("error");
+      });
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  function capture() {
+    const video = videoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      onCapture(new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" }));
+    }, "image/jpeg", 0.92);
+  }
+
+  return (
+    <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden", bgcolor: "#000", aspectRatio: "4/3" }}>
+      {state === "starting" && (
+        <Stack alignItems="center" justifyContent="center" sx={{ position: "absolute", inset: 0 }} spacing={1.5}>
+          <CircularProgress sx={{ color: "white" }} size={32} />
+          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.8)" }}>Starting camera…</Typography>
+        </Stack>
+      )}
+      {state === "error" && (
+        <Stack alignItems="center" justifyContent="center" sx={{ position: "absolute", inset: 0, p: 3 }} spacing={2}>
+          <Typography variant="body2" textAlign="center" sx={{ color: "rgba(255,255,255,0.85)" }}>{errMsg}</Typography>
+          <Button size="small" variant="outlined" onClick={onClose}
+            sx={{ color: "white", borderColor: "rgba(255,255,255,0.4)", "&:hover": { borderColor: "white" } }}>
+            Use file upload
+          </Button>
+        </Stack>
+      )}
+      <video ref={videoRef} playsInline muted
+        style={{ width: "100%", height: "100%", objectFit: "cover", display: state === "ready" ? "block" : "none" }} />
+      {state === "ready" && (
+        <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, p: 2, background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }}>
+          <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
+            <Button size="small" onClick={onClose} sx={{ color: "rgba(255,255,255,0.75)", minWidth: 72 }}>Cancel</Button>
+            <IconButton onClick={capture}
+              sx={{ width: 56, height: 56, bgcolor: "white", color: "grey.900", border: "3px solid rgba(255,255,255,0.5)", "&:hover": { bgcolor: "grey.100" } }}>
+              <PhotoCameraRounded sx={{ fontSize: 24 }} />
+            </IconButton>
+          </Stack>
+        </Box>
+      )}
+      <IconButton size="small" onClick={onClose}
+        sx={{ position: "absolute", top: 8, right: 8, color: "white", bgcolor: "rgba(0,0,0,0.45)", "&:hover": { bgcolor: "rgba(0,0,0,0.65)" } }}>
+        <CloseRounded fontSize="small" />
+      </IconButton>
+    </Box>
+  );
+}
+
+// ── Upload dropzone with drag-drop + file-pick + camera ────────────────────────
+
 interface DropzoneProps {
   label: string;
   icon: React.ReactNode;
@@ -358,7 +481,28 @@ interface DropzoneProps {
 
 function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, onFile, onClear }: DropzoneProps) {
   const [dragging, setDragging] = React.useState(false);
+  const [showCamera, setShowCamera] = React.useState(false);
+  const [hasCamera, setHasCamera] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    setHasCamera(
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices?.getUserMedia === "function",
+    );
+  }, []);
+
+  if (showCamera) {
+    return (
+      <Box>
+        <Typography variant="body2" fontWeight={700} color="text.secondary" mb={1}>{label}</Typography>
+        <CameraCapture
+          onCapture={(f) => { setShowCamera(false); onFile(f); }}
+          onClose={() => setShowCamera(false)}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Box>
@@ -369,11 +513,11 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click(); } }}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }}
         onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
         sx={(theme) => ({
           position: "relative",
-          minHeight: 130,
+          minHeight: 120,
           borderRadius: 2,
           border: "2px dashed",
           borderColor: error ? "error.main" : dragging ? "primary.main" : theme.palette.divider,
@@ -387,46 +531,50 @@ function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, on
           "&:focus-visible": { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
         })}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          hidden
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
-        />
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
         {thumbnail ? (
           <>
             <Box component="img" src={thumbnail} alt={label}
               sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
             <Box sx={{ position: "absolute", inset: 0, bgcolor: "rgba(0,0,0,0.38)", display: "flex", alignItems: "flex-end", p: 1 }}>
-              <Typography variant="caption" color="white" fontWeight={700} noWrap sx={{ maxWidth: "100%" }}>
-                {file?.name}
-              </Typography>
+              <Typography variant="caption" color="white" fontWeight={700} noWrap sx={{ maxWidth: "100%" }}>{file?.name}</Typography>
             </Box>
           </>
         ) : (
           <Stack alignItems="center" spacing={0.75} sx={{ py: 2, px: 2, pointerEvents: "none" }}>
-            {checking
-              ? <CircularProgress size={26} />
-              : <Box sx={{ fontSize: 34, color: "text.secondary", display: "flex" }}>{icon}</Box>
-            }
+            {checking ? <CircularProgress size={26} /> : <Box sx={{ fontSize: 34, color: "text.secondary", display: "flex" }}>{icon}</Box>}
             <Typography variant="body2" fontWeight={700} textAlign="center">{label}</Typography>
             <Typography variant="caption" color="text.secondary" textAlign="center">
-              Drag & drop or click<br />JPEG · PNG · WebP
+              Drag & drop · choose file · take photo<br />JPEG · PNG · WebP
             </Typography>
           </Stack>
         )}
       </Box>
-      {file && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 0.5 }}>
-          <Button size="small" color="error"
-            startIcon={<DeleteOutlineRounded fontSize="small" />}
-            onClick={(e) => { e.stopPropagation(); onClear(); }}
-            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.72rem" }}>
+
+      <Stack direction="row" spacing={1} mt={0.75} justifyContent="space-between" alignItems="center">
+        <Stack direction="row" spacing={1} onClick={(e) => e.stopPropagation()}>
+          <Button size="small" variant="outlined" startIcon={<CloudUploadRounded fontSize="small" />}
+            onClick={() => inputRef.current?.click()}
+            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.75rem", borderRadius: 2 }}>
+            {thumbnail ? "Replace" : "Choose file"}
+          </Button>
+          {hasCamera && (
+            <Button size="small" variant="outlined" color="secondary" startIcon={<CameraAltRounded fontSize="small" />}
+              onClick={() => setShowCamera(true)}
+              sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.75rem", borderRadius: 2 }}>
+              Take photo
+            </Button>
+          )}
+        </Stack>
+        {file && (
+          <Button size="small" color="error" startIcon={<DeleteOutlineRounded fontSize="small" />}
+            onClick={onClear} sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.72rem" }}>
             Remove
           </Button>
-        </Box>
-      )}
+        )}
+      </Stack>
+
       {checking && <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>Checking image…</Typography>}
       {!checking && error && <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>{error}</Typography>}
       {!checking && !error && warning && <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>{warning}</Typography>}
@@ -606,11 +754,20 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
         },
         paymentInfo: {
           method: data.paymentMethod,
-          cardholderName: data.cardholderName.trim(),
-          cardLast4: data.cardLast4.trim(),
-          expiryMonth: data.expiryMonth.trim(),
-          expiryYear: data.expiryYear.trim(),
-          billingPostalCode: data.billingPostalCode.trim(),
+          ...(data.paymentMethod === "mobile_money"
+            ? {
+                mobileMoneyNetwork: data.momoProvider,
+                mobileMoneyNumber: data.momoNumber.trim(),
+                accountName: data.momoAccountName.trim(),
+                currency: "GHS",
+              }
+            : {
+                cardholderName: data.cardholderName.trim(),
+                cardLast4: data.cardLast4.trim(),
+                expiryMonth: data.expiryMonth.trim(),
+                expiryYear: data.expiryYear.trim(),
+                billingPostalCode: data.billingPostalCode.trim(),
+              }),
         },
       };
 
@@ -680,8 +837,8 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
         <Select label="Sell as" value={data.sellerType}
           onChange={(e) => setField("sellerType", e.target.value as SellerType)}
           MenuProps={{ sx: MENU_SX }}>
-          <MenuItem value="retail">Retail seller</MenuItem>
-          <MenuItem value="wholesale">Wholesale seller</MenuItem>
+          <MenuItem value="retail">Retail vendor</MenuItem>
+          <MenuItem value="wholesale">Wholesale vendor</MenuItem>
         </Select>
       </FormControl>
       <TextField label="Store description" value={data.storeDescription} required multiline minRows={3} fullWidth
@@ -752,45 +909,164 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
     /* 5 */
     <Stack key="s5" spacing={2.5}>
       <Alert severity="info" icon={false} sx={{ borderRadius: 2 }}>
-        Save reference details only — Spree never stores full card numbers. Payouts are handled via Paystack.
+        This is how Spree will pay you after each sale. You can update it later in your profile settings.
       </Alert>
       <FormControl fullWidth>
-        <InputLabel>Preferred payment method</InputLabel>
-        <Select label="Preferred payment method" value={data.paymentMethod}
+        <InputLabel>Payout method</InputLabel>
+        <Select label="Payout method" value={data.paymentMethod}
           onChange={(e) => setField("paymentMethod", e.target.value as WizardData["paymentMethod"])}
           MenuProps={{ sx: MENU_SX }}>
-          <MenuItem value="card">Card</MenuItem>
+          <MenuItem value="mobile_money">
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <PhoneAndroidRounded fontSize="small" color="primary" />
+              <span>Mobile Money (MoMo)</span>
+            </Stack>
+          </MenuItem>
           <MenuItem value="bank-transfer">Bank transfer</MenuItem>
+          <MenuItem value="card">Card</MenuItem>
         </Select>
       </FormControl>
-      <TextField label="Cardholder / account name" value={data.cardholderName} fullWidth onChange={updateField("cardholderName")} />
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(2, 1fr)" }}>
-        <TextField label="Card last 4" value={data.cardLast4} onChange={updateField("cardLast4")} inputProps={{ maxLength: 4 }} />
-        <TextField label="Billing postal code" value={data.billingPostalCode} onChange={updateField("billingPostalCode")} />
-        <TextField label="Expiry month" value={data.expiryMonth} onChange={updateField("expiryMonth")} inputProps={{ maxLength: 2 }} placeholder="MM" />
-        <TextField label="Expiry year" value={data.expiryYear} onChange={updateField("expiryYear")} inputProps={{ maxLength: 4 }} placeholder="YYYY" />
-      </Box>
+
+      {data.paymentMethod === "mobile_money" ? (
+        <>
+          <FormControl fullWidth>
+            <InputLabel>MoMo network</InputLabel>
+            <Select label="MoMo network" value={data.momoProvider}
+              onChange={(e) => setData((d) => ({ ...d, momoProvider: e.target.value }))}
+              MenuProps={{ sx: MENU_SX }}>
+              {MOMO_NETWORKS.map((n) => <MenuItem key={n.value} value={n.value}>{n.label}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <TextField
+            label="MoMo number"
+            value={data.momoNumber}
+            fullWidth
+            required
+            placeholder="0241234567"
+            onChange={(e) => { setData((d) => ({ ...d, momoNumber: e.target.value })); clearError("momoNumber"); }}
+            onBlur={() => {
+              if (data.momoNumber.trim()) {
+                const err = validateMoMoNumber(data.momoNumber.trim());
+                if (err) setErrors((prev) => ({ ...prev, momoNumber: err }));
+              }
+            }}
+            error={!!errors.momoNumber}
+            helperText={errors.momoNumber || "10-digit Ghana number, e.g. 0241234567"}
+            inputProps={{ inputMode: "tel", maxLength: 13 }}
+          />
+          <TextField label="Account name" value={data.momoAccountName} fullWidth
+            onChange={(e) => setData((d) => ({ ...d, momoAccountName: e.target.value }))}
+            helperText="Full name as it appears on the MoMo account" />
+          {data.momoProvider && data.momoNumber && !errors.momoNumber && (
+            <Alert severity="success" icon={false} sx={{ borderRadius: 2, py: 1 }}>
+              Payouts will be sent to <strong>{data.momoNumber}</strong> via <strong>{data.momoProvider}</strong>.
+            </Alert>
+          )}
+          <Box sx={(theme) => ({ p: 1.5, borderRadius: 2, bgcolor: theme.palette.action.hover })}>
+            <Typography variant="caption" color="text.secondary" lineHeight={1.7}>
+              <strong>MTN Mobile Money:</strong> 024, 054, 055, 059<br />
+              <strong>Telecel Cash (Vodafone):</strong> 020, 050<br />
+              <strong>AirtelTigo Money:</strong> 026, 027, 056, 057
+            </Typography>
+          </Box>
+        </>
+      ) : (
+        <>
+          <TextField label="Cardholder / account name" value={data.cardholderName} fullWidth onChange={updateField("cardholderName")} />
+          <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "repeat(2, 1fr)" }}>
+            <TextField label="Card last 4" value={data.cardLast4} onChange={updateField("cardLast4")} inputProps={{ maxLength: 4 }} />
+            <TextField label="Billing postal code" value={data.billingPostalCode} onChange={updateField("billingPostalCode")} />
+            <TextField label="Expiry month" value={data.expiryMonth} onChange={updateField("expiryMonth")} inputProps={{ maxLength: 2 }} placeholder="MM" />
+            <TextField label="Expiry year" value={data.expiryYear} onChange={updateField("expiryYear")} inputProps={{ maxLength: 4 }} placeholder="YYYY" />
+          </Box>
+        </>
+      )}
     </Stack>,
 
     /* 6 */
     <Stack key="s6" spacing={2.5}>
-      <Typography variant="body2" color="text.secondary">
-        We verify every seller before product publishing is enabled. Documents are reviewed privately by our team.
-      </Typography>
-      <FormControl fullWidth required error={!!errors.governmentIdType}>
-        <InputLabel>Government ID type</InputLabel>
-        <Select label="Government ID type" value={data.governmentIdType}
-          onChange={(e) => { setField("governmentIdType", e.target.value as GovernmentIdType); clearError("governmentIdType"); }}
-          MenuProps={{ sx: MENU_SX }}>
-          {GHANA_ID_TYPES.map((id) => <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>)}
-        </Select>
-        {errors.governmentIdType && <FormHelperText>{errors.governmentIdType}</FormHelperText>}
-      </FormControl>
-      <TextField label="ID number" value={data.governmentIdNumber} required fullWidth
-        onChange={(e) => { updateField("governmentIdNumber")(e); clearError("governmentIdNumber"); }}
-        error={!!errors.governmentIdNumber}
-        helperText={errors.governmentIdNumber || "Kept private — visible to admins only."}
-        inputProps={{ "aria-invalid": !!errors.governmentIdNumber }} />
+      {(() => {
+        const idSpec = GHANA_ID_SPECS[data.governmentIdType];
+        const idTrimmed = data.governmentIdNumber.trim();
+        const idValid = !!idTrimmed && idTrimmed !== "GHA-" && !errors.governmentIdNumber;
+        return (
+          <>
+            <Typography variant="body2" color="text.secondary">
+              We verify every seller before product publishing is enabled. Documents are reviewed privately by our team.
+            </Typography>
+            <FormControl fullWidth required error={!!errors.governmentIdType}>
+              <InputLabel>Government ID type</InputLabel>
+              <Select label="Government ID type" value={data.governmentIdType}
+                onChange={(e) => {
+                  const newType = e.target.value as GovernmentIdType;
+                  setData((d) => ({ ...d, governmentIdType: newType, governmentIdNumber: initialIdValue(newType, "") }));
+                  clearError("governmentIdType");
+                  clearError("governmentIdNumber");
+                }}
+                MenuProps={{ sx: MENU_SX }}>
+                {GHANA_ID_TYPES.map((id) => <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>)}
+              </Select>
+              {errors.governmentIdType && <FormHelperText>{errors.governmentIdType}</FormHelperText>}
+            </FormControl>
+
+            <Box>
+              {idSpec && (
+                <Box sx={(theme) => ({
+                  mb: 1, px: 1.5, py: 0.75, borderRadius: 1.5,
+                  bgcolor: idValid ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.info.main, 0.07),
+                  border: "1px solid",
+                  borderColor: idValid ? alpha(theme.palette.success.main, 0.3) : alpha(theme.palette.info.main, 0.2),
+                })}>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.25 }}>
+                    Expected format
+                  </Typography>
+                  <Typography variant="caption" sx={{
+                    fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.06em",
+                    color: idValid ? "success.main" : "text.primary", fontSize: "0.8rem",
+                  }}>
+                    {idSpec.placeholder}
+                  </Typography>
+                </Box>
+              )}
+              <TextField
+                label="ID number"
+                value={data.governmentIdNumber}
+                required
+                fullWidth
+                onChange={(e) => {
+                  const formatted = applyIdFormat(e.target.value, data.governmentIdType);
+                  setData((d) => ({ ...d, governmentIdNumber: formatted }));
+                  const trimmed = formatted.trim();
+                  if (trimmed && trimmed !== "GHA-") {
+                    const err = idSpec?.validate(trimmed) ?? "";
+                    setErrors((prev) => ({ ...prev, governmentIdNumber: err }));
+                  } else {
+                    clearError("governmentIdNumber");
+                  }
+                }}
+                error={!!errors.governmentIdNumber}
+                helperText={
+                  errors.governmentIdNumber
+                    ? errors.governmentIdNumber
+                    : idValid
+                      ? "✓ Format looks correct"
+                      : idSpec?.formatHint
+                }
+                slotProps={{
+                  formHelperText: { sx: idValid ? { color: "success.main", fontWeight: 600 } : {} },
+                  htmlInput: {
+                    style: { textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em" },
+                    spellCheck: false,
+                    autoCorrect: "off",
+                    autoCapitalize: "characters",
+                    "aria-invalid": !!errors.governmentIdNumber,
+                  },
+                }}
+              />
+            </Box>
+          </>
+        );
+      })()}
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
         <IdDropzone label="ID front" icon={<BadgeRounded fontSize="inherit" />}
           file={idFront} thumbnail={thumbFront} checking={checkingFront}
@@ -825,9 +1101,26 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
       {submitSuccess && <Alert severity="success" sx={{ borderRadius: 2 }}>Application submitted! Returning to your profile…</Alert>}
       {[
         { title: "Account", idx: 0, rows: [["Display name", data.name], ["Email", data.email]] },
-        { title: "Store", idx: 1, rows: [["Store name", data.storeName], ["Tagline", data.storeTagline], ["Sell as", data.sellerType === "retail" ? "Retail seller" : "Wholesale seller"], ["Description", data.storeDescription.slice(0, 80) + (data.storeDescription.length > 80 ? "…" : "")]] },
+        { title: "Store", idx: 1, rows: [["Store name", data.storeName], ["Tagline", data.storeTagline], ["Sell as", data.sellerType === "retail" ? "Retail vendor" : "Wholesale vendor"], ["Description", data.storeDescription.slice(0, 80) + (data.storeDescription.length > 80 ? "…" : "")]] },
         { title: "Location", idx: 2, rows: [["Address", data.storeAddressLine1], ["City", data.storeCity], ["Region", data.storeState], ["Country", data.storeCountry]] },
         { title: "Business", idx: 3, rows: [["Business phone", data.businessPhone], ["Business email", data.businessEmail], ["WhatsApp", data.whatsapp]] },
+        {
+          title: "Payment",
+          idx: 5,
+          rows: data.paymentMethod === "mobile_money"
+            ? [
+                ["Method", "Mobile Money (MoMo)"],
+                ["Network", MOMO_NETWORKS.find((n) => n.value === data.momoProvider)?.label ?? data.momoProvider],
+                ["MoMo number", data.momoNumber],
+                ["Account name", data.momoAccountName],
+              ]
+            : [
+                ["Method", data.paymentMethod === "bank-transfer" ? "Bank transfer" : "Card"],
+                ["Cardholder name", data.cardholderName],
+                ["Card last 4", data.cardLast4 ? `•••• ${data.cardLast4}` : ""],
+                ["Expiry", data.expiryMonth && data.expiryYear ? `${data.expiryMonth}/${data.expiryYear}` : ""],
+              ],
+        },
         { title: "Identity", idx: 6, rows: [["ID type", GHANA_ID_TYPES.find((t) => t.value === data.governmentIdType)?.label ?? ""], ["ID number", data.governmentIdNumber ? "••••••••" : ""], ["Documents", [idFront && "Front", idBack && "Back", idSelfie && "Selfie"].filter(Boolean).join(", ") || "None uploaded"]] },
       ].map(({ title, idx, rows }) => (
         <Box key={title} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
@@ -869,11 +1162,10 @@ export function SellerApplicationWizard({ profile }: { profile: UserProfile }) {
         <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: { xs: 3, md: 4 } }}>
           <Box>
             <Typography variant="overline" color="primary.main" fontWeight={800} lineHeight={1} display="block">
-              Seller Application
+              vendor Application
             </Typography>
             <Typography variant="h4" fontWeight={900} color="text.primary" sx={{ mt: 0.25, lineHeight: 1.1, letterSpacing: "-0.025em" }}>
-              Become a{" "}
-              <Box component="span" sx={{ color: "primary.main" }}>Seller</Box>
+              Become a vendor
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
               Complete all steps to submit your store for review.

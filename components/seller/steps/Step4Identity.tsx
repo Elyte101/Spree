@@ -28,7 +28,7 @@ import {
 } from "@mui/icons-material";
 
 import { api, ApiClientError } from "@/lib/api";
-import { GHANA_ID_TYPES, GHANA_ID_SPECS } from "@/lib/ghana";
+import { GHANA_ID_TYPES, GHANA_ID_SPECS, applyIdFormat, initialIdValue } from "@/lib/ghana";
 import type { GovernmentIdType } from "@/types/types";
 import type { StepProps } from "../SellerOnboardingWizard";
 import type { OnboardingStep4Payload } from "@/lib/api/types";
@@ -61,53 +61,6 @@ const SLOT_META: Record<Slot, { label: string; hint: string; icon: React.ReactNo
     facing: "user",
   },
 };
-
-/**
- * Filter and auto-format ID input per type.
- * Strips invalid characters, enforces character class rules,
- * and auto-inserts Ghana Card dashes so the user only types digits.
- */
-function applyIdFormat(raw: string, type: string): string {
-  const up = raw.toUpperCase();
-  switch (type) {
-    case "ghana-card": {
-      // Rebuild GHA-XXXXXXXXX-X: strip non-alphanumeric, extract digit body
-      const stripped = up.replace(/[^A-Z0-9]/g, "");
-      const body = stripped.startsWith("GHA") ? stripped.slice(3) : stripped;
-      const digits = body.replace(/\D/g, "").slice(0, 10);
-      if (!digits) return "GHA-";
-      if (digits.length <= 9) return `GHA-${digits}`;
-      return `GHA-${digits.slice(0, 9)}-${digits.slice(9)}`;
-    }
-    case "passport":
-      // 1 letter + 7-8 digits, max 9 chars
-      const ps = up.replace(/[^A-Z0-9]/g, "");
-      if (!ps) return "";
-      const pl = /^[A-Z]$/.test(ps[0]) ? ps[0] : "";
-      return pl + ps.slice(pl ? 1 : 0).replace(/\D/g, "").slice(0, 8);
-    case "ssnit": {
-      // C or P followed by 10-11 digits
-      const ss = up.replace(/[^A-Z0-9]/g, "");
-      if (!ss) return "";
-      const sp = /^[CP]$/.test(ss[0]) ? ss[0] : "";
-      return sp + ss.slice(sp ? 1 : 0).replace(/\D/g, "").slice(0, 11);
-    }
-    case "voters-id":
-      return up.replace(/[^A-Z0-9]/g, "").slice(0, 14);
-    case "ecowas-card":
-      return up.replace(/[^A-Z0-9-]/g, "").slice(0, 20);
-    case "drivers-license":
-      return up.replace(/[^A-Z0-9/ -]/g, "").slice(0, 20);
-    default:
-      return up;
-  }
-}
-
-/** Starting value for the ID number field — pre-fills Ghana Card prefix. */
-function initialIdValue(type: string, existing: string): string {
-  if (existing) return existing;
-  return type === "ghana-card" ? "GHA-" : "";
-}
 
 // ---------------------------------------------------------------------------
 // Camera view component
@@ -584,7 +537,7 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
         Identity verification
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
-        We verify every seller to keep Spree safe. Your documents are stored securely
+        We verify every vendor to keep Spree safe. Your documents are stored securely
         and seen only by our review team.
       </Typography>
 
