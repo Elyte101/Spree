@@ -21,7 +21,7 @@ export default async function AdminProductCreatePage() {
   }
 
   if (!canCreateProductsRole(session.user.role)) {
-    redirect(`/auth/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=seller`);
+    redirect(`/auth/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}&reason=vendor`);
   }
 
   const isAdmin = session.user.role === "admin";

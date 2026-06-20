@@ -9,7 +9,7 @@ import { checkRateLimit, clearFailedAttempts, recordFailedAttempt } from "@/lib/
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 import { isSafeCallbackUrl } from "@/lib/safeUrl";
 
-type AppUserRole = "customer" | "seller" | "admin";
+type AppUserRole = "customer" | "vendor" | "admin";
 
 const SignInSchema = z.object({ 
   email: z.string().email(),

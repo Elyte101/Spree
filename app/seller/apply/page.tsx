@@ -6,7 +6,7 @@ import { getUserProfile } from "@/lib/serverApi";
 import { SellerApplicationWizard } from "@/components/profile/sellerApplicationWizard";
 
 export const metadata: Metadata = {
-  title: "Become a Seller | Spree",
+  title: "Become a vendor | Spree",
   description: "Set up your Spree store and start selling today",
 };
 
@@ -14,7 +14,7 @@ export default async function SellerApplyPage() {
   const session = await auth();
 
   if (!session) {
-    redirect("/auth/sign-in?callbackUrl=/seller/apply");
+    redirect("/auth/sign-in?callbackUrl=/vendor/apply");
   }
 
   if (session.user.role === "admin") {

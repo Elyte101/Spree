@@ -93,8 +93,8 @@ const formatDate = (value?: string | null) =>
       }).format(new Date(value))
     : "Not started";
 
-const formatLocation = (seller: SellerSummary) =>
-  [seller.storeLocation.city, seller.storeLocation.state, seller.storeLocation.country]
+const formatLocation = (vendor: SellerSummary) =>
+  [vendor.storeLocation.city, vendor.storeLocation.state, vendor.storeLocation.country]
     .filter(Boolean)
     .join(", ") || "Not provided";
 
@@ -164,7 +164,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
       router.refresh();
     } catch (err) {
       setDeleteError(
-        err instanceof ApiClientError ? err.message : "Failed to delete seller."
+        err instanceof ApiClientError ? err.message : "Failed to delete vendor."
       );
     } finally {
       setDeleting(false);
@@ -221,11 +221,11 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         href={`/dashboard/sellers/${activeSellerId}`}
         onClick={closeMenu}
       >
-        Edit seller
+        Edit vendor
       </MenuItem>
       <MenuItem
         component={Link}
-        href={`/dashboard/products?seller=${activeSellerId}`}
+        href={`/dashboard/products?vendor=${activeSellerId}`}
         onClick={closeMenu}
       >
         View products
@@ -237,7 +237,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             closeMenu();
           }}
         >
-          Restore seller
+          Restore vendor
         </MenuItem>
       ) : (
         <MenuItem
@@ -249,7 +249,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
           }}
           sx={{ color: "warning.main" }}
         >
-          Blacklist seller
+          Blacklist vendor
         </MenuItem>
       )}
       <MenuItem
@@ -261,7 +261,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         }}
         sx={{ color: "error.main" }}
       >
-        Delete seller
+        Delete vendor
       </MenuItem>
     </Menu>
   );
@@ -303,10 +303,10 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             backgroundImage: "none",
           }}
         >
-          <Table sx={{ minWidth: 960 }} aria-label="Seller management table">
+          <Table sx={{ minWidth: 960 }} aria-label="vendor management table">
             <TableHead>
               <TableRow sx={{ "& th": { fontWeight: 700, whiteSpace: "nowrap" } }}>
-                <TableCell component="th" scope="col">Seller</TableCell>
+                <TableCell component="th" scope="col">vendor</TableCell>
                 <TableCell component="th" scope="col">Status</TableCell>
                 <TableCell component="th" scope="col">Type</TableCell>
                 <TableCell component="th" scope="col">Location</TableCell>
@@ -335,29 +335,29 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                sellers.map((seller) => (
+                sellers.map((vendor) => (
                   <TableRow
-                    key={seller.id}
+                    key={vendor.id}
                     hover
                     sx={
-                      seller.isBlacklisted
+                      vendor.isBlacklisted
                         ? { opacity: 0.65, bgcolor: "action.hover" }
                         : undefined
                     }
                   >
-                    {/* Seller identity */}
+                    {/* vendor identity */}
                     <TableCell sx={{ minWidth: 220 }}>
                       <Stack direction="row" spacing={1.5} alignItems="center">
                         <Avatar
                           aria-hidden
-                          sx={{ bgcolor: avatarColor(seller.id), width: 34, height: 34, fontSize: "0.75rem", flexShrink: 0 }}
+                          sx={{ bgcolor: avatarColor(vendor.id), width: 34, height: 34, fontSize: "0.75rem", flexShrink: 0 }}
                         >
-                          {getInitials(seller.storeName)}
+                          {getInitials(vendor.storeName)}
                         </Avatar>
                         <Stack spacing={0.2} minWidth={0}>
                           <Typography
                             component="a"
-                            href={`/dashboard/sellers/${seller.id}`}
+                            href={`/dashboard/sellers/${vendor.id}`}
                             sx={{
                               color: "text.primary",
                               textDecoration: "none",
@@ -369,12 +369,12 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                               "&:hover": { color: "primary.main" },
                             }}
                           >
-                            {seller.storeName}
+                            {vendor.storeName}
                           </Typography>
                           <Typography variant="caption" color="text.secondary" noWrap>
-                            {seller.name} · {seller.email}
+                            {vendor.name} · {vendor.email}
                           </Typography>
-                          {seller.isBlacklisted && (
+                          {vendor.isBlacklisted && (
                             <Chip
                               label="Blacklisted"
                               color="error"
@@ -388,28 +388,28 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
 
                     <TableCell>
                       <Chip
-                        label={seller.sellerStatus}
+                        label={vendor.sellerStatus}
                         size="small"
-                        color={statusColor(seller.sellerStatus)}
+                        color={statusColor(vendor.sellerStatus)}
                       />
                     </TableCell>
 
                     <TableCell>
                       <Chip
-                        label={sellerTypeLabels[seller.sellerType]}
+                        label={sellerTypeLabels[vendor.sellerType]}
                         size="small"
                         variant="outlined"
                       />
                     </TableCell>
 
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {formatLocation(seller)}
+                      {formatLocation(vendor)}
                     </TableCell>
 
                     <TableCell>
-                      {seller.sellerBadge ? (
+                      {vendor.sellerBadge ? (
                         <Chip
-                          label={seller.sellerBadge}
+                          label={vendor.sellerBadge}
                           size="small"
                           color="success"
                           variant="outlined"
@@ -419,29 +419,29 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                       )}
                     </TableCell>
 
-                    <TableCell align="right">{seller.followerCount.toLocaleString()}</TableCell>
-                    <TableCell align="right">{seller.purchaseCount.toLocaleString()}</TableCell>
-                    <TableCell align="right">{seller.completedDeliveries.toLocaleString()}</TableCell>
+                    <TableCell align="right">{vendor.followerCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{vendor.purchaseCount.toLocaleString()}</TableCell>
+                    <TableCell align="right">{vendor.completedDeliveries.toLocaleString()}</TableCell>
 
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
-                      {formatDate(seller.startedAt)}
+                      {formatDate(vendor.startedAt)}
                     </TableCell>
 
                     <TableCell sx={{ maxWidth: 200 }}>
                       <Typography
                         variant="body2"
                         color="text.secondary"
-                        title={seller.sellerNotice || undefined}
+                        title={vendor.sellerNotice || undefined}
                         sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                       >
-                        {seller.sellerNotice || "—"}
+                        {vendor.sellerNotice || "—"}
                       </Typography>
                     </TableCell>
 
                     <TableCell align="right">
                       <IconButton
-                        onClick={(e) => openMenu(e, seller.id)}
-                        aria-label={`Actions for ${seller.storeName}`}
+                        onClick={(e) => openMenu(e, vendor.id)}
+                        aria-label={`Actions for ${vendor.storeName}`}
                         size="medium"
                         sx={{ width: 44, height: 44 }}
                       >
@@ -478,20 +478,20 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
             </Typography>
           </Paper>
         ) : (
-          sellers.map((seller) => {
-            const expanded = expandedCards.has(seller.id);
+          sellers.map((vendor) => {
+            const expanded = expandedCards.has(vendor.id);
             return (
               <Paper
-                key={seller.id}
+                key={vendor.id}
                 elevation={0}
                 sx={(theme) => ({
                   borderRadius: 2,
                   border: "1.5px solid",
-                  borderColor: seller.isBlacklisted
+                  borderColor: vendor.isBlacklisted
                     ? alpha(theme.palette.error.main, 0.35)
                     : theme.palette.divider,
                   overflow: "hidden",
-                  opacity: seller.isBlacklisted ? 0.82 : 1,
+                  opacity: vendor.isBlacklisted ? 0.82 : 1,
                 })}
               >
                 {/* Card header — primary info */}
@@ -504,20 +504,20 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                   <Avatar
                     aria-hidden
                     sx={{
-                      bgcolor: avatarColor(seller.id),
+                      bgcolor: avatarColor(vendor.id),
                       width: 40,
                       height: 40,
                       flexShrink: 0,
                       mt: 0.25,
                     }}
                   >
-                    {getInitials(seller.storeName)}
+                    {getInitials(vendor.storeName)}
                   </Avatar>
 
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       component="a"
-                      href={`/dashboard/sellers/${seller.id}`}
+                      href={`/dashboard/sellers/${vendor.id}`}
                       sx={{
                         color: "text.primary",
                         textDecoration: "none",
@@ -527,10 +527,10 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                         "&:hover": { color: "primary.main" },
                       }}
                     >
-                      {seller.storeName}
+                      {vendor.storeName}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" display="block" noWrap>
-                      {seller.name} · {seller.email}
+                      {vendor.name} · {vendor.email}
                     </Typography>
                     <Stack
                       direction="row"
@@ -540,18 +540,18 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                       flexWrap="wrap"
                     >
                       <Chip
-                        label={seller.sellerStatus}
+                        label={vendor.sellerStatus}
                         size="small"
-                        color={statusColor(seller.sellerStatus)}
+                        color={statusColor(vendor.sellerStatus)}
                         sx={{ height: 22 }}
                       />
                       <Chip
-                        label={sellerTypeLabels[seller.sellerType]}
+                        label={sellerTypeLabels[vendor.sellerType]}
                         size="small"
                         variant="outlined"
                         sx={{ height: 22 }}
                       />
-                      {seller.isBlacklisted && (
+                      {vendor.isBlacklisted && (
                         <Chip
                           label="Blacklisted"
                           color="error"
@@ -563,8 +563,8 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                   </Box>
 
                   <IconButton
-                    onClick={(e) => openMenu(e, seller.id)}
-                    aria-label={`Actions for ${seller.storeName}`}
+                    onClick={(e) => openMenu(e, vendor.id)}
+                    aria-label={`Actions for ${vendor.storeName}`}
                     size="medium"
                     sx={{ width: 44, height: 44, flexShrink: 0 }}
                   >
@@ -588,9 +588,9 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                   }}
                 >
                   {[
-                    { icon: <PeopleRounded sx={{ fontSize: 14 }} />, label: "Followers", value: seller.followerCount },
-                    { icon: <ShoppingBagOutlined sx={{ fontSize: 14 }} />, label: "Purchases", value: seller.purchaseCount },
-                    { icon: <LocalShippingRounded sx={{ fontSize: 14 }} />, label: "Deliveries", value: seller.completedDeliveries },
+                    { icon: <PeopleRounded sx={{ fontSize: 14 }} />, label: "Followers", value: vendor.followerCount },
+                    { icon: <ShoppingBagOutlined sx={{ fontSize: 14 }} />, label: "Purchases", value: vendor.purchaseCount },
+                    { icon: <LocalShippingRounded sx={{ fontSize: 14 }} />, label: "Deliveries", value: vendor.completedDeliveries },
                   ].map(({ icon, label, value }) => (
                     <Box
                       key={label}
@@ -617,7 +617,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                 >
                   <StorefrontRounded sx={{ fontSize: 14, color: "text.secondary", flexShrink: 0 }} aria-hidden />
                   <Typography variant="caption" color="text.secondary">
-                    {formatLocation(seller)}
+                    {formatLocation(vendor)}
                   </Typography>
                 </Stack>
 
@@ -625,12 +625,12 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                 <Box
                   component="button"
                   type="button"
-                  onClick={() => toggleExpand(seller.id)}
+                  onClick={() => toggleExpand(vendor.id)}
                   aria-expanded={expanded}
                   aria-label={
                     expanded
-                      ? `Collapse details for ${seller.storeName}`
-                      : `Show more details for ${seller.storeName}`
+                      ? `Collapse details for ${vendor.storeName}`
+                      : `Show more details for ${vendor.storeName}`
                   }
                   sx={(theme) => ({
                     display: "flex",
@@ -679,16 +679,16 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                         Started
                       </Typography>
                       <Typography variant="caption" fontWeight={700}>
-                        {formatDate(seller.startedAt)}
+                        {formatDate(vendor.startedAt)}
                       </Typography>
                     </Stack>
-                    {seller.sellerBadge ? (
+                    {vendor.sellerBadge ? (
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography variant="caption" color="text.secondary" fontWeight={600}>
                           Badge
                         </Typography>
                         <Chip
-                          label={seller.sellerBadge}
+                          label={vendor.sellerBadge}
                           size="small"
                           color="success"
                           variant="outlined"
@@ -696,13 +696,13 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
                         />
                       </Stack>
                     ) : null}
-                    {seller.sellerNotice ? (
+                    {vendor.sellerNotice ? (
                       <Box>
                         <Typography variant="caption" color="text.secondary" fontWeight={600}>
                           Notice
                         </Typography>
                         <Typography variant="body2" sx={{ mt: 0.25 }}>
-                          {seller.sellerNotice}
+                          {vendor.sellerNotice}
                         </Typography>
                       </Box>
                     ) : null}
@@ -724,7 +724,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle sx={{ fontWeight: 900 }}>Delete seller?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 900 }}>Delete vendor?</DialogTitle>
         <DialogContent>
           {deleteError ? (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -761,7 +761,7 @@ export function SellersTable({ sellers, filter }: SellersTableProps) {
         fullWidth
       >
         <DialogTitle sx={{ fontWeight: 900 }}>
-          {blacklistTarget?.isBlacklisted ? "Restore seller?" : "Blacklist seller?"}
+          {blacklistTarget?.isBlacklisted ? "Restore vendor?" : "Blacklist vendor?"}
         </DialogTitle>
         <DialogContent>
           {blacklistError ? (

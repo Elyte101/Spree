@@ -343,7 +343,7 @@ export function normalizeMoMoNumber(v: string): string {
 /** Consistent mobile network options used across onboarding and profile. */
 export const MOMO_NETWORKS = [
   { value: "MTN Mobile Money", label: "MTN Mobile Money" },
-  { value: "Vodafone Cash", label: "Vodafone Cash" },
+  { value: "Telecel Cash", label: "Telecel Cash" },
   { value: "AirtelTigo Money", label: "AirtelTigo Money" },
 ];
 

@@ -29,7 +29,7 @@ import { useThemeContext } from "@/theme/themeContext";
 
 interface SignInFormProps {
   callbackUrl: string;
-  reason?: "seller";
+  reason?: "vendor";
   currentUserEmail?: string;
   currentUserRole?: string;
 }
@@ -121,9 +121,9 @@ export function SignInForm({
   const [info, setInfo] = React.useState<string | null>(null);
 
   const isSellerRestricted =
-    reason === "seller" &&
+    reason === "vendor" &&
     currentUserRole !== undefined &&
-    currentUserRole !== "seller" &&
+    currentUserRole !== "vendor" &&
     currentUserRole !== "admin";
 
   const handleSocialSignIn = async (provider: "google" | "apple") => {
@@ -144,7 +144,7 @@ export function SignInForm({
   const handleAccountSwitch = async () => {
     setSubmitting(true);
     await signOut({
-      callbackUrl: `/auth/sign-in?callbackUrl=${encodeURIComponent(redirectTarget)}&reason=seller`,
+      callbackUrl: `/auth/sign-in?callbackUrl=${encodeURIComponent(redirectTarget)}&reason=vendor`,
     });
   };
 
@@ -270,7 +270,7 @@ export function SignInForm({
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
               {tab === "signin"
                 ? "Sign in to access your orders, saved details, and store information."
-                : "Join Spree as a buyer. Upgrade to seller anytime with a government ID."}
+                : "Join Spree as a buyer. Upgrade to vendor anytime with a government ID."}
             </Typography>
           </Box>
 
@@ -306,12 +306,12 @@ export function SignInForm({
             ))}
           </Stack>
 
-          {/* Seller restriction warning */}
-          {reason === "seller" && (
+          {/* vendor restriction warning */}
+          {reason === "vendor" && (
             <Alert severity={isSellerRestricted ? "warning" : "info"}>
               {isSellerRestricted
-                ? `Signed in as ${currentUserEmail ?? "another user"}. Use a seller or admin account to continue.`
-                : "Sign in with a seller or admin account to manage the store."}
+                ? `Signed in as ${currentUserEmail ?? "another user"}. Use a vendor or admin account to continue.`
+                : "Sign in with a vendor or admin account to manage the store."}
             </Alert>
           )}
 

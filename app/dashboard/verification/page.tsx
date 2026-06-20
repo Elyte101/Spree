@@ -4,8 +4,8 @@ import { auth } from "@/auth";
 import { VerificationQueue } from "@/components/admin/VerificationQueue";
 
 export const metadata: Metadata = {
-  title: "Seller Verification | Dashboard | Spree",
-  description: "Review and verify pending seller applications",
+  title: "vendor Verification | Dashboard | Spree",
+  description: "Review and verify pending vendor applications",
 };
 
 export default async function VerificationPage() {

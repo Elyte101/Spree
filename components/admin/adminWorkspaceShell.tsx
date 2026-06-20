@@ -45,7 +45,7 @@ interface NavItem {
 
 const roleLabelMap: Record<UserRole, string> = {
   admin: "Admin",
-  seller: "Seller",
+  vendor: "vendor",
   customer: "Customer",
 };
 

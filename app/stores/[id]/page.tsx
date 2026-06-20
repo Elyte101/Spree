@@ -6,7 +6,7 @@ import { getSeller } from "@/lib/serverApi";
 
 export const metadata: Metadata = {
   title: "Storefront | Spree",
-  description: "Browse a seller storefront on Spree",
+  description: "Browse a vendor storefront on Spree",
 };
 
 interface StorePageProps {
@@ -15,11 +15,11 @@ interface StorePageProps {
 
 export default async function StorePage({ params }: StorePageProps) {
   const { id } = await params;
-  const seller = await getSeller(id);
+  const vendor = await getSeller(id);
 
-  if (!seller) {
+  if (!vendor) {
     notFound();
   }
 
-  return <StoreProfilePage initialSeller={seller} />;
+  return <StoreProfilePage initialSeller={vendor} />;
 }

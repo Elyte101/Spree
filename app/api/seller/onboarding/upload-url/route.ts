@@ -1,7 +1,7 @@
 import "server-only";
 import { auth } from "@/auth";
 
-const BUCKET = "seller-documents";
+const BUCKET = "vendor-documents";
 const ALLOWED_SLOTS = new Set(["id_front", "id_back", "selfie", "logo"]);
 
 function supabaseBase(): string {

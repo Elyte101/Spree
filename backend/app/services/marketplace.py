@@ -18,7 +18,7 @@ from app.services.catalog import ProductListParams, _load_products, _product_to_
 
 def _seller_query(include_inactive: bool = False):
     statement = select(User).where(
-        User.role.in_(["seller", "admin"]),
+        User.role.in_(["vendor", "admin"]),
         User.store_name.is_not(None),
     )
 
@@ -30,7 +30,7 @@ def _seller_query(include_inactive: bool = False):
 
 def _resolve_seller(db: Session, identifier: str, *, include_inactive: bool = False) -> User:
     normalized_identifier = identifier.strip().lower()
-    seller = db.scalar(
+    vendor = db.scalar(
         _seller_query(include_inactive).where(
             or_(
                 User.id == identifier,
@@ -40,14 +40,14 @@ def _resolve_seller(db: Session, identifier: str, *, include_inactive: bool = Fa
         )
     )
 
-    if seller is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Seller not found")
+    if vendor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="vendor not found")
 
-    return seller
+    return vendor
 
 
 def _batch_seller_metrics(db: Session, seller_ids: list[str]) -> dict[str, dict]:
-    """Fetch all metrics for a list of seller IDs in 4 batch queries instead of 4N."""
+    """Fetch all metrics for a list of vendor IDs in 4 batch queries instead of 4N."""
     if not seller_ids:
         return {}
 
@@ -91,76 +91,76 @@ def _batch_seller_metrics(db: Session, seller_ids: list[str]) -> dict[str, dict]
     return metrics
 
 
-def _seller_badge_label(seller: User, purchase_count: int) -> str:
-    custom_badge = (seller.seller_badge or "").strip()
+def _seller_badge_label(vendor: User, purchase_count: int) -> str:
+    custom_badge = (vendor.seller_badge or "").strip()
     if custom_badge:
         return custom_badge
 
-    completed_deliveries = seller.completed_deliveries or 0
+    completed_deliveries = vendor.completed_deliveries or 0
     average_delivery_days = (
-        float(seller.average_delivery_days) if seller.average_delivery_days is not None else None
+        float(vendor.average_delivery_days) if vendor.average_delivery_days is not None else None
     )
 
     if average_delivery_days is not None and average_delivery_days <= 2 and completed_deliveries >= 5:
         return "Fast delivery"
 
     if purchase_count >= 25 and completed_deliveries >= 10:
-        return "Trusted seller"
+        return "Trusted vendor"
 
-    if seller.seller_status == "active" and seller.government_id_verified:
-        return "Verified seller"
+    if vendor.seller_status == "active" and vendor.government_id_verified:
+        return "Verified vendor"
 
     return ""
 
 
-def _serialize_seller_summary(seller: User, metrics: dict) -> dict:
-    seller_type = seller.seller_type if seller.seller_type in {"retail", "wholesale"} else "retail"
+def _serialize_seller_summary(vendor: User, metrics: dict) -> dict:
+    seller_type = vendor.seller_type if vendor.seller_type in {"retail", "wholesale"} else "retail"
     average_delivery_days = (
-        float(seller.average_delivery_days) if seller.average_delivery_days is not None else None
+        float(vendor.average_delivery_days) if vendor.average_delivery_days is not None else None
     )
 
     return {
-        "id": seller.id,
-        "name": seller.name,
-        "email": seller.email,
-        "role": seller.role,
-        "phone": seller.phone or "",
-        "storeName": seller.store_name or seller.name,
-        "storeSlug": seller.store_slug or "",
-        "storeTagline": seller.store_tagline or "",
-        "storeDescription": seller.store_description or "",
+        "id": vendor.id,
+        "name": vendor.name,
+        "email": vendor.email,
+        "role": vendor.role,
+        "phone": vendor.phone or "",
+        "storeName": vendor.store_name or vendor.name,
+        "storeSlug": vendor.store_slug or "",
+        "storeTagline": vendor.store_tagline or "",
+        "storeDescription": vendor.store_description or "",
         "storeLocation": {
             **_default_store_location(),
-            **(seller.store_location or {}),
+            **(vendor.store_location or {}),
         },
         "sellerContact": {
-            **_default_seller_contact(seller.email, seller.phone or ""),
-            **(seller.seller_contact or {}),
+            **_default_seller_contact(vendor.email, vendor.phone or ""),
+            **(vendor.seller_contact or {}),
         },
         "sellerType": seller_type,
-        "sellerStatus": seller.seller_status or "buyer",
-        "sellerBadge": _seller_badge_label(seller, metrics["purchaseCount"]),
-        "completedDeliveries": seller.completed_deliveries or 0,
+        "sellerStatus": vendor.seller_status or "buyer",
+        "sellerBadge": _seller_badge_label(vendor, metrics["purchaseCount"]),
+        "completedDeliveries": vendor.completed_deliveries or 0,
         "averageDeliveryDays": average_delivery_days,
-        "sellerNotice": seller.seller_notice or "",
-        "governmentIdType": seller.government_id_type or "ghana-card",
-        "governmentIdVerified": bool(seller.government_id_verified),
-        "isBlacklisted": bool(seller.is_blacklisted),
-        "lastLoginAt": seller.last_login_at,
+        "sellerNotice": vendor.seller_notice or "",
+        "governmentIdType": vendor.government_id_type or "ghana-card",
+        "governmentIdVerified": bool(vendor.government_id_verified),
+        "isBlacklisted": bool(vendor.is_blacklisted),
+        "lastLoginAt": vendor.last_login_at,
         "followerCount": metrics["followerCount"],
         "productCount": metrics["productCount"],
         "purchaseCount": metrics["purchaseCount"],
         "reportCount": metrics["reportCount"],
-        "startedAt": seller.seller_started_at,
-        "createdAt": seller.created_at,
+        "startedAt": vendor.seller_started_at,
+        "createdAt": vendor.created_at,
     }
 
 
-def _serialize_admin_seller_summary(seller: User, metrics: dict) -> dict:
+def _serialize_admin_seller_summary(vendor: User, metrics: dict) -> dict:
     """Like _serialize_seller_summary but includes admin-only fields."""
     return {
-        **_serialize_seller_summary(seller, metrics),
-        "adminNote": seller.admin_note or "",
+        **_serialize_seller_summary(vendor, metrics),
+        "adminNote": vendor.admin_note or "",
     }
 
 
@@ -170,16 +170,16 @@ def list_public_sellers(db: Session) -> list[dict]:
     ).all()
     seller_ids = [s.id for s in sellers]
     metrics = _batch_seller_metrics(db, seller_ids)
-    return [_serialize_seller_summary(seller, metrics[seller.id]) for seller in sellers]
+    return [_serialize_seller_summary(vendor, metrics[vendor.id]) for vendor in sellers]
 
 
 def get_seller_detail(db: Session, identifier: str) -> dict:
-    seller = _resolve_seller(db, identifier)
-    metrics = _batch_seller_metrics(db, [seller.id])
-    summary = _serialize_seller_summary(seller, metrics[seller.id])
+    vendor = _resolve_seller(db, identifier)
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    summary = _serialize_seller_summary(vendor, metrics[vendor.id])
     products = _load_products(
         db,
-        ProductListParams(seller=seller.id, limit=24, sort="featured"),
+        ProductListParams(vendor=vendor.id, limit=24, sort="featured"),
     )
 
     return {
@@ -189,13 +189,13 @@ def get_seller_detail(db: Session, identifier: str) -> dict:
 
 
 def follow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
-    seller = _resolve_seller(db, seller_id)
+    vendor = _resolve_seller(db, seller_id)
     follower = db.get(User, follower_id)
 
     if follower is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
 
-    if follower.id == seller.id:
+    if follower.id == vendor.id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="You cannot follow your own store",
@@ -203,7 +203,7 @@ def follow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
 
     existing_follow = db.scalar(
         select(SellerFollow).where(
-            SellerFollow.seller_id == seller.id,
+            SellerFollow.seller_id == vendor.id,
             SellerFollow.follower_id == follower.id,
         )
     )
@@ -211,18 +211,18 @@ def follow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
         db.add(
             SellerFollow(
                 id=f"follow-{uuid4().hex[:12]}",
-                seller_id=seller.id,
+                seller_id=vendor.id,
                 follower_id=follower.id,
             )
         )
         db.commit()
 
-    metrics = _batch_seller_metrics(db, [seller.id])
-    return _serialize_seller_summary(seller, metrics[seller.id])
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    return _serialize_seller_summary(vendor, metrics[vendor.id])
 
 
 def unfollow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
-    seller = _resolve_seller(db, seller_id)
+    vendor = _resolve_seller(db, seller_id)
     follower = db.get(User, follower_id)
 
     if follower is None:
@@ -230,7 +230,7 @@ def unfollow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
 
     existing_follow = db.scalar(
         select(SellerFollow).where(
-            SellerFollow.seller_id == seller.id,
+            SellerFollow.seller_id == vendor.id,
             SellerFollow.follower_id == follower.id,
         )
     )
@@ -238,27 +238,27 @@ def unfollow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
         db.delete(existing_follow)
         db.commit()
 
-    metrics = _batch_seller_metrics(db, [seller.id])
-    return _serialize_seller_summary(seller, metrics[seller.id])
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    return _serialize_seller_summary(vendor, metrics[vendor.id])
 
 
 def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, details: str) -> dict:
-    seller = _resolve_seller(db, seller_id, include_inactive=True)
+    vendor = _resolve_seller(db, seller_id, include_inactive=True)
     reporter = db.get(User, reporter_id)
 
     if reporter is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
 
-    if reporter.id == seller.id:
+    if reporter.id == vendor.id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="You cannot report your own store",
         )
 
-    # One open report per reporter per seller
+    # One open report per reporter per vendor
     existing_report = db.scalar(
         select(SellerReport).where(
-            SellerReport.seller_id == seller.id,
+            SellerReport.seller_id == vendor.id,
             SellerReport.reporter_id == reporter.id,
             SellerReport.status == "open",
         )
@@ -266,13 +266,13 @@ def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, de
     if existing_report is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="You already have an open report against this seller",
+            detail="You already have an open report against this vendor",
         )
 
     db.add(
         SellerReport(
             id=f"report-{uuid4().hex[:12]}",
-            seller_id=seller.id,
+            seller_id=vendor.id,
             reporter_id=reporter.id,
             reason=reason,
             details=details.strip() or None,
@@ -280,8 +280,8 @@ def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, de
     )
     db.commit()
 
-    metrics = _batch_seller_metrics(db, [seller.id])
-    return _serialize_seller_summary(seller, metrics[seller.id])
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    return _serialize_seller_summary(vendor, metrics[vendor.id])
 
 
 def list_admin_sellers(db: Session, filter_type: str = "all") -> list[dict]:
@@ -301,17 +301,17 @@ def list_admin_sellers(db: Session, filter_type: str = "all") -> list[dict]:
     sellers = db.scalars(base).all()
     seller_ids = [s.id for s in sellers]
     metrics = _batch_seller_metrics(db, seller_ids)
-    return [_serialize_admin_seller_summary(seller, metrics[seller.id]) for seller in sellers]
+    return [_serialize_admin_seller_summary(vendor, metrics[vendor.id]) for vendor in sellers]
 
 
 def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
-    seller = _resolve_seller(db, seller_id, include_inactive=True)
-    metrics = _batch_seller_metrics(db, [seller.id])
-    summary = _serialize_admin_seller_summary(seller, metrics[seller.id])
+    vendor = _resolve_seller(db, seller_id, include_inactive=True)
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    summary = _serialize_admin_seller_summary(vendor, metrics[vendor.id])
 
     reports = db.scalars(
         select(SellerReport)
-        .where(SellerReport.seller_id == seller.id)
+        .where(SellerReport.seller_id == vendor.id)
         .order_by(SellerReport.created_at.desc())
     ).all()
 
@@ -324,19 +324,19 @@ def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
 
     return {
         **summary,
-        "governmentIdNumber": seller.government_id_number or "",
-        "idFrontUrl": seller.id_front_url or "",
-        "idBackUrl": seller.id_back_url or "",
-        "selfieUrl": seller.selfie_url or "",
-        "onboardingStep": seller.onboarding_step or 0,
-        "rejectionReason": seller.rejection_reason,
+        "governmentIdNumber": vendor.government_id_number or "",
+        "idFrontUrl": vendor.id_front_url or "",
+        "idBackUrl": vendor.id_back_url or "",
+        "selfieUrl": vendor.selfie_url or "",
+        "onboardingStep": vendor.onboarding_step or 0,
+        "rejectionReason": vendor.rejection_reason,
         "shippingAddress": {
-            **_default_shipping_address(seller.name),
-            **(seller.shipping_info or {}),
+            **_default_shipping_address(vendor.name),
+            **(vendor.shipping_info or {}),
         },
         "paymentInfo": {
-            **_default_payment_info(seller.name),
-            **(seller.payment_info or {}),
+            **_default_payment_info(vendor.name),
+            **(vendor.payment_info or {}),
         },
         "reports": [
             {
@@ -364,56 +364,56 @@ def update_admin_seller_status(
     average_delivery_days: float | None,
     government_id_verified: bool,
 ) -> dict:
-    seller = _resolve_seller(db, seller_id, include_inactive=True)
+    vendor = _resolve_seller(db, seller_id, include_inactive=True)
 
-    if seller.role == "admin" and status_value != "active":
+    if vendor.role == "admin" and status_value != "active":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Admin-managed stores cannot be suspended or removed from the admin console",
         )
 
-    seller.seller_status = status_value
-    seller.seller_notice = seller_notice.strip() or None
-    seller.admin_note = admin_note.strip() or None
-    seller.seller_badge = seller_badge.strip() or None
-    seller.completed_deliveries = max(completed_deliveries, 0)
-    seller.average_delivery_days = average_delivery_days
+    vendor.seller_status = status_value
+    vendor.seller_notice = seller_notice.strip() or None
+    vendor.admin_note = admin_note.strip() or None
+    vendor.seller_badge = seller_badge.strip() or None
+    vendor.completed_deliveries = max(completed_deliveries, 0)
+    vendor.average_delivery_days = average_delivery_days
     # government_id_verified must be explicitly set by the admin; setting status to
     # "active" does NOT automatically mark the ID as verified.
-    seller.government_id_verified = government_id_verified
-    db.add(seller)
+    vendor.government_id_verified = government_id_verified
+    db.add(vendor)
     db.commit()
-    db.refresh(seller)
+    db.refresh(vendor)
 
-    return get_admin_seller_detail(db, seller.id)
+    return get_admin_seller_detail(db, vendor.id)
 
 
 def delete_seller(db: Session, seller_id: str) -> None:
-    seller = _resolve_seller(db, seller_id, include_inactive=True)
-    if seller.role == "admin":
+    vendor = _resolve_seller(db, seller_id, include_inactive=True)
+    if vendor.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Admin accounts cannot be deleted via the seller console",
+            detail="Admin accounts cannot be deleted via the vendor console",
         )
-    db.delete(seller)
+    db.delete(vendor)
     db.commit()
 
 
 def toggle_seller_blacklist(db: Session, seller_id: str, blacklisted: bool) -> dict:
-    seller = _resolve_seller(db, seller_id, include_inactive=True)
-    if seller.role == "admin":
+    vendor = _resolve_seller(db, seller_id, include_inactive=True)
+    if vendor.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Admin accounts cannot be blacklisted",
         )
-    seller.is_blacklisted = blacklisted
-    # Cascade blacklist state to all seller products
-    products = db.scalars(select(Product).where(Product.seller_id == seller.id)).all()
+    vendor.is_blacklisted = blacklisted
+    # Cascade blacklist state to all vendor products
+    products = db.scalars(select(Product).where(Product.seller_id == vendor.id)).all()
     for product in products:
         product.is_blacklisted = blacklisted
     db.commit()
-    db.refresh(seller)
-    return get_admin_seller_detail(db, seller.id)
+    db.refresh(vendor)
+    return get_admin_seller_detail(db, vendor.id)
 
 
 def list_verification_queue(db: Session) -> list[dict]:
@@ -425,34 +425,34 @@ def list_verification_queue(db: Session) -> list[dict]:
     ).all()
     seller_ids = [s.id for s in sellers]
     metrics = _batch_seller_metrics(db, seller_ids)
-    return [_serialize_admin_seller_summary(seller, metrics[seller.id]) for seller in sellers]
+    return [_serialize_admin_seller_summary(vendor, metrics[vendor.id]) for vendor in sellers]
 
 
 def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
-    seller = db.get(User, seller_id)
-    if seller is None:
-        raise HTTPException(status_code=404, detail="Seller not found")
-    if seller.seller_status not in ("pending_verification", "incomplete", "rejected"):
+    vendor = db.get(User, seller_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="vendor not found")
+    if vendor.seller_status not in ("pending_verification", "incomplete", "rejected"):
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot approve a seller with status '{seller.seller_status}'",
+            detail=f"Cannot approve a vendor with status '{vendor.seller_status}'",
         )
-    seller.seller_status = "verified"
-    seller.government_id_verified = True
-    seller.rejection_reason = None
-    seller.role = "seller"
+    vendor.seller_status = "verified"
+    vendor.government_id_verified = True
+    vendor.rejection_reason = None
+    vendor.role = "vendor"
     db.commit()
 
     from app.services import notifications as notif_svc
     notif_svc.notify(
         db,
         event_type="seller_approved",
-        recipient_id=seller.id,
-        title="Your seller account is verified! 🎉",
-        body="Congratulations! Your Spree seller account has been verified. "
+        recipient_id=vendor.id,
+        title="Your vendor account is verified! 🎉",
+        body="Congratulations! Your Spree vendor account has been verified. "
              "You can now list products and start selling.",
         href="/dashboard/products/new",
-        email_subject="Your Spree seller account is approved",
+        email_subject="Your Spree vendor account is approved",
         cta_label="Start selling",
     )
 
@@ -462,26 +462,26 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
 def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> dict:
     if not reason or not reason.strip():
         raise HTTPException(status_code=400, detail="A rejection reason is required")
-    seller = db.get(User, seller_id)
-    if seller is None:
-        raise HTTPException(status_code=404, detail="Seller not found")
+    vendor = db.get(User, seller_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="vendor not found")
 
-    seller.seller_status = "rejected"
-    seller.rejection_reason = reason.strip()
-    seller.government_id_verified = False
+    vendor.seller_status = "rejected"
+    vendor.rejection_reason = reason.strip()
+    vendor.government_id_verified = False
     db.commit()
 
     from app.services import notifications as notif_svc
     notif_svc.notify(
         db,
         event_type="seller_rejected",
-        recipient_id=seller.id,
-        title="Seller application not approved",
+        recipient_id=vendor.id,
+        title="vendor application not approved",
         body=f"We reviewed your documents and could not verify your account at this time. "
              f"Reason: {reason.strip()}. "
              "Please update your information and re-submit.",
-        href="/seller/register",
-        email_subject="Spree seller application — action required",
+        href="/vendor/register",
+        email_subject="Spree vendor application — action required",
         cta_label="Re-submit application",
     )
 

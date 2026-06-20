@@ -78,7 +78,7 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
             <TableRow>
               <TableCell>Rank</TableCell>
               <TableCell>Product</TableCell>
-              <TableCell>Seller</TableCell>
+              <TableCell>vendor</TableCell>
               <TableCell>Purchases</TableCell>
               <TableCell>Price</TableCell>
               <TableCell>Stock</TableCell>
@@ -123,10 +123,10 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
                         },
                       }}
                     >
-                      {product.storeName ?? product.sellerName ?? "Marketplace seller"}
+                      {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
                     </Typography>
                   ) : (
-                    product.storeName ?? product.sellerName ?? "Marketplace seller"
+                    product.storeName ?? product.sellerName ?? "Marketplace vendor"
                   )}
                 </TableCell>
                 <TableCell>{product.purchaseCount}</TableCell>

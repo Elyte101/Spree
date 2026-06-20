@@ -4,14 +4,14 @@ import { auth } from "@/auth";
 import { SellerOnboardingWizard } from "@/components/seller/SellerOnboardingWizard";
 
 export const metadata: Metadata = {
-  title: "Become a Seller | Spree",
+  title: "Become a vendor | Spree",
   description: "Set up your Spree store and start selling today",
 };
 
 export default async function SellerRegisterPage() {
   const session = await auth();
   if (!session?.user?.id) {
-    redirect("/auth/sign-in?callbackUrl=/seller/register&reason=seller");
+    redirect("/auth/sign-in?callbackUrl=/vendor/register&reason=vendor");
   }
 
   if (session.user.role === "admin") {

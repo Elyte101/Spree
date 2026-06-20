@@ -7,7 +7,7 @@ export async function GET() {
   if (!session) {
     return Response.json({ detail: "Authentication required" }, { status: 401 });
   }
-  return proxyBackend("/seller/orders", {
+  return proxyBackend("/vendor/orders", {
     headers: { "X-Actor-User-Id": session.user.id },
   }, { internal: true });
 }

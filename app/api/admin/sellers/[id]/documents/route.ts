@@ -1,7 +1,7 @@
 import "server-only";
 import { auth } from "@/auth";
 
-const BUCKET = "seller-documents";
+const BUCKET = "vendor-documents";
 
 function supabaseBase(): string {
   const url = process.env.DATABASE_SUPABASE_URL;
@@ -48,7 +48,7 @@ export async function GET(
 
   const { id } = await params;
 
-  // Fetch the seller detail from the backend to get stored paths
+  // Fetch the vendor detail from the backend to get stored paths
   const { getBackendApiBaseUrl, getBackendInternalApiKey } = await import("@/lib/runtimeConfig");
   const backendRes = await fetch(
     `${getBackendApiBaseUrl()}/admin/sellers/${id}`,
@@ -61,9 +61,9 @@ export async function GET(
     }
   );
   if (!backendRes.ok) {
-    return Response.json({ error: "Seller not found" }, { status: backendRes.status });
+    return Response.json({ error: "vendor not found" }, { status: backendRes.status });
   }
-  const seller = await backendRes.json();
+  const vendor = await backendRes.json();
 
   let base: string, key: string;
   try {
@@ -72,16 +72,16 @@ export async function GET(
   } catch {
     // Return stored URLs as-is if Supabase not configured (dev fallback)
     return Response.json({
-      idFrontUrl: seller.idFrontUrl || null,
-      idBackUrl: seller.idBackUrl || null,
-      selfieUrl: seller.selfieUrl || null,
+      idFrontUrl: vendor.idFrontUrl || null,
+      idBackUrl: vendor.idBackUrl || null,
+      selfieUrl: vendor.selfieUrl || null,
     });
   }
 
   const [idFrontUrl, idBackUrl, selfieUrl] = await Promise.all([
-    signedReadUrl(base, key, seller.idFrontUrl),
-    signedReadUrl(base, key, seller.idBackUrl),
-    signedReadUrl(base, key, seller.selfieUrl),
+    signedReadUrl(base, key, vendor.idFrontUrl),
+    signedReadUrl(base, key, vendor.idBackUrl),
+    signedReadUrl(base, key, vendor.selfieUrl),
   ]);
 
   return Response.json({ idFrontUrl, idBackUrl, selfieUrl });

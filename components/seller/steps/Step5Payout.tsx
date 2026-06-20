@@ -233,7 +233,7 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
           <Box sx={(theme) => ({ p: 2, borderRadius: 2, bgcolor: theme.palette.action.hover })}>
             <Typography variant="caption" color="text.secondary" lineHeight={1.7}>
               <strong>MTN Mobile Money:</strong> numbers starting with 024, 054, 055, 059<br />
-              <strong>Vodafone Cash:</strong> numbers starting with 020, 050<br />
+              <strong>Telecel Cash:</strong> numbers starting with 020, 050<br />
               <strong>AirtelTigo Money:</strong> numbers starting with 026, 027, 056, 057
             </Typography>
           </Box>

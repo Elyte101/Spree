@@ -279,20 +279,20 @@ export const api = {
   /* ---------- ONBOARDING ---------- */
 
   getOnboardingState: () =>
-    requestJson<OnboardingState>("/api/seller/onboarding"),
+    requestJson<OnboardingState>("/api/vendor/onboarding"),
 
   saveOnboardingStep: (step: 1 | 2 | 3 | 4 | 5, payload: unknown) =>
-    requestJson<UserProfile>(`/api/seller/onboarding/step/${step}`, {
+    requestJson<UserProfile>(`/api/vendor/onboarding/step/${step}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
 
   submitOnboarding: () =>
-    requestJson<UserProfile>("/api/seller/onboarding/submit", { method: "POST" }),
+    requestJson<UserProfile>("/api/vendor/onboarding/submit", { method: "POST" }),
 
   getUploadUrl: (slot: "id_front" | "id_back" | "selfie" | "logo") =>
     requestJson<{ uploadUrl: string; path: string; bucket: string }>(
-      "/api/seller/onboarding/upload-url",
+      "/api/vendor/onboarding/upload-url",
       { method: "POST", body: JSON.stringify({ slot }) }
     ),
 

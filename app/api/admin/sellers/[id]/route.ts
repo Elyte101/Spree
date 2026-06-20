@@ -11,14 +11,14 @@ export async function GET(
 
   if (!session) {
     return NextResponse.json(
-      { detail: "You must be signed in to view seller details" },
+      { detail: "You must be signed in to view vendor details" },
       { status: 401 }
     );
   }
 
   if (session.user.role !== "admin") {
     return NextResponse.json(
-      { detail: "Only admins can view seller details" },
+      { detail: "Only admins can view vendor details" },
       { status: 403 }
     );
   }

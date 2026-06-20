@@ -21,7 +21,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
 
   const nextUrl = isSafeCallbackUrl(callbackUrl ?? "") ? (callbackUrl ?? "/profile") : "/profile";
   const requiresSeller =
-    reason === "seller" || nextUrl.startsWith("/dashboard/products/new");
+    reason === "vendor" || nextUrl.startsWith("/dashboard/products/new");
 
   if (session && (!requiresSeller || canCreateProductsRole(session.user.role))) {
     redirect(nextUrl);
@@ -30,7 +30,7 @@ export default async function SignInPage({ searchParams }: SignInPageProps) {
   return (
     <SignInForm
       callbackUrl={nextUrl}
-      reason={requiresSeller ? "seller" : undefined}
+      reason={requiresSeller ? "vendor" : undefined}
       currentUserEmail={session?.user.email ?? undefined}
       currentUserRole={session?.user.role}
     />

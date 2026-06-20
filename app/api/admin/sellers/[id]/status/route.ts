@@ -11,14 +11,14 @@ export async function PUT(
 
   if (!session) {
     return NextResponse.json(
-      { detail: "You must be signed in to manage seller status" },
+      { detail: "You must be signed in to manage vendor status" },
       { status: 401 }
     );
   }
 
   if (session.user.role !== "admin") {
     return NextResponse.json(
-      { detail: "Only admins can manage seller status" },
+      { detail: "Only admins can manage vendor status" },
       { status: 403 }
     );
   }

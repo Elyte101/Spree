@@ -66,14 +66,14 @@ const trustPillars = [
   {
     icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
     title: "Verified Sellers",
-    desc: "Every seller submits a Ghana Card and selfie before listing.",
+    desc: "Every vendor submits a Ghana Card and selfie before listing.",
     color: "#22C55E",
     bg: "rgba(34,197,94,0.1)",
   },
   {
     icon: <PhoneAndroidRounded sx={{ fontSize: 22 }} />,
     title: "Mobile Money",
-    desc: "Pay via MTN MoMo, Vodafone Cash, AirtelTigo, or card.",
+    desc: "Pay via MTN MoMo, Telecel Cash, AirtelTigo, or card.",
     color: "#0EA5E9",
     bg: "rgba(14,165,233,0.1)",
   },
@@ -90,21 +90,21 @@ const escrowSteps = [
   {
     step: "01",
     title: "You pay into escrow",
-    body: "Place your order and pay via MoMo, card, or Vodafone Cash. Your money is held safely — the seller receives nothing yet.",
+    body: "Place your order and pay via MoMo, card, or Telecel Cash. Your money is held safely — the vendor receives nothing yet.",
     accent: "#655AFF",
     icon: <SecurityRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "02",
-    title: "Seller dispatches",
-    body: "The verified seller packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
+    title: "vendor dispatches",
+    body: "The verified vendor packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
     accent: "#0EA5E9",
     icon: <LocalShippingRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "03",
-    title: "You confirm — seller gets paid",
-    body: "Once you confirm delivery, Spree releases payment instantly to the seller's MoMo or bank. No delivery = no payment.",
+    title: "You confirm — vendor gets paid",
+    body: "Once you confirm delivery, Spree releases payment instantly to the vendor's MoMo or bank. No delivery = no payment.",
     accent: "#22C55E",
     icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
   },
@@ -259,7 +259,7 @@ export function LandingPage({
                   <Typography variant="caption" color="text.secondary" fontWeight={700}>
                     Pay with:
                   </Typography>
-                  {["MTN MoMo", "Vodafone Cash", "AirtelTigo", "Card"].map((m) => (
+                  {["MTN MoMo", "Telecel Cash", "AirtelTigo", "Card"].map((m) => (
                     <Chip
                       key={m}
                       label={m}

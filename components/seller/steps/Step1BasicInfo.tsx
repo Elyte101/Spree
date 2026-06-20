@@ -28,7 +28,7 @@ export function Step1BasicInfo({ profile, onSubmit, submitting }: StepProps) {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "Full name is required";
     if (!phone.trim() || phone.trim().length < 8) e.phone = "Enter a valid phone number";
-    if (!terms) e.terms = "You must accept the seller terms to continue";
+    if (!terms) e.terms = "You must accept the vendor terms to continue";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -85,7 +85,7 @@ export function Step1BasicInfo({ profile, onSubmit, submitting }: StepProps) {
               <Typography variant="body2">
                 I agree to Spree&apos;s{" "}
                 <Link href="/terms/sellers" target="_blank" rel="noopener">
-                  Seller Terms
+                  vendor Terms
                 </Link>{" "}
                 and{" "}
                 <Link href="/privacy" target="_blank" rel="noopener">

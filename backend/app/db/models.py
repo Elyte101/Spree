@@ -111,7 +111,7 @@ class Product(Base):
     brand: Mapped[Brand] = relationship(back_populates="products")
     category: Mapped[Category] = relationship(back_populates="products")
     collection: Mapped[Collection | None] = relationship(back_populates="products")
-    seller: Mapped["User | None"] = relationship(back_populates="products")
+    vendor: Mapped["User | None"] = relationship(back_populates="products")
 
 
 class Notification(Base):
@@ -198,7 +198,7 @@ class User(Base):
         onupdate=func.now(),
     )
 
-    products: Mapped[list[Product]] = relationship(back_populates="seller")
+    products: Mapped[list[Product]] = relationship(back_populates="vendor")
 
 
 class VerificationToken(Base):

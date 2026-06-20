@@ -756,7 +756,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                         {
                           value: "momo" as const,
                           label: "Mobile Money",
-                          detail: "MTN MoMo · Vodafone Cash · AirtelTigo",
+                          detail: "MTN MoMo · Telecel Cash · AirtelTigo",
                           icon: <PhoneAndroidRounded />,
                         },
                         {
@@ -855,7 +855,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                               onChange={(e) => setMomoProvider(e.target.value as MomoProvider)}
                             >
                               <MenuItem value="mtn">MTN Mobile Money</MenuItem>
-                              <MenuItem value="vod">Vodafone Cash</MenuItem>
+                              <MenuItem value="vod">Telecel Cash</MenuItem>
                               <MenuItem value="atl">AirtelTigo Money</MenuItem>
                             </Select>
                           </FormControl>

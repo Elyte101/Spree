@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   const session = await auth();
   const userRole = session?.user.role ?? "customer";
   const profile =
-    session && userRole === "seller"
+    session && userRole === "vendor"
       ? await getUserProfile(session.user.id, {
           name: session.user.name ?? undefined,
           email: session.user.email ?? undefined,
