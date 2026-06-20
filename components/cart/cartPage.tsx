@@ -217,7 +217,7 @@ export function CartPage({ recommendations }: CartPageProps) {
                           alt={item.name}
                           fill
                           sizes="(max-width: 600px) 100vw, 128px"
-                          style={{ objectFit: "contain", padding: "12px" }}
+                          style={{ objectFit: "cover" }}
                         />
                       </Box>
 

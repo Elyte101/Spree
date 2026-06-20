@@ -497,7 +497,7 @@ export function LandingPage({
                     })}
                   >
                     <Box sx={{ position: "relative", width: 52, height: 52 }}>
-                      <Image src={category.image} alt={category.name} fill sizes="52px" style={{ objectFit: "contain" }} />
+                      <Image src={category.image} alt={category.name} fill sizes="52px" style={{ objectFit: "cover" }} />
                     </Box>
                     <Typography variant="body2" fontWeight={700} textAlign="center" lineHeight={1.3} fontSize="0.8rem">
                       {category.name}
@@ -817,7 +817,7 @@ export function LandingPage({
                         alt={product.name}
                         fill
                         sizes="80px"
-                        style={{ objectFit: "contain", padding: 8 }}
+                        style={{ objectFit: "cover" }}
                       />
                     </Box>
                     <Stack gap={0.3} minWidth={0}>
@@ -891,7 +891,7 @@ export function LandingPage({
                   >
                     <Stack gap={2}>
                       <Box sx={{ position: "relative", width: 52, height: 52 }}>
-                        <Image src={collection.image} alt={collection.name} fill sizes="52px" style={{ objectFit: "contain" }} />
+                        <Image src={collection.image} alt={collection.name} fill sizes="52px" style={{ objectFit: "cover" }} />
                       </Box>
                       <Box>
                         <Typography variant="h6" fontWeight={700} color="text.primary">{collection.name}</Typography>

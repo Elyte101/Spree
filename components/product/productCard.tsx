@@ -93,8 +93,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         },
       })}
     >
-      {/* Image zone */}
-      <Box sx={{ position: "relative", pt: isCompact ? 1.25 : 1.75, px: isCompact ? 1.25 : 1.75 }}>
+      {/* Image zone — no padding; Card overflow:hidden clips corners */}
+      <Box sx={{ position: "relative" }}>
         <Box
           component={Link}
           href={`/products/${product.slug}`}
@@ -104,7 +104,6 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             sx={(theme) => ({
               position: "relative",
               aspectRatio: "1 / 1",
-              borderRadius: 2.5,
               overflow: "hidden",
               backgroundColor:
                 theme.palette.mode === "dark"
@@ -139,8 +138,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                           : "(max-width: 900px) 100vw, 420px"
                       }
                       style={{
-                        objectFit: "contain",
-                        padding: "12px",
+                        objectFit: "cover",
                         opacity: imgLoaded ? 1 : 0,
                         transition: "opacity 0.2s ease",
                       }}
@@ -211,9 +209,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           alignItems="flex-start"
           sx={{
             position: "absolute",
-            top: isCompact ? 18 : 24,
-            left: isCompact ? 18 : 24,
-            right: isCompact ? 18 : 24,
+            top: 8,
+            left: 8,
+            right: 8,
             pointerEvents: "none",
           }}
         >
