@@ -154,7 +154,7 @@ export function SellerOnboardingWizard() {
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
       {/* Header */}
       <Box mb={4} textAlign="center">
-        <Typography variant="h4" fontWeight={800} gutterBottom>
+        <Typography variant="h4" fontWeight={800} color="text.primary" gutterBottom>
           Become a seller
         </Typography>
         <Typography color="text.secondary">

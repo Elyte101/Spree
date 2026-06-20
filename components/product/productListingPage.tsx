@@ -494,7 +494,7 @@ export function ProductListingPage({
           <Stack spacing={2.5}>
             <Paper
               elevation={0}
-              sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3, border: "1px solid", borderColor: "divider", maxHeight: 400, overflow: "auto" }}
+              sx={{ p: { xs: 2, sm: 2.5 }, borderRadius: 3, border: "1px solid", borderColor: "divider" }}
             >
               <Stack spacing={2}>
                 <Stack

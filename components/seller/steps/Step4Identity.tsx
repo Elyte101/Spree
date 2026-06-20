@@ -62,6 +62,53 @@ const SLOT_META: Record<Slot, { label: string; hint: string; icon: React.ReactNo
   },
 };
 
+/**
+ * Filter and auto-format ID input per type.
+ * Strips invalid characters, enforces character class rules,
+ * and auto-inserts Ghana Card dashes so the user only types digits.
+ */
+function applyIdFormat(raw: string, type: string): string {
+  const up = raw.toUpperCase();
+  switch (type) {
+    case "ghana-card": {
+      // Rebuild GHA-XXXXXXXXX-X: strip non-alphanumeric, extract digit body
+      const stripped = up.replace(/[^A-Z0-9]/g, "");
+      const body = stripped.startsWith("GHA") ? stripped.slice(3) : stripped;
+      const digits = body.replace(/\D/g, "").slice(0, 10);
+      if (!digits) return "GHA-";
+      if (digits.length <= 9) return `GHA-${digits}`;
+      return `GHA-${digits.slice(0, 9)}-${digits.slice(9)}`;
+    }
+    case "passport":
+      // 1 letter + 7-8 digits, max 9 chars
+      const ps = up.replace(/[^A-Z0-9]/g, "");
+      if (!ps) return "";
+      const pl = /^[A-Z]$/.test(ps[0]) ? ps[0] : "";
+      return pl + ps.slice(pl ? 1 : 0).replace(/\D/g, "").slice(0, 8);
+    case "ssnit": {
+      // C or P followed by 10-11 digits
+      const ss = up.replace(/[^A-Z0-9]/g, "");
+      if (!ss) return "";
+      const sp = /^[CP]$/.test(ss[0]) ? ss[0] : "";
+      return sp + ss.slice(sp ? 1 : 0).replace(/\D/g, "").slice(0, 11);
+    }
+    case "voters-id":
+      return up.replace(/[^A-Z0-9]/g, "").slice(0, 14);
+    case "ecowas-card":
+      return up.replace(/[^A-Z0-9-]/g, "").slice(0, 20);
+    case "drivers-license":
+      return up.replace(/[^A-Z0-9/ -]/g, "").slice(0, 20);
+    default:
+      return up;
+  }
+}
+
+/** Starting value for the ID number field — pre-fills Ghana Card prefix. */
+function initialIdValue(type: string, existing: string): string {
+  if (existing) return existing;
+  return type === "ghana-card" ? "GHA-" : "";
+}
+
 // ---------------------------------------------------------------------------
 // Camera view component
 // ---------------------------------------------------------------------------
@@ -82,7 +129,6 @@ function CameraView({
   const [facing, setFacing] = React.useState(initialFacing);
 
   const startCamera = React.useCallback(async (mode: "environment" | "user") => {
-    // Stop any existing stream before starting a new one
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCamState("starting");
@@ -108,7 +154,6 @@ function CameraView({
         } else if (err.name === "NotSupportedError" || err.name === "InsecureContextError") {
           msg = "Camera access requires a secure (HTTPS) connection.";
         } else if (err.name === "OverconstrainedError") {
-          // Fallback: try without facing constraint
           try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true });
             streamRef.current = stream;
@@ -164,7 +209,6 @@ function CameraView({
 
   return (
     <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden", bgcolor: "#000", aspectRatio: "4/3", width: "100%" }}>
-      {/* Loading */}
       {camState === "starting" && (
         <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ position: "absolute", inset: 0 }}>
           <CircularProgress sx={{ color: "white" }} size={36} />
@@ -172,7 +216,6 @@ function CameraView({
         </Stack>
       )}
 
-      {/* Error */}
       {camState === "error" && (
         <Stack alignItems="center" justifyContent="center" spacing={2} sx={{ position: "absolute", inset: 0, p: 3 }}>
           <VideocamOffRounded sx={{ fontSize: 44, color: "grey.500" }} />
@@ -190,7 +233,6 @@ function CameraView({
         </Stack>
       )}
 
-      {/* Live feed */}
       <video
         ref={videoRef}
         playsInline
@@ -204,7 +246,6 @@ function CameraView({
         }}
       />
 
-      {/* Overlay controls */}
       {camState === "ready" && (
         <Box
           sx={{
@@ -252,7 +293,6 @@ function CameraView({
         </Box>
       )}
 
-      {/* Top-right close */}
       <IconButton
         size="small"
         onClick={onClose}
@@ -287,13 +327,17 @@ function UploadTile({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [showCamera, setShowCamera] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
+  // Start false to match SSR; set to true after mount so the button renders correctly
+  const [hasCamera, setHasCamera] = React.useState(false);
   const meta = SLOT_META[slot];
   const done = !!state.path && !state.uploading;
 
-  // Feature-detect getUserMedia (won't be available on some old Android WebViews)
-  const hasCamera =
-    typeof navigator !== "undefined" &&
-    typeof navigator.mediaDevices?.getUserMedia === "function";
+  React.useEffect(() => {
+    setHasCamera(
+      typeof navigator !== "undefined" &&
+      typeof navigator.mediaDevices?.getUserMedia === "function",
+    );
+  }, []);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -432,25 +476,55 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
   const [idType, setIdType] = React.useState<GovernmentIdType>(
     (profile?.governmentIdType as GovernmentIdType) || "ghana-card"
   );
-  const [idNumber, setIdNumber] = React.useState(profile?.governmentIdNumber || "");
+  const [idNumber, setIdNumber] = React.useState(
+    initialIdValue((profile?.governmentIdType as string) || "ghana-card", profile?.governmentIdNumber || "")
+  );
   const [uploads, setUploads] = React.useState<Record<Slot, UploadSlotState>>({
     id_front: { path: profile?.idFrontUrl || null, uploading: false, error: null },
     id_back:  { path: profile?.idBackUrl  || null, uploading: false, error: null },
     selfie:   { path: profile?.selfieUrl  || null, uploading: false, error: null },
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [idTouched, setIdTouched] = React.useState(false);
 
-  // Reset ID number when type changes so stale formats don't carry over
   const prevIdType = React.useRef(idType);
   React.useEffect(() => {
     if (idType !== prevIdType.current) {
-      setIdNumber("");
+      setIdNumber(initialIdValue(idType, ""));
       setErrors((e) => ({ ...e, idNumber: "" }));
+      setIdTouched(false);
       prevIdType.current = idType;
     }
   }, [idType]);
 
   const spec = GHANA_ID_SPECS[idType];
+
+  function validateIdNumber(value: string): string {
+    const trimmed = value.trim();
+    // Ghana Card prefix-only counts as empty
+    if (!trimmed || trimmed === "GHA-") return "ID number is required";
+    return spec?.validate(trimmed) ?? "";
+  }
+
+  function handleIdNumberChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const formatted = applyIdFormat(e.target.value, idType);
+    setIdNumber(formatted);
+    setIdTouched(true);
+    // Validate immediately on every keystroke once the user has started typing
+    const trimmed = formatted.trim();
+    if (!trimmed || trimmed === "GHA-") {
+      setErrors((prev) => ({ ...prev, idNumber: "" }));
+    } else {
+      const err = spec?.validate(trimmed) ?? "";
+      setErrors((prev) => ({ ...prev, idNumber: err }));
+    }
+  }
+
+  function handleIdNumberBlur() {
+    setIdTouched(true);
+    const err = validateIdNumber(idNumber);
+    setErrors((prev) => ({ ...prev, idNumber: err }));
+  }
 
   async function handleFileSelect(slot: Slot, file: File) {
     setUploads((prev) => ({ ...prev, [slot]: { ...prev[slot], uploading: true, error: null } }));
@@ -477,18 +551,11 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-
-    if (!idNumber.trim()) {
-      e.idNumber = "ID number is required";
-    } else {
-      const formatError = spec?.validate(idNumber.trim().toUpperCase());
-      if (formatError) e.idNumber = formatError;
-    }
-
+    const idErr = validateIdNumber(idNumber);
+    if (idErr) e.idNumber = idErr;
     if (!uploads.id_front.path) e.id_front = "Please upload the front of your ID";
     if (!uploads.id_back.path)  e.id_back  = "Please upload the back of your ID";
     if (!uploads.selfie.path)   e.selfie   = "Please upload a selfie holding your ID";
-
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -507,6 +574,9 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
   }
 
   const anyUploading = Object.values(uploads).some((u) => u.uploading);
+
+  // Determine whether to show a live "looks good" indicator
+  const idNumberValid = idTouched && !errors.idNumber && idNumber.trim() !== "" && idNumber.trim() !== "GHA-";
 
   return (
     <Box component="form" onSubmit={handleSubmit}>
@@ -537,24 +607,75 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
           ))}
         </TextField>
 
-        {/* ID number with per-type format hint */}
-        <TextField
-          label="ID number"
-          value={idNumber}
-          onChange={(e) => setIdNumber(e.target.value.toUpperCase())}
-          onBlur={() => {
-            if (idNumber.trim() && spec) {
-              const err = spec.validate(idNumber.trim().toUpperCase());
-              setErrors((prev) => ({ ...prev, idNumber: err ?? "" }));
+        {/* ID number — per-type format guidance + real-time validation */}
+        <Box>
+          {spec && (
+            <Box
+              sx={(theme) => ({
+                mb: 1,
+                px: 1.5,
+                py: 0.75,
+                borderRadius: 1.5,
+                bgcolor: idNumberValid
+                  ? alpha(theme.palette.success.main, 0.08)
+                  : alpha(theme.palette.info.main, 0.07),
+                border: "1px solid",
+                borderColor: idNumberValid
+                  ? alpha(theme.palette.success.main, 0.3)
+                  : alpha(theme.palette.info.main, 0.2),
+              })}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.25 }}>
+                Expected format
+              </Typography>
+              <Typography
+                variant="caption"
+                component="span"
+                sx={{
+                  fontFamily: "monospace",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  color: idNumberValid ? "success.main" : "text.primary",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {spec.placeholder}
+              </Typography>
+            </Box>
+          )}
+
+          <TextField
+            label="ID number"
+            value={idNumber}
+            onChange={handleIdNumberChange}
+            onBlur={handleIdNumberBlur}
+            error={idTouched && !!errors.idNumber}
+            helperText={
+              idTouched && errors.idNumber
+                ? errors.idNumber
+                : idNumberValid
+                  ? "✓ Format looks correct"
+                  : spec?.formatHint
             }
-          }}
-          error={!!errors.idNumber}
-          helperText={errors.idNumber || spec?.formatHint}
-          placeholder={spec?.placeholder}
-          fullWidth
-          required
-          inputProps={{ style: { textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.04em" } }}
-        />
+            FormHelperTextProps={{
+              sx: idNumberValid ? { color: "success.main", fontWeight: 600 } : {},
+            }}
+            fullWidth
+            required
+            slotProps={{
+              htmlInput: {
+                style: {
+                  textTransform: "uppercase",
+                  fontFamily: "monospace",
+                  letterSpacing: "0.06em",
+                },
+                spellCheck: false,
+                autoCorrect: "off",
+                autoCapitalize: "characters",
+              },
+            }}
+          />
+        </Box>
 
         {/* Photo uploads */}
         <Box>
