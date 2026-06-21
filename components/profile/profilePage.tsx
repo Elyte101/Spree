@@ -11,6 +11,7 @@ import {
   BadgeRounded,
   CameraAltRounded,
   CheckCircleOutlined,
+  CheckCircleRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
@@ -29,6 +30,7 @@ import {
   CircularProgress,
   Divider,
   FormControl,
+  InputAdornment,
   InputLabel,
   MenuItem,
   Paper,
@@ -43,14 +45,15 @@ import { canCreateProductsRole } from "@/lib/roles";
 import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
 import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel, MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
+import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
 }
 
 const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
-  retail: "Retail seller",
-  wholesale: "Wholesale seller",
+  retail: "Retail vendor",
+  wholesale: "Wholesale vendor",
 };
 
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
@@ -81,14 +84,45 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     currency: "GHS",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
+  const [paymentNameVerified, setPaymentNameVerified] = React.useState(
+    profile.paymentInfo?.momoNameVerified ?? false,
+  );
+  const [payoutNameVerified, setPayoutNameVerified] = React.useState(false);
   const [paymentFieldErrors, setPaymentFieldErrors] = React.useState<Record<string, string>>({});
   const [payoutFieldErrors, setPayoutFieldErrors] = React.useState<Record<string, string>>({});
   const [savingPayout, setSavingPayout] = React.useState(false);
   const [payoutError, setPayoutError] = React.useState<string | null>(null);
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
+  // MoMo name-enquiry for payment info section
+  const paymentMomoResolve = useMomoResolve(
+    profile.paymentInfo?.mobileMoneyNumber ?? "",
+    profile.paymentInfo?.mobileMoneyNetwork ?? "",
+  );
+  React.useEffect(() => {
+    if (paymentMomoResolve.status === "resolved" && paymentMomoResolve.resolvedName) {
+      setProfile((p) => ({
+        ...p,
+        paymentInfo: { ...p.paymentInfo, accountName: paymentMomoResolve.resolvedName! },
+      }));
+      setPaymentNameVerified(true);
+    }
+  }, [paymentMomoResolve.status, paymentMomoResolve.resolvedName]);
+
+  // MoMo name-enquiry for payout info section
+  const payoutMomoResolve = useMomoResolve(
+    payout.mobileMoneyNumber,
+    payout.mobileMoneyNetwork,
+  );
+  React.useEffect(() => {
+    if (payoutMomoResolve.status === "resolved" && payoutMomoResolve.resolvedName) {
+      setPayout((p) => ({ ...p, accountName: payoutMomoResolve.resolvedName! }));
+      setPayoutNameVerified(true);
+    }
+  }, [payoutMomoResolve.status, payoutMomoResolve.resolvedName]);
+
   const isAdmin = profile.role === "admin";
-  const sellerSwitchChecked = isAdmin || profile.role === "seller";
+  const sellerSwitchChecked = isAdmin || profile.role === "vendor";
   const savedSellerAccess =
     isAdmin || (canCreateProductsRole(profile.role) && profile.sellerStatus === "active");
 
@@ -225,7 +259,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const canUploadDocs = profile.role === "seller" && !isAdmin;
+  const canUploadDocs = profile.role === "vendor" && !isAdmin;
 
   return (
     <Box
@@ -291,7 +325,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   startIcon={<AddBusinessRounded />}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
-                  Become a seller
+                  Become a vendor
                 </Button>
               ) : (
                 <Button
@@ -372,7 +406,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               </Stack>
             </Paper>
 
-            {profile.role !== "seller" && !isAdmin && (
+            {profile.role !== "vendor" && !isAdmin && (
               <Paper
                 elevation={0}
                 sx={{
@@ -401,7 +435,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     fullWidth
                     sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, py: 1.5 }}
                   >
-                    Apply to become a seller
+                    Apply to become a vendor
                   </Button>
                 </Stack>
               </Paper>
@@ -573,8 +607,31 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     <TextField
                       label="Account name"
                       value={profile.paymentInfo.accountName ?? ""}
-                      onChange={updatePaymentField("accountName")}
-                      helperText="Full name as it appears on the MoMo account"
+                      slotProps={{
+                        input: {
+                          readOnly: paymentNameVerified,
+                          endAdornment: paymentMomoResolve.status === "loading" ? (
+                            <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment>
+                          ) : paymentNameVerified ? (
+                            <InputAdornment position="end">
+                              <Chip icon={<CheckCircleRounded />} label="Verified" color="success" size="small" variant="outlined" />
+                            </InputAdornment>
+                          ) : null,
+                        },
+                      }}
+                      onChange={(e) => {
+                        updatePaymentField("accountName")(e as React.ChangeEvent<HTMLInputElement>);
+                        setPaymentNameVerified(false);
+                      }}
+                      helperText={
+                        paymentMomoResolve.status === "loading"
+                          ? "Verifying account…"
+                          : paymentMomoResolve.status === "failed"
+                          ? `Auto-verify unavailable — enter name manually`
+                          : paymentNameVerified
+                          ? "Name verified via MoMo network"
+                          : "Full name as it appears on the MoMo account"
+                      }
                       fullWidth
                       sx={{ gridColumn: { md: "span 2" } }}
                     />
@@ -665,12 +722,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     : profile.sellerStatus === "pending"
                       ? "Your storefront application is waiting for admin approval before products can go live."
                     : profile.sellerStatus === "suspended"
-                      ? "Your store is temporarily paused. Review the seller notice above before contacting admin."
+                      ? "Your store is temporarily paused. Review the vendor notice above before contacting admin."
                       : profile.sellerStatus === "removed"
-                        ? "Your seller access was removed. Buyer features still work, but product publishing is disabled."
+                        ? "Your vendor access was removed. Buyer features still work, but product publishing is disabled."
                     : sellerSwitchChecked
                       ? "Your application is in review. An admin will activate your store soon."
-                      : "Apply to become a seller to start publishing products on Spree."}
+                      : "Apply to become a vendor to start publishing products on Spree."}
                 </Typography>
                 <Button
                   component={Link}
@@ -724,7 +781,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   Marketplace model
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Buyers can browse immediately. Vendors must register a store with identity details, and admins can monitor seller health privately.
+                  Buyers can browse immediately. Vendors must register a store with identity details, and admins can monitor vendor health privately.
                   Approved vendors keep buyer checkout access while managing their storefront and product catalog.
                 </Typography>
               </Stack>
@@ -826,7 +883,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             )}
 
             {/* ── PAYOUT INFO ── */}
-            {(profile.role === "seller" || isAdmin) && (
+            {(profile.role === "vendor" || isAdmin) && (
               <Paper
                 elevation={0}
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
@@ -867,9 +924,32 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   <TextField
                     label="Account name"
                     value={payout.accountName}
-                    onChange={(e) => setPayout((p) => ({ ...p, accountName: e.target.value }))}
+                    slotProps={{
+                      input: {
+                        readOnly: payoutNameVerified && payout.method === "mobile_money",
+                        endAdornment: payout.method === "mobile_money" && payoutMomoResolve.status === "loading" ? (
+                          <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment>
+                        ) : payoutNameVerified && payout.method === "mobile_money" ? (
+                          <InputAdornment position="end">
+                            <Chip icon={<CheckCircleRounded />} label="Verified" color="success" size="small" variant="outlined" />
+                          </InputAdornment>
+                        ) : null,
+                      },
+                    }}
+                    onChange={(e) => {
+                      setPayout((p) => ({ ...p, accountName: e.target.value }));
+                      setPayoutNameVerified(false);
+                    }}
                     error={!!payoutFieldErrors.accountName}
-                    helperText={payoutFieldErrors.accountName || "Full name as it appears on the account"}
+                    helperText={
+                      payout.method === "mobile_money" && payoutMomoResolve.status === "loading"
+                        ? "Verifying account…"
+                        : payout.method === "mobile_money" && payoutMomoResolve.status === "failed"
+                        ? "Auto-verify unavailable — enter name manually"
+                        : payoutFieldErrors.accountName || (payoutNameVerified && payout.method === "mobile_money"
+                          ? "Name verified via MoMo network"
+                          : "Full name as it appears on the account")
+                    }
                     size="small"
                     fullWidth
                   />

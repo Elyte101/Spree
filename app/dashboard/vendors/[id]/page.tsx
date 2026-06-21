@@ -22,11 +22,11 @@ export default async function DashboardSellerDetailPage({
   }
 
   const { id } = await params;
-  const seller = await getAdminSeller(id);
+  const vendor = await getAdminSeller(id);
 
-  if (!seller) {
+  if (!vendor) {
     notFound();
   }
 
-  return <AdminVendorDetailPage initialSeller={seller} />;
+  return <AdminVendorDetailPage initialSeller={vendor} />;
 }

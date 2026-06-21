@@ -5,7 +5,7 @@ export type CatalogSort =
   | "price-desc"
   | "rating";
 
-export type UserRole = "customer" | "seller" | "admin";
+export type UserRole = "customer" | "vendor" | "admin";
 export type PaymentMethod = "card" | "bank-transfer" | "mobile_money";
 export type SellerStatus =
   | "buyer"
@@ -360,6 +360,7 @@ export interface PaymentInfo {
   mobileMoneyNetwork?: string;
   mobileMoneyNumber?: string;
   accountName?: string;
+  momoNameVerified?: boolean;
   // Card / bank fields
   cardholderName: string;
   cardLast4: string;

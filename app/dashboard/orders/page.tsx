@@ -7,7 +7,7 @@ import { getSellerOrders } from "@/lib/serverApi";
 import { VendorOrdersPage } from "@/components/admin/vendorOrdersPage";
 
 export const metadata: Metadata = {
-  title: "Orders | seller Dashboard | Spree",
+  title: "Orders | vendor Dashboard | Spree",
 };
 
 export default async function DashboardOrdersRoute() {

@@ -202,7 +202,7 @@ export function OrderDetailPage({
         const data = (await res.json()) as { detail?: string };
         setError(data.detail ?? "Failed to confirm delivery.");
       } else {
-        setSuccessMsg("Delivery confirmed! Payment has been released to the seller.");
+        setSuccessMsg("Delivery confirmed! Payment has been released to the vendor.");
         router.refresh();
       }
     } catch {
@@ -676,7 +676,7 @@ export function OrderDetailPage({
                   <LockOutlined color="success" sx={{ fontSize: 16 }} />
                   <Typography variant="caption" color="success.main" fontWeight={600}>
                     {order.status === "completed"
-                      ? "Payment released to seller"
+                      ? "Payment released to vendor"
                       : order.status === "cancelled"
                       ? "Order cancelled"
                       : "Payment held securely by Spree"}

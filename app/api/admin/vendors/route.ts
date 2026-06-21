@@ -8,14 +8,14 @@ export async function GET() {
 
   if (!session) {
     return NextResponse.json(
-      { detail: "You must be signed in to view seller management" },
+      { detail: "You must be signed in to view vendor management" },
       { status: 401 }
     );
   }
 
   if (session.user.role !== "admin") {
     return NextResponse.json(
-      { detail: "Only admins can view seller management" },
+      { detail: "Only admins can view vendor management" },
       { status: 403 }
     );
   }

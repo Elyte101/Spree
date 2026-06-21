@@ -42,8 +42,8 @@ const formatLabel = (value: string) =>
     .join(" ");
 
 const sellerTypeLabels: Record<NonNullable<Product["sellerType"]>, string> = {
-  retail: "Retail seller",
-  wholesale: "Wholesale seller",
+  retail: "Retail vendor",
+  wholesale: "Wholesale vendor",
 };
 
 export function ProductDetailsPage({
@@ -452,7 +452,7 @@ export function ProductDetailsPage({
                     Sold by
                   </Typography>
                   <Typography variant="body1" fontWeight={700}>
-                    {product.storeName ?? product.sellerName ?? "Marketplace seller"}
+                    {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
                   </Typography>
                   {product.sellerType ? (
                     <Typography variant="body2" color="text.secondary">
@@ -510,8 +510,8 @@ export function ProductDetailsPage({
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {product.sellerLocation
-                        ? `Located in ${product.sellerLocation}. Explore the seller's storefront, follow their shop, or report them if something feels off.`
-                        : "Explore the seller's storefront, follow their shop, or report them if something feels off."}
+                        ? `Located in ${product.sellerLocation}. Explore the vendor's storefront, follow their shop, or report them if something feels off.`
+                        : "Explore the vendor's storefront, follow their shop, or report them if something feels off."}
                     </Typography>
                   </Box>
                   <Button

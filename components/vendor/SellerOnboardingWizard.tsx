@@ -155,7 +155,7 @@ export function VendorOnboardingWizard() {
       {/* Header */}
       <Box mb={4} textAlign="center">
         <Typography variant="h4" fontWeight={800} color="text.primary" gutterBottom>
-          Become a seller
+          Become a vendor
         </Typography>
         <Typography color="text.secondary">
           Complete your profile to start listing products on Spree.

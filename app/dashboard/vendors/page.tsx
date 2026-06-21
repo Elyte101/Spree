@@ -8,7 +8,7 @@ import { VendorsTable } from "./_components/VendorsTable";
 
 export const metadata: Metadata = {
   title: "Sellers | Dashboard | Spree",
-  description: "Manage seller accounts",
+  description: "Manage vendor accounts",
 };
 
 interface PageProps {
@@ -46,10 +46,10 @@ export default async function DashboardSellersPage({ searchParams }: PageProps) 
       >
         <Chip label="Admin only" color="secondary" sx={{ mb: 1.5, borderRadius: 999 }} />
         <Typography variant="h4" sx={{ fontWeight: 900 }}>
-          seller management
+          vendor management
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-          Review seller health, monitor follower and purchase counts, and jump into individual seller
+          Review vendor health, monitor follower and purchase counts, and jump into individual vendor
           cases.
         </Typography>
       </Paper>

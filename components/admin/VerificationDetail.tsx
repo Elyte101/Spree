@@ -29,7 +29,7 @@ import { api, ApiClientError } from "@/lib/api";
 import type { VerificationQueueItem } from "@/types/types";
 
 interface VerificationDetailProps {
-  seller: VerificationQueueItem;
+  vendor: VerificationQueueItem;
   onDecision: (id: string, approved: boolean) => void;
   onClose: () => void;
 }
@@ -117,7 +117,7 @@ function DocumentImage({ url, label }: { url: string | null; label: string }) {
   );
 }
 
-export function VerificationDetail({ seller, onDecision, onClose }: VerificationDetailProps) {
+export function VerificationDetail({ vendor, onDecision, onClose }: VerificationDetailProps) {
   const [docs, setDocs] = React.useState<DocumentUrls | null>(null);
   const [docsLoading, setDocsLoading] = React.useState(true);
   const [docsError, setDocsError] = React.useState<string | null>(null);
@@ -130,18 +130,18 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
     setDocs(null);
     setDocsLoading(true);
     setDocsError(null);
-    api.getSellerDocumentUrls(seller.id)
+    api.getSellerDocumentUrls(vendor.id)
       .then((d) => setDocs(d))
       .catch((err) => setDocsError(err instanceof ApiClientError ? err.message : "Failed to load documents"))
       .finally(() => setDocsLoading(false));
-  }, [seller.id]);
+  }, [vendor.id]);
 
   async function handleApprove() {
     setActionLoading(true);
     setActionError(null);
     try {
-      await api.approveSeller(seller.id);
-      onDecision(seller.id, true);
+      await api.approveSeller(vendor.id);
+      onDecision(vendor.id, true);
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : "Approval failed");
     } finally {
@@ -154,8 +154,8 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
     setActionLoading(true);
     setActionError(null);
     try {
-      await api.rejectSeller(seller.id, { reason: rejectReason.trim() });
-      onDecision(seller.id, false);
+      await api.rejectSeller(vendor.id, { reason: rejectReason.trim() });
+      onDecision(vendor.id, false);
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : "Rejection failed");
     } finally {
@@ -164,9 +164,9 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
   }
 
   const location = [
-    seller.storeLocation?.city,
-    seller.storeLocation?.state,
-    seller.storeLocation?.country,
+    vendor.storeLocation?.city,
+    vendor.storeLocation?.state,
+    vendor.storeLocation?.country,
   ].filter(Boolean).join(", ");
 
   return (
@@ -181,8 +181,8 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
         sx={{ bgcolor: (t) => alpha(t.palette.primary.main, 0.05) }}
       >
         <Box>
-          <Typography variant="h6" fontWeight={700}>{seller.name}</Typography>
-          <Typography variant="body2" color="text.secondary">{seller.email}</Typography>
+          <Typography variant="h6" fontWeight={700}>{vendor.name}</Typography>
+          <Typography variant="body2" color="text.secondary">{vendor.email}</Typography>
         </Box>
         <IconButton onClick={onClose} size="small">
           <CloseRounded />
@@ -191,17 +191,17 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
 
       <Box p={3}>
         <Stack spacing={3}>
-          {/* seller info */}
+          {/* vendor info */}
           <Box>
             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-              seller details
+              vendor details
             </Typography>
             <Stack spacing={0.75}>
-              <InfoRow label="Store name" value={seller.storeName || "—"} />
-              <InfoRow label="seller type" value={seller.sellerType || "—"} />
+              <InfoRow label="Store name" value={vendor.storeName || "—"} />
+              <InfoRow label="vendor type" value={vendor.sellerType || "—"} />
               <InfoRow label="Location" value={location || "—"} />
-              <InfoRow label="Phone" value={seller.phone || "—"} />
-              <InfoRow label="Onboarding step" value={`${seller.onboardingStep} / 5`} />
+              <InfoRow label="Phone" value={vendor.phone || "—"} />
+              <InfoRow label="Onboarding step" value={`${vendor.onboardingStep} / 5`} />
             </Stack>
           </Box>
 
@@ -247,7 +247,7 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
                   disabled={actionLoading || docsLoading}
                   onClick={handleApprove}
                 >
-                  Approve seller
+                  Approve vendor
                 </Button>
                 <Button
                   variant="outlined"
@@ -268,7 +268,7 @@ export function VerificationDetail({ seller, onDecision, onClose }: Verification
                 <TextField
                   multiline
                   minRows={3}
-                  placeholder="Explain why this application is being rejected. This will be shown to the seller."
+                  placeholder="Explain why this application is being rejected. This will be shown to the vendor."
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   fullWidth

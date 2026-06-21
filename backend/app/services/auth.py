@@ -345,7 +345,7 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
         if existing_store is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="That store handle is already taken by another seller",
+                detail="That store handle is already taken by another vendor",
             )
 
     moderated_seller_status = user.seller_status in {"suspended", "removed"} and user.role != "admin"
@@ -359,7 +359,7 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
         if not store_name:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Please name your store before enabling seller access",
+                detail="Please name your store before enabling vendor access",
             )
 
         if len(store_description) < 24:
@@ -382,7 +382,7 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
         ):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Please provide a valid seller business email",
+                detail="Please provide a valid vendor business email",
             )
 
         if not (seller_contact["businessPhone"] or phone):
@@ -423,9 +423,9 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
 
     if user.role != "admin":
         if moderated_seller_status:
-            user.role = "seller"
+            user.role = "vendor"
         else:
-            user.role = "seller" if payload.isSeller else "customer"
+            user.role = "vendor" if payload.isSeller else "customer"
             if payload.isSeller:
                 user.seller_status = "active" if user.seller_status == "active" else "pending"
             else:

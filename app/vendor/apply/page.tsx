@@ -6,7 +6,7 @@ import { getUserProfile } from "@/lib/serverApi";
 import { VendorApplicationWizard } from "@/components/profile/vendorApplicationWizard";
 
 export const metadata: Metadata = {
-  title: "Become a seller | Spree",
+  title: "Become a vendor | Spree",
   description: "Set up your Spree store and start selling today",
 };
 

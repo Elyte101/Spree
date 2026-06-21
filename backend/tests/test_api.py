@@ -154,7 +154,7 @@ def test_signup_endpoint_creates_customer_account():
 
 def test_profile_endpoint_updates_customer_to_seller():
     with TestClient(app) as client:
-        email = f"seller-{uuid4().hex[:8]}@example.com"
+        email = f"vendor-{uuid4().hex[:8]}@example.com"
         signup_response = client.post(
             "/api/v1/auth/signup",
             headers=INTERNAL_HEADERS,
@@ -177,7 +177,7 @@ def test_profile_endpoint_updates_customer_to_seller():
 
         assert profile_response.status_code == 200
         payload = profile_response.json()
-        assert payload["role"] == "seller"
+        assert payload["role"] == "vendor"
         assert payload["sellerStatus"] == "pending"
         assert payload["storeName"] == store_name
         assert payload["sellerType"] == "wholesale"
@@ -190,7 +190,7 @@ def test_profile_endpoint_updates_customer_to_seller():
 
 def test_suspended_seller_cannot_reactivate_through_profile_update():
     with TestClient(app) as client:
-        email = f"paused-seller-{uuid4().hex[:8]}@example.com"
+        email = f"paused-vendor-{uuid4().hex[:8]}@example.com"
         signup_response = client.post(
             "/api/v1/auth/signup",
             headers=INTERNAL_HEADERS,
@@ -218,7 +218,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
                 "status": "active",
                 "sellerNotice": "",
                 "adminNote": "Accepted for selling",
-                "sellerBadge": "Verified seller",
+                "sellerBadge": "Verified vendor",
                 "completedDeliveries": 12,
                 "averageDeliveryDays": 1.8,
                 "governmentIdVerified": True,
@@ -226,7 +226,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
         )
         assert accept_response.status_code == 200
         assert accept_response.json()["sellerStatus"] == "active"
-        assert accept_response.json()["sellerBadge"] == "Verified seller"
+        assert accept_response.json()["sellerBadge"] == "Verified vendor"
         assert accept_response.json()["completedDeliveries"] == 12
 
         suspend_response = client.put(
@@ -236,7 +236,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
                 "status": "suspended",
                 "sellerNotice": "Identity review needed",
                 "adminNote": "Regression guard",
-                "sellerBadge": "Verified seller",
+                "sellerBadge": "Verified vendor",
                 "completedDeliveries": 12,
                 "averageDeliveryDays": 1.8,
                 "governmentIdVerified": True,
@@ -253,7 +253,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         assert updated_profile_response.status_code == 200
         updated_profile = updated_profile_response.json()
-        assert updated_profile["role"] == "seller"
+        assert updated_profile["role"] == "vendor"
         assert updated_profile["sellerStatus"] == "suspended"
         assert updated_profile["sellerNotice"] == "Identity review needed"
 

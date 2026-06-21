@@ -537,7 +537,7 @@ export function Step4Identity({ profile, onSubmit, submitting }: StepProps) {
         Identity verification
       </Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
-        We verify every seller to keep Spree safe. Your documents are stored securely
+        We verify every vendor to keep Spree safe. Your documents are stored securely
         and seen only by our review team.
       </Typography>
 

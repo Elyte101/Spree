@@ -557,7 +557,7 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
             db.commit()
 
     elif event == "transfer.success":
-        # Paystack confirmed the seller payout transfer
+        # Paystack confirmed the vendor payout transfer
         reference = data.get("reference", "")
         logger.info("Webhook: transfer success ref=%s", reference)
 
@@ -566,24 +566,24 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
         amount_minor = data.get("amount", 0)
         if not recipient_code:
             return
-        seller = db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
-        if seller:
+        vendor = db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
+        if vendor:
             amount = amount_minor / 100
             logger.warning(
-                "Webhook: payout transfer failed for seller %s (recipient=%s, amount=%.2f)",
-                seller.id, recipient_code, amount,
+                "Webhook: payout transfer failed for vendor %s (recipient=%s, amount=%.2f)",
+                vendor.id, recipient_code, amount,
             )
             create_notification(
                 db,
                 title="Payout failed — action required",
                 body=(
-                    f"We couldn't send your payout of {(seller.payout_info or {}).get('currency', 'GHS')} "
+                    f"We couldn't send your payout of {(vendor.payout_info or {}).get('currency', 'GHS')} "
                     f"{amount:.2f}. Please update your payout account details in your profile "
                     "so we can retry."
                 ),
                 notif_type="account",
                 href="/settings?tab=payout",
-                recipient_id=seller.id,
+                recipient_id=vendor.id,
             )
             db.commit()
 
@@ -763,7 +763,7 @@ def add_tracking(
 
 def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
     # Use FOR UPDATE so two concurrent confirm-delivery calls can't both pass
-    # the status check and double-release the seller payout.
+    # the status check and double-release the vendor payout.
     order = db.scalar(
         select(Order).where(Order.id == order_id).with_for_update()
     )
@@ -801,20 +801,20 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
     order.payout_amount = total_payout
 
     for sid, payout in seller_payouts.items():
-        seller = db.get(User, sid)
+        vendor = db.get(User, sid)
         payout_minor = int(payout * 100)
         transfer_ok = False
 
-        if seller and seller.paystack_recipient_code and settings.paystack_secret_key:
+        if vendor and vendor.paystack_recipient_code and settings.paystack_secret_key:
             try:
                 paystack_svc.initiate_transfer(
                     amount_minor=payout_minor,
-                    recipient_code=seller.paystack_recipient_code,
+                    recipient_code=vendor.paystack_recipient_code,
                     reason=f"Spree payout for order {order_id}",
                 )
                 transfer_ok = True
             except Exception as exc:
-                logger.error("Paystack transfer failed for seller %s: %s", sid, exc)
+                logger.error("Paystack transfer failed for vendor %s: %s", sid, exc)
 
         payout_note = (
             f"Your payout of {order.currency} {float(payout):.2f} has been sent to your account."
@@ -832,8 +832,8 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             href="/dashboard/orders",
             recipient_id=sid,
         )
-        if seller:
-            seller.completed_deliveries = (seller.completed_deliveries or 0) + 1
+        if vendor:
+            vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
 
     db.commit()
     db.refresh(order)

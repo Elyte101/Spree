@@ -9,6 +9,7 @@ import {
   ArrowForwardRounded,
   BadgeRounded,
   CameraAltRounded,
+  CheckCircleRounded,
   CheckRounded,
   CloseRounded,
   CloudUploadRounded,
@@ -28,12 +29,14 @@ import {
   alpha,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Container,
   FormControl,
   FormHelperText,
   IconButton,
   InputLabel,
+  InputAdornment,
   LinearProgress,
   MenuItem,
   Paper,
@@ -55,6 +58,7 @@ import {
   MOMO_NETWORKS, validateMoMoNumber,
 } from "@/lib/ghana";
 import { GovernmentIdType, SellerType, UserProfile } from "@/types/types";
+import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -85,6 +89,7 @@ interface WizardData {
   momoProvider: string;
   momoNumber: string;
   momoAccountName: string;
+  momoNameVerified: boolean;
   cardholderName: string;
   cardLast4: string;
   expiryMonth: string;
@@ -343,6 +348,7 @@ function buildInitialData(profile: UserProfile): WizardData {
     momoProvider:       d?.momoProvider       ?? profile.paymentInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
     momoNumber:         d?.momoNumber         ?? profile.paymentInfo?.mobileMoneyNumber  ?? "",
     momoAccountName:    d?.momoAccountName    ?? profile.paymentInfo?.accountName        ?? "",
+    momoNameVerified:   d?.momoNameVerified   ?? profile.paymentInfo?.momoNameVerified   ?? false,
     cardholderName:     d?.cardholderName     ?? profile.paymentInfo?.cardholderName    ?? "",
     cardLast4:          d?.cardLast4          ?? profile.paymentInfo?.cardLast4         ?? "",
     expiryMonth:        d?.expiryMonth        ?? profile.paymentInfo?.expiryMonth       ?? "",
@@ -648,6 +654,14 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
     };
   }, [thumbFront, thumbBack, thumbSelfie]);
 
+  // MoMo name-enquiry
+  const momoResolve = useMomoResolve(data.momoNumber, data.momoProvider);
+  React.useEffect(() => {
+    if (momoResolve.status === "resolved" && momoResolve.resolvedName) {
+      setData((d) => ({ ...d, momoAccountName: momoResolve.resolvedName!, momoNameVerified: true }));
+    }
+  }, [momoResolve.status, momoResolve.resolvedName]);
+
   const updateField = <K extends keyof WizardData>(field: K) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       setData((d) => ({ ...d, [field]: e.target.value }));
@@ -784,6 +798,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
                 mobileMoneyNetwork: data.momoProvider,
                 mobileMoneyNumber: data.momoNumber.trim(),
                 accountName: data.momoAccountName.trim(),
+                momoNameVerified: data.momoNameVerified,
                 currency: "GHS",
               }
             : {
@@ -982,9 +997,41 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
             helperText={errors.momoNumber || "10-digit Ghana number, e.g. 0241234567"}
             inputProps={{ inputMode: "tel", maxLength: 13 }}
           />
-          <TextField label="Account name" value={data.momoAccountName} fullWidth
-            onChange={(e) => setData((d) => ({ ...d, momoAccountName: e.target.value }))}
-            helperText="Full name as it appears on the MoMo account" />
+          <TextField
+            label="Account name"
+            value={data.momoAccountName}
+            fullWidth
+            slotProps={{
+              input: {
+                readOnly: data.momoNameVerified,
+                endAdornment: momoResolve.status === "loading" ? (
+                  <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment>
+                ) : data.momoNameVerified ? (
+                  <InputAdornment position="end">
+                    <Chip
+                      icon={<CheckCircleRounded />}
+                      label="Verified"
+                      color="success"
+                      size="small"
+                      variant="outlined"
+                    />
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
+            onChange={(e) => {
+              setData((d) => ({ ...d, momoAccountName: e.target.value, momoNameVerified: false }));
+            }}
+            helperText={
+              momoResolve.status === "loading"
+                ? "Verifying account…"
+                : momoResolve.status === "failed"
+                ? `Auto-verify unavailable (${momoResolve.failReason ?? "lookup failed"}) — enter name manually`
+                : data.momoNameVerified
+                ? "Name verified via MoMo network"
+                : "Full name as it appears on the MoMo account"
+            }
+          />
           {data.momoProvider && data.momoNumber && !errors.momoNumber && (
             <Alert severity="success" icon={false} sx={{ borderRadius: 2, py: 1 }}>
               Payouts will be sent to <strong>{data.momoNumber}</strong> via <strong>{data.momoProvider}</strong>.

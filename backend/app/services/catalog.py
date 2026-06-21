@@ -16,7 +16,7 @@ from app.schemas.catalog import ProductCreateIn, ProductUpdateIn
 @dataclass(slots=True)
 class ProductListParams:
     ids: list[str] | None = None
-    seller: str | None = None
+    vendor: str | None = None
     category: str | None = None
     brand: str | None = None
     collection: str | None = None
@@ -69,33 +69,33 @@ def _extract_unique_values(variants: list[dict], key: str) -> list[str]:
     return values
 
 
-def _seller_badge_label(seller: User | None) -> str | None:
-    if seller is None:
+def _seller_badge_label(vendor: User | None) -> str | None:
+    if vendor is None:
         return None
 
-    custom_badge = (seller.seller_badge or "").strip()
+    custom_badge = (vendor.seller_badge or "").strip()
     if custom_badge:
         return custom_badge
 
-    completed_deliveries = seller.completed_deliveries or 0
+    completed_deliveries = vendor.completed_deliveries or 0
     average_delivery_days = (
-        float(seller.average_delivery_days) if seller.average_delivery_days is not None else None
+        float(vendor.average_delivery_days) if vendor.average_delivery_days is not None else None
     )
 
     if average_delivery_days is not None and average_delivery_days <= 2 and completed_deliveries >= 5:
         return "Fast delivery"
 
-    if seller.seller_status == "active" and seller.government_id_verified:
-        return "Verified seller"
+    if vendor.seller_status == "active" and vendor.government_id_verified:
+        return "Verified vendor"
 
     return None
 
 
-def _seller_location_label(seller: User | None) -> str | None:
-    if seller is None:
+def _seller_location_label(vendor: User | None) -> str | None:
+    if vendor is None:
         return None
 
-    location = seller.store_location or {}
+    location = vendor.store_location or {}
     parts = [
         str(location.get("city", "")).strip(),
         str(location.get("state", "")).strip(),
@@ -128,13 +128,13 @@ def _product_to_dict(product: Product) -> dict:
         "brand": product.brand.name,
         "brandId": product.brand.id,
         "brandSlug": product.brand.slug,
-        "sellerId": product.seller.id if product.seller else None,
-        "sellerName": product.seller.name if product.seller else None,
-        "storeName": product.seller.store_name if product.seller else None,
-        "storeSlug": product.seller.store_slug if product.seller else None,
-        "sellerType": product.seller.seller_type if product.seller else None,
-        "sellerBadge": _seller_badge_label(product.seller),
-        "sellerLocation": _seller_location_label(product.seller),
+        "sellerId": product.vendor.id if product.vendor else None,
+        "sellerName": product.vendor.name if product.vendor else None,
+        "storeName": product.vendor.store_name if product.vendor else None,
+        "storeSlug": product.vendor.store_slug if product.vendor else None,
+        "sellerType": product.vendor.seller_type if product.vendor else None,
+        "sellerBadge": _seller_badge_label(product.vendor),
+        "sellerLocation": _seller_location_label(product.vendor),
         "collection": product.collection.slug if product.collection else None,
         "collectionId": product.collection.id if product.collection else None,
         "stock": product.stock,
@@ -190,12 +190,12 @@ def _base_product_query(include_inactive_sellers: bool = False, include_blacklis
         .join(Product.brand)
         .join(Product.category)
         .outerjoin(Product.collection)
-        .outerjoin(Product.seller)
+        .outerjoin(Product.vendor)
         .options(
             selectinload(Product.brand),
             selectinload(Product.category),
             selectinload(Product.collection),
-            selectinload(Product.seller),
+            selectinload(Product.vendor),
         )
     )
 
@@ -218,12 +218,12 @@ def _apply_product_filters(statement, params: ProductListParams):
     if params.ids:
         statement = statement.where(Product.id.in_(params.ids))
 
-    if params.seller:
-        normalized_seller = params.seller.strip().lower()
+    if params.vendor:
+        normalized_seller = params.vendor.strip().lower()
         statement = statement.where(
             or_(
-                Product.seller_id == params.seller,
-                User.store_slug == params.seller,
+                Product.seller_id == params.vendor,
+                User.store_slug == params.vendor,
                 func.lower(func.coalesce(User.store_name, "")) == normalized_seller,
                 func.lower(User.name) == normalized_seller,
             )
@@ -604,13 +604,13 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
     if actor is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="A signed-in seller account is required to create products",
+            detail="A signed-in vendor account is required to create products",
         )
 
     if actor.role != "admin" and actor.seller_status != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your seller account is not active right now",
+            detail="Your vendor account is not active right now",
         )
 
     images = [image.strip() for image in payload.images if image.strip()]
@@ -812,10 +812,10 @@ def get_admin_overview(db: Session) -> dict:
         "brandCount": db.scalar(select(func.count(Brand.id))) or 0,
         "collectionCount": db.scalar(select(func.count(Collection.id))) or 0,
         "userCount": db.scalar(select(func.count(User.id))) or 0,
-        "sellerCount": db.scalar(select(func.count(User.id)).where(User.role.in_(["seller", "admin"]))) or 0,
+        "sellerCount": db.scalar(select(func.count(User.id)).where(User.role.in_(["vendor", "admin"]))) or 0,
         "activeSellerCount": db.scalar(
             select(func.count(User.id)).where(
-                User.role.in_(["seller", "admin"]),
+                User.role.in_(["vendor", "admin"]),
                 User.seller_status == "active",
             )
         ) or 0,
@@ -863,7 +863,7 @@ def _resolve_product_for_actor(
         if actor and actor.seller_status != "active":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Your seller account is not active right now",
+                detail="Your vendor account is not active right now",
             )
 
     return product

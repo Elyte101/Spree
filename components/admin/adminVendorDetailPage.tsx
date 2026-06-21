@@ -35,24 +35,24 @@ const formatDate = (value?: string | null) =>
     : "Not yet started";
 
 const sellerTypeLabels: Record<AdminSellerDetail["sellerType"], string> = {
-  retail: "Retail seller",
-  wholesale: "Wholesale seller",
+  retail: "Retail vendor",
+  wholesale: "Wholesale vendor",
 };
 
 const formatDeliverySpeed = (value?: number | null) =>
   value === null || value === undefined ? "Not tracked" : `${value.toFixed(1)} days average`;
 
-const formatStoreLocation = (seller: AdminSellerDetail) =>
+const formatStoreLocation = (vendor: AdminSellerDetail) =>
   [
-    seller.storeLocation.city,
-    seller.storeLocation.state,
-    seller.storeLocation.country,
+    vendor.storeLocation.city,
+    vendor.storeLocation.state,
+    vendor.storeLocation.country,
   ].filter(Boolean).join(", ") || "Location not provided";
 
 export function AdminVendorDetailPage({
   initialSeller,
 }: AdminVendorDetailPageProps) {
-  const [seller, setSeller] = React.useState(initialSeller);
+  const [vendor, setSeller] = React.useState(initialSeller);
   const [status, setStatus] = React.useState<Extract<SellerStatus, "pending" | "active" | "suspended" | "removed">>(
     (initialSeller.sellerStatus === "buyer" ? "active" : initialSeller.sellerStatus) as Extract<
       SellerStatus,
@@ -83,7 +83,7 @@ export function AdminVendorDetailPage({
     setError(null);
 
     try {
-      const updated = await api.updateAdminSellerStatus(seller.id, {
+      const updated = await api.updateAdminSellerStatus(vendor.id, {
         status,
         sellerNotice,
         adminNote,
@@ -104,12 +104,12 @@ export function AdminVendorDetailPage({
           : String(updated.averageDeliveryDays)
       );
       setGovernmentIdVerified(updated.governmentIdVerified);
-      setMessage("seller status saved.");
+      setMessage("vendor status saved.");
     } catch (saveError) {
       setError(
         saveError instanceof ApiClientError
           ? saveError.message
-          : "We couldn't update this seller right now."
+          : "We couldn't update this vendor right now."
       );
     } finally {
       setSaving(false);
@@ -137,24 +137,24 @@ export function AdminVendorDetailPage({
           alignItems={{ xs: "flex-start", xl: "center" }}
         >
           <Box>
-            <Chip label="seller profile" color="primary" sx={{ mb: 1.5, borderRadius: 999 }} />
+            <Chip label="vendor profile" color="primary" sx={{ mb: 1.5, borderRadius: 999 }} />
             <Typography variant="h4" sx={{ fontWeight: 900 }}>
-              {seller.storeName}
+              {vendor.storeName}
             </Typography>
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
-              <Chip label={sellerTypeLabels[seller.sellerType]} variant="outlined" />
-              {seller.sellerBadge ? (
-                <Chip label={seller.sellerBadge} color="success" variant="outlined" />
+              <Chip label={sellerTypeLabels[vendor.sellerType]} variant="outlined" />
+              {vendor.sellerBadge ? (
+                <Chip label={vendor.sellerBadge} color="success" variant="outlined" />
               ) : null}
             </Stack>
             <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
-              {seller.storeDescription}
+              {vendor.storeDescription}
             </Typography>
           </Box>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
             <Button
               component={Link}
-              href={`/stores/${seller.storeSlug}`}
+              href={`/stores/${vendor.storeSlug}`}
               variant="outlined"
               sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
             >
@@ -184,10 +184,10 @@ export function AdminVendorDetailPage({
         }}
       >
         {[
-          { label: "Followers", value: seller.followerCount },
-          { label: "Recorded purchases", value: seller.purchaseCount },
-          { label: "Products", value: seller.productCount },
-          { label: "Completed deliveries", value: seller.completedDeliveries },
+          { label: "Followers", value: vendor.followerCount },
+          { label: "Recorded purchases", value: vendor.purchaseCount },
+          { label: "Products", value: vendor.productCount },
+          { label: "Completed deliveries", value: vendor.completedDeliveries },
         ].map((item) => (
           <Paper
             key={item.label}
@@ -229,46 +229,46 @@ export function AdminVendorDetailPage({
           >
             <Stack spacing={2}>
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                seller details
+                vendor details
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Name: {seller.name}
+                Name: {vendor.name}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Email: {seller.email}
+                Email: {vendor.email}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Phone: {seller.phone || "Not provided"}
+                Phone: {vendor.phone || "Not provided"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                seller type: {sellerTypeLabels[seller.sellerType]}
+                vendor type: {sellerTypeLabels[vendor.sellerType]}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Store location: {formatStoreLocation(seller)}
+                Store location: {formatStoreLocation(vendor)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Store address: {seller.storeLocation.addressLine1 || "Not provided"}
+                Store address: {vendor.storeLocation.addressLine1 || "Not provided"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Business email: {seller.sellerContact.businessEmail || seller.email}
+                Business email: {vendor.sellerContact.businessEmail || vendor.email}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Business phone: {seller.sellerContact.businessPhone || seller.phone || "Not provided"}
+                Business phone: {vendor.sellerContact.businessPhone || vendor.phone || "Not provided"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Registration: {seller.sellerContact.registrationNumber || "Not provided"}
+                Registration: {vendor.sellerContact.registrationNumber || "Not provided"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Government ID: {seller.governmentIdType} {seller.governmentIdNumber || "Not provided"}
+                Government ID: {vendor.governmentIdType} {vendor.governmentIdNumber || "Not provided"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Verification: {seller.governmentIdVerified ? "Verified" : "Pending review"}
+                Verification: {vendor.governmentIdVerified ? "Verified" : "Pending review"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Selling since: {formatDate(seller.startedAt)}
+                Selling since: {formatDate(vendor.startedAt)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Delivery speed: {formatDeliverySpeed(seller.averageDeliveryDays)}
+                Delivery speed: {formatDeliverySpeed(vendor.averageDeliveryDays)}
               </Typography>
             </Stack>
           </Paper>
@@ -286,8 +286,8 @@ export function AdminVendorDetailPage({
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
                 Reports from buyers
               </Typography>
-              {seller.reports.length ? (
-                seller.reports.map((report) => (
+              {vendor.reports.length ? (
+                vendor.reports.map((report) => (
                   <Paper
                     key={report.id}
                     elevation={0}
@@ -314,7 +314,7 @@ export function AdminVendorDetailPage({
                 ))
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  No buyer reports on this seller yet.
+                  No buyer reports on this vendor yet.
                 </Typography>
               )}
             </Stack>
@@ -337,7 +337,7 @@ export function AdminVendorDetailPage({
               </Typography>
               <TextField
                 select
-                label="seller status"
+                label="vendor status"
                 value={status}
                 onChange={(event) =>
                   setStatus(
@@ -357,13 +357,13 @@ export function AdminVendorDetailPage({
                     onChange={(event) => setGovernmentIdVerified(event.target.checked)}
                   />
                 }
-                label="Verify seller identity"
+                label="Verify vendor identity"
               />
               <TextField
-                label="Public seller badge"
+                label="Public vendor badge"
                 value={sellerBadge}
                 onChange={(event) => setSellerBadge(event.target.value)}
-                helperText="Examples: Verified seller, Fast delivery, Trusted seller"
+                helperText="Examples: Verified vendor, Fast delivery, Trusted vendor"
               />
               <TextField
                 label="Completed deliveries"
@@ -380,12 +380,12 @@ export function AdminVendorDetailPage({
                 slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
               />
               <TextField
-                label="seller notice"
+                label="vendor notice"
                 value={sellerNotice}
                 onChange={(event) => setSellerNotice(event.target.value)}
                 multiline
                 minRows={3}
-                helperText="Visible to the seller on their profile."
+                helperText="Visible to the vendor on their profile."
               />
               <TextField
                 label="Admin note"
@@ -422,13 +422,13 @@ export function AdminVendorDetailPage({
                   Identity documents
                 </Typography>
                 <Chip
-                  label={seller.governmentIdVerified ? "Verified" : "Pending review"}
-                  color={seller.governmentIdVerified ? "success" : "warning"}
+                  label={vendor.governmentIdVerified ? "Verified" : "Pending review"}
+                  color={vendor.governmentIdVerified ? "success" : "warning"}
                   size="small"
                 />
               </Stack>
 
-              {seller.idFrontUrl || seller.idBackUrl || seller.selfieUrl ? (
+              {vendor.idFrontUrl || vendor.idBackUrl || vendor.selfieUrl ? (
                 <Box
                   sx={{
                     display: "grid",
@@ -437,9 +437,9 @@ export function AdminVendorDetailPage({
                   }}
                 >
                   {[
-                    { label: "ID front", url: seller.idFrontUrl },
-                    { label: "ID back", url: seller.idBackUrl },
-                    { label: "Selfie", url: seller.selfieUrl },
+                    { label: "ID front", url: vendor.idFrontUrl },
+                    { label: "ID back", url: vendor.idBackUrl },
+                    { label: "Selfie", url: vendor.selfieUrl },
                   ]
                     .filter((doc) => doc.url)
                     .map((doc) => {
@@ -497,7 +497,7 @@ export function AdminVendorDetailPage({
               )}
 
               <Typography variant="caption" color="text.secondary">
-                Use the &quot;Verify seller identity&quot; toggle in Admin controls to approve after review.
+                Use the &quot;Verify vendor identity&quot; toggle in Admin controls to approve after review.
                 Clicking an image opens it full size in a new tab.
               </Typography>
             </Stack>
@@ -517,10 +517,10 @@ export function AdminVendorDetailPage({
                 Fulfillment references
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Shipping: {seller.shippingAddress.addressLine1 || "Not configured"}
+                Shipping: {vendor.shippingAddress.addressLine1 || "Not configured"}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Payment method: {seller.paymentInfo.method}
+                Payment method: {vendor.paymentInfo.method}
               </Typography>
             </Stack>
           </Paper>

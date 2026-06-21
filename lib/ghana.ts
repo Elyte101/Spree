@@ -217,7 +217,7 @@ export const GHANA_ID_TYPES: { value: string; label: string }[] = [
 ];
 
 /**
- * Per-ID-type format specifications for seller identity verification.
+ * Per-ID-type format specifications for vendor identity verification.
  * Patterns verified against: NIA (Ghana Card), EC Ghana (Voter's ID),
  * DVLA Ghana (Driver's License), GIS (Passport/ECOWAS), SSNIT.
  */

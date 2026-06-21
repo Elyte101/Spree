@@ -41,23 +41,23 @@ const formatDate = (value?: string | null) =>
     : "Recently joined";
 
 const sellerTypeLabels: Record<SellerDetail["sellerType"], string> = {
-  retail: "Retail seller",
-  wholesale: "Wholesale seller",
+  retail: "Retail vendor",
+  wholesale: "Wholesale vendor",
 };
 
 const formatDeliverySpeed = (value?: number | null) =>
   value === null || value === undefined ? "Delivery speed not tracked" : `${value.toFixed(1)} day average delivery`;
 
-const formatStoreLocation = (seller: SellerDetail) =>
+const formatStoreLocation = (vendor: SellerDetail) =>
   [
-    seller.storeLocation.city,
-    seller.storeLocation.state,
-    seller.storeLocation.country,
+    vendor.storeLocation.city,
+    vendor.storeLocation.state,
+    vendor.storeLocation.country,
   ].filter(Boolean).join(", ") || "Location not provided";
 
 export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
   const { status } = useSession();
-  const [seller, setSeller] = React.useState(initialSeller);
+  const [vendor, setSeller] = React.useState(initialSeller);
   const [reportReason, setReportReason] = React.useState("misleading-listing");
   const [reportDetails, setReportDetails] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null);
@@ -71,12 +71,12 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
     setMessage(null);
 
     try {
-      const updated = await api.followSeller(seller.id);
+      const updated = await api.followSeller(vendor.id);
       setSeller((current) => ({
         ...current,
         followerCount: updated.followerCount,
       }));
-      setMessage(`You are now following ${seller.storeName}.`);
+      setMessage(`You are now following ${vendor.storeName}.`);
     } catch (followError) {
       setError(
         followError instanceof ApiClientError
@@ -94,7 +94,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
     setMessage(null);
 
     try {
-      const updated = await api.reportSeller(seller.id, {
+      const updated = await api.reportSeller(vendor.id, {
         reason: reportReason as
           | "counterfeit"
           | "fraud"
@@ -149,40 +149,40 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
             <Stack spacing={1.5} sx={{ maxWidth: 760 }}>
               <Chip
                 icon={<StorefrontRounded />}
-                label="seller storefront"
+                label="vendor storefront"
                 color="primary"
                 sx={{ width: "fit-content", borderRadius: 999 }}
               />
               <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-                {seller.storeName}
+                {vendor.storeName}
               </Typography>
-              {seller.storeTagline ? (
+              {vendor.storeTagline ? (
                 <Typography variant="h6" color="text.secondary">
-                  {seller.storeTagline}
+                  {vendor.storeTagline}
                 </Typography>
               ) : null}
               <Typography variant="body1" color="text.secondary">
-                {seller.storeDescription}
+                {vendor.storeDescription}
               </Typography>
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                <Chip label={sellerTypeLabels[seller.sellerType]} variant="outlined" />
-                {seller.governmentIdVerified && (
+                <Chip label={sellerTypeLabels[vendor.sellerType]} variant="outlined" />
+                {vendor.governmentIdVerified && (
                   <Chip
                     icon={<VerifiedRounded sx={{ fontSize: 15 }} />}
-                    label="Verified seller"
+                    label="Verified vendor"
                     color="success"
                     size="small"
                     sx={{ fontWeight: 700 }}
                   />
                 )}
-                {seller.sellerBadge ? (
-                  <Chip label={seller.sellerBadge} color="success" variant="outlined" />
+                {vendor.sellerBadge ? (
+                  <Chip label={vendor.sellerBadge} color="success" variant="outlined" />
                 ) : null}
-                <Chip label={formatStoreLocation(seller)} variant="outlined" />
-                <Chip label={`${seller.followerCount} followers`} variant="outlined" />
-                <Chip label={`${seller.purchaseCount} recorded purchases`} variant="outlined" />
-                <Chip label={`${seller.completedDeliveries} completed deliveries`} variant="outlined" />
-                <Chip label={`Selling since ${formatDate(seller.startedAt)}`} variant="outlined" />
+                <Chip label={formatStoreLocation(vendor)} variant="outlined" />
+                <Chip label={`${vendor.followerCount} followers`} variant="outlined" />
+                <Chip label={`${vendor.purchaseCount} recorded purchases`} variant="outlined" />
+                <Chip label={`${vendor.completedDeliveries} completed deliveries`} variant="outlined" />
+                <Chip label={`Selling since ${formatDate(vendor.startedAt)}`} variant="outlined" />
               </Stack>
             </Stack>
 
@@ -194,7 +194,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                 onClick={handleFollow}
                 sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
               >
-                {following ? "Following..." : "Follow seller"}
+                {following ? "Following..." : "Follow vendor"}
               </Button>
               <Button
                 component={Link}
@@ -208,8 +208,8 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
           </Stack>
         </Paper>
 
-        {seller.sellerNotice ? (
-          <Alert severity="warning">{seller.sellerNotice}</Alert>
+        {vendor.sellerNotice ? (
+          <Alert severity="warning">{vendor.sellerNotice}</Alert>
         ) : null}
         {message ? <Alert severity="success">{message}</Alert> : null}
         {error ? <Alert severity="error">{error}</Alert> : null}
@@ -242,8 +242,8 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                   gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
                 }}
               >
-                {seller.products.length ? (
-                  seller.products.map((product) => (
+                {vendor.products.length ? (
+                  vendor.products.map((product) => (
                     <ProductCard key={product.id} product={product} size="compact" />
                   ))
                 ) : (
@@ -258,7 +258,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                     }}
                   >
                     <Typography variant="body2" color="text.secondary">
-                      This seller has not published products yet.
+                      This vendor has not published products yet.
                     </Typography>
                   </Paper>
                 )}
@@ -284,7 +284,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                   </Typography>
                 </Stack>
                 <Typography variant="body2" color="text.secondary">
-                  If a store behaves suspiciously, buyers can flag it and the admin can suspend or remove the seller privately.
+                  If a store behaves suspiciously, buyers can flag it and the admin can suspend or remove the vendor privately.
                 </Typography>
                 <TextField
                   select
@@ -315,7 +315,7 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                   disabled={status !== "authenticated" || reporting}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
-                  {reporting ? "Sending report..." : "Report seller"}
+                  {reporting ? "Sending report..." : "Report vendor"}
                 </Button>
               </Stack>
             </Paper>
@@ -334,22 +334,22 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                   Store health
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Reports filed: {seller.reportCount}
+                  Reports filed: {vendor.reportCount}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  seller status: {seller.sellerStatus}
+                  vendor status: {vendor.sellerStatus}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Store type: {sellerTypeLabels[seller.sellerType]}
+                  Store type: {sellerTypeLabels[vendor.sellerType]}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Location: {formatStoreLocation(seller)}
+                  Location: {formatStoreLocation(vendor)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Contact: {seller.sellerContact.businessPhone || seller.sellerContact.businessEmail || "Not provided"}
+                  Contact: {vendor.sellerContact.businessPhone || vendor.sellerContact.businessEmail || "Not provided"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {formatDeliverySpeed(seller.averageDeliveryDays)}
+                  {formatDeliverySpeed(vendor.averageDeliveryDays)}
                 </Typography>
               </Stack>
             </Paper>

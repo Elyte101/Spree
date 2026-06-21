@@ -188,7 +188,7 @@ async function validateImage(
       `or\n` +
       `{"approved":false,"issues":["Specific actionable reason 1","Specific actionable reason 2"]}\n` +
       `\nWrite every rejection reason in ${language}. ` +
-      `Be specific and actionable so the seller knows exactly what to fix.`;
+      `Be specific and actionable so the vendor knows exactly what to fix.`;
 
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -318,7 +318,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // AI quality gate — runs after format normalisation so we always send a
-  // web-safe image to the model regardless of what the seller originally uploaded.
+  // web-safe image to the model regardless of what the vendor originally uploaded.
   const validation = await validateImage(finalBytes, finalFormat, productName, language);
   if (!validation.approved) {
     return Response.json(
