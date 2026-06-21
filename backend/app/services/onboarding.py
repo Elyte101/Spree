@@ -1,4 +1,4 @@
-"""vendor onboarding wizard — step-by-step registration with resume support."""
+"""seller onboarding wizard — step-by-step registration with resume support."""
 from __future__ import annotations
 
 import re
@@ -178,11 +178,11 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
         raise HTTPException(status_code=400, detail="Store details are required")
 
     user.seller_status = "pending_verification"
-    user.role = "vendor"
+    user.role = "seller"
     user.seller_started_at = user.seller_started_at or datetime.now(timezone.utc)
     db.commit()
 
-    # Notify the vendor
+    # Notify the seller
     notif_svc.notify(
         db,
         event_type="docs_submitted",
@@ -191,7 +191,7 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
         body="We've received your identity documents and will review them shortly. "
              "We aim to verify accounts within 1–2 business days.",
         href="/settings",
-        email_subject="Your Spree vendor application is under review",
+        email_subject="Your Spree seller application is under review",
         cta_label="View your profile",
         cta_url=f"{settings.frontend_url}/settings",
     )
@@ -204,11 +204,11 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
             db,
             event_type="new_verification_pending",
             recipient_id=admin.id,
-            title="New vendor awaiting verification",
+            title="New seller awaiting verification",
             body=f"{user.name} ({user.email}) has submitted their documents. "
                  "Review their application in the verification queue.",
             href="/dashboard/verification",
-            email_subject="New vendor verification request",
+            email_subject="New seller verification request",
             cta_label="Review now",
             cta_url=f"{settings.frontend_url}/dashboard/verification",
         )

@@ -49,8 +49,8 @@ interface ProfilePageProps {
 }
 
 const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
-  retail: "Retail vendor",
-  wholesale: "Wholesale vendor",
+  retail: "Retail seller",
+  wholesale: "Wholesale seller",
 };
 
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
@@ -88,7 +88,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
   const isAdmin = profile.role === "admin";
-  const sellerSwitchChecked = isAdmin || profile.role === "vendor";
+  const sellerSwitchChecked = isAdmin || profile.role === "seller";
   const savedSellerAccess =
     isAdmin || (canCreateProductsRole(profile.role) && profile.sellerStatus === "active");
 
@@ -225,7 +225,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   };
 
-  const canUploadDocs = profile.role === "vendor" && !isAdmin;
+  const canUploadDocs = profile.role === "seller" && !isAdmin;
 
   return (
     <Box
@@ -291,7 +291,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   startIcon={<AddBusinessRounded />}
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                 >
-                  Become a vendor
+                  Become a seller
                 </Button>
               ) : (
                 <Button
@@ -372,7 +372,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               </Stack>
             </Paper>
 
-            {profile.role !== "vendor" && !isAdmin && (
+            {profile.role !== "seller" && !isAdmin && (
               <Paper
                 elevation={0}
                 sx={{
@@ -401,7 +401,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     fullWidth
                     sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, py: 1.5 }}
                   >
-                    Apply to become a vendor
+                    Apply to become a seller
                   </Button>
                 </Stack>
               </Paper>
@@ -665,12 +665,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     : profile.sellerStatus === "pending"
                       ? "Your storefront application is waiting for admin approval before products can go live."
                     : profile.sellerStatus === "suspended"
-                      ? "Your store is temporarily paused. Review the vendor notice above before contacting admin."
+                      ? "Your store is temporarily paused. Review the seller notice above before contacting admin."
                       : profile.sellerStatus === "removed"
-                        ? "Your vendor access was removed. Buyer features still work, but product publishing is disabled."
+                        ? "Your seller access was removed. Buyer features still work, but product publishing is disabled."
                     : sellerSwitchChecked
                       ? "Your application is in review. An admin will activate your store soon."
-                      : "Apply to become a vendor to start publishing products on Spree."}
+                      : "Apply to become a seller to start publishing products on Spree."}
                 </Typography>
                 <Button
                   component={Link}
@@ -724,8 +724,8 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   Marketplace model
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Buyers can browse immediately. Sellers must register a store with identity details, and admins can monitor vendor health privately.
-                  Approved sellers keep buyer checkout access while managing their storefront and product catalog.
+                  Buyers can browse immediately. Vendors must register a store with identity details, and admins can monitor seller health privately.
+                  Approved vendors keep buyer checkout access while managing their storefront and product catalog.
                 </Typography>
               </Stack>
             </Paper>
@@ -826,7 +826,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             )}
 
             {/* ── PAYOUT INFO ── */}
-            {(profile.role === "vendor" || isAdmin) && (
+            {(profile.role === "seller" || isAdmin) && (
               <Paper
                 elevation={0}
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}

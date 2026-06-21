@@ -52,7 +52,7 @@ def products(
     db: DBSession,
     is_internal: OptionalInternalKey,
     ids: str | None = Query(default=None),
-    vendor: str | None = Query(default=None),
+    seller: str | None = Query(default=None),
     category: str | None = Query(default=None),
     brand: str | None = Query(default=None),
     collection: str | None = Query(default=None),
@@ -70,7 +70,7 @@ def products(
         db,
         ProductListParams(
             ids=_parse_csv(ids),
-            vendor=vendor,
+            seller=seller,
             category=category,
             brand=brand,
             collection=collection,

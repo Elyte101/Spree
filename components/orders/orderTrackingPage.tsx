@@ -94,7 +94,7 @@ function buildSteps(order: OrderDetail): TrackStep[] {
     {
       key: "shipped",
       label: "Shipped",
-      sublabel: order.shippedAt ? formatDate(order.shippedAt) : "Awaiting dispatch from vendor",
+      sublabel: order.shippedAt ? formatDate(order.shippedAt) : "Awaiting dispatch from seller",
       done: !!order.shippedAt,
       active: !!order.shippedAt && !order.deliveredAt,
       icon: <LocalShippingOutlined />,
@@ -403,7 +403,7 @@ export function OrderTrackingPage({ order }: { order: OrderDetail }) {
               </Stack>
               {order.estimatedDeliveryDays && (
                 <Stack direction="row" justifyContent="space-between" mt={0.5}>
-                  <Typography variant="body2" color="text.secondary">vendor estimate</Typography>
+                  <Typography variant="body2" color="text.secondary">seller estimate</Typography>
                   <Typography variant="body2" fontWeight={600}>{order.estimatedDeliveryDays} day{order.estimatedDeliveryDays !== 1 ? "s" : ""}</Typography>
                 </Stack>
               )}

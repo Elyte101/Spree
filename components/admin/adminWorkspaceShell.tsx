@@ -45,7 +45,7 @@ interface NavItem {
 
 const roleLabelMap: Record<UserRole, string> = {
   admin: "Admin",
-  vendor: "vendor",
+  seller: "seller",
   customer: "Customer",
 };
 
@@ -93,8 +93,8 @@ export function AdminWorkspaceShell({
     ...(userRole === "admin"
       ? [
           {
-            label: "Sellers",
-            href: "/dashboard/sellers",
+            label: "Vendors",
+            href: "/dashboard/vendors",
             icon: <ManageAccountsRounded fontSize="small" />,
           },
           {

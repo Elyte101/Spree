@@ -31,19 +31,19 @@ def onboarding_reminder(db: Session = Depends(get_db)) -> dict:
     ).all()
 
     reminded = 0
-    for vendor in sellers:
-        next_step = (vendor.onboarding_step or 0) + 1
+    for seller in sellers:
+        next_step = (seller.onboarding_step or 0) + 1
         notif_svc.notify(
             db,
             event_type="onboarding_reminder",
-            recipient_id=vendor.id,
+            recipient_id=seller.id,
             title="Finish setting up your store",
-            body=f"You're on step {vendor.onboarding_step or 0} of 5. "
-                 "Complete your vendor profile to start listing products.",
-            href="/vendor/register",
+            body=f"You're on step {seller.onboarding_step or 0} of 5. "
+                 "Complete your seller profile to start listing products.",
+            href="/seller/register",
             email_subject="Don't forget — your Spree store is almost ready",
             cta_label=f"Continue to step {next_step}",
-            cta_url=f"{settings.frontend_url}/vendor/register",
+            cta_url=f"{settings.frontend_url}/seller/register",
         )
         reminded += 1
 

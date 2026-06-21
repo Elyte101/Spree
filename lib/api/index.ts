@@ -193,19 +193,19 @@ export const api = {
   /* ---------- SELLERS ---------- */
 
   getSellers: () =>
-    requestJson<SellerSummary[]>("/api/sellers"),
+    requestJson<SellerSummary[]>("/api/vendors"),
 
   getSeller: (id: string) =>
-    requestJson<SellerDetail>(`/api/sellers/${id}`),
+    requestJson<SellerDetail>(`/api/vendors/${id}`),
 
   followSeller: (id: string) =>
-    requestJson<SellerSummary>(`/api/sellers/${id}/follow`, {
+    requestJson<SellerSummary>(`/api/vendors/${id}/follow`, {
       method: "POST",
       body: JSON.stringify({}),
     }),
 
   reportSeller: (id: string, payload: ReportSellerPayload) =>
-    requestJson<SellerSummary>(`/api/sellers/${id}/report`, {
+    requestJson<SellerSummary>(`/api/vendors/${id}/report`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -217,15 +217,15 @@ export const api = {
 
   getAdminSellers: (filter?: "all" | "blacklisted" | "inactive") =>
     requestJson<SellerSummary[]>(
-      `/api/admin/sellers${buildQueryString(filter && filter !== "all" ? { filter } : {})}`
+      `/api/admin/vendors${buildQueryString(filter && filter !== "all" ? { filter } : {})}`
     ),
 
   getAdminSeller: (id: string) =>
-    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}`),
+    requestJson<AdminSellerDetail>(`/api/admin/vendors/${id}`),
 
   updateAdminSellerStatus: (id: string, payload: UpdateSellerStatusPayload) =>
     requestJson<AdminSellerDetail>(
-      `/api/admin/sellers/${id}/status`,
+      `/api/admin/vendors/${id}/status`,
       {
         method: "PUT",
         body: JSON.stringify(payload),
@@ -233,10 +233,10 @@ export const api = {
     ),
 
   deleteAdminSeller: (id: string) =>
-    requestJson<void>(`/api/admin/sellers/${id}`, { method: "DELETE" }),
+    requestJson<void>(`/api/admin/vendors/${id}`, { method: "DELETE" }),
 
   blacklistAdminSeller: (id: string, blacklisted: boolean) =>
-    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/blacklist`, {
+    requestJson<AdminSellerDetail>(`/api/admin/vendors/${id}/blacklist`, {
       method: "PATCH",
       body: JSON.stringify({ blacklisted }),
     }),
@@ -302,17 +302,17 @@ export const api = {
     requestJson<VerificationQueueItem[]>("/api/admin/verification"),
 
   approveSeller: (id: string) =>
-    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/approve`, { method: "POST" }),
+    requestJson<AdminSellerDetail>(`/api/admin/vendors/${id}/approve`, { method: "POST" }),
 
   rejectSeller: (id: string, payload: SellerRejectPayload) =>
-    requestJson<AdminSellerDetail>(`/api/admin/sellers/${id}/reject`, {
+    requestJson<AdminSellerDetail>(`/api/admin/vendors/${id}/reject`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
   getSellerDocumentUrls: (id: string) =>
     requestJson<{ idFrontUrl: string; idBackUrl: string; selfieUrl: string }>(
-      `/api/admin/sellers/${id}/documents`
+      `/api/admin/vendors/${id}/documents`
     ),
 
   /* ---------- NOTIFICATIONS (EXTENDED) ---------- */

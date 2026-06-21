@@ -115,7 +115,7 @@ const createFallbackUserProfile = (
     registrationNumber: "",
   },
   sellerType: "retail",
-  sellerStatus: fallback?.role === "vendor" || fallback?.role === "admin" ? "active" : "buyer",
+  sellerStatus: fallback?.role === "seller" || fallback?.role === "admin" ? "active" : "buyer",
   sellerBadge: "",
   completedDeliveries: 0,
   averageDeliveryDays: null,
@@ -491,7 +491,7 @@ export const getOrder = async (
 
 export const getSellerOrders = (sellerId: string) =>
   getJson<import("@/types/types").OrderListItem[]>(
-    "/vendor/orders",
+    "/seller/orders",
     { headers: { "X-Actor-User-Id": sellerId } },
     { internal: true, fallback: () => [] }
   );

@@ -628,7 +628,7 @@ export function ProductCreateForm({
                     label="Badge"
                     value={badge}
                     onChange={(event) => setBadge(event.target.value)}
-                    helperText="Optional short label such as Best vendor or Limited"
+                    helperText="Optional short label such as Best seller or Limited"
                   />
                   <TextField
                     label="Tags"

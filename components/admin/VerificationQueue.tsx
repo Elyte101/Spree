@@ -60,7 +60,7 @@ export function VerificationQueue() {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box mb={4}>
         <Typography variant="h5" fontWeight={700}>
-          vendor verification
+          seller verification
         </Typography>
         <Typography color="text.secondary">
           {items.length} application{items.length !== 1 ? "s" : ""} pending review
@@ -71,7 +71,7 @@ export function VerificationQueue() {
         <Paper variant="outlined" sx={{ p: 6, textAlign: "center", borderRadius: 3 }}>
           <VerifiedRounded sx={{ fontSize: 48, color: "success.main", mb: 2 }} />
           <Typography variant="h6" fontWeight={600}>All caught up!</Typography>
-          <Typography color="text.secondary">No pending vendor applications.</Typography>
+          <Typography color="text.secondary">No pending seller applications.</Typography>
         </Paper>
       ) : (
         <Box
@@ -95,7 +95,7 @@ export function VerificationQueue() {
           {/* Detail panel */}
           {selected && (
             <VerificationDetail
-              vendor={selected}
+              seller={selected}
               onDecision={handleDecision}
               onClose={() => setSelected(null)}
             />

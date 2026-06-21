@@ -23,7 +23,7 @@ export const authConfig: NextAuthConfig = {
     session({ session, token }) {
       if (session.user) {
         if (token.id) session.user.id = token.id as string;
-        if (token.role) session.user.role = token.role as "customer" | "vendor" | "admin";
+        if (token.role) session.user.role = token.role as "customer" | "seller" | "admin";
       }
       return session;
     },

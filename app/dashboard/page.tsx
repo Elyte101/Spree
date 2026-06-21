@@ -23,7 +23,7 @@ import { formatPrice } from "@/lib/ghana";
 
 export const metadata: Metadata = {
   title: "Dashboard | Spree",
-  description: "Your vendor dashboard",
+  description: "Your seller dashboard",
 };
 
 const formatDate = (value: string) =>
@@ -56,7 +56,7 @@ export default async function Dashboard() {
   const [overview, catalog] = await Promise.all([
     isAdmin ? getAdminOverview() : Promise.resolve(null),
     canManageProducts
-      ? getProducts({ limit: 6, sort: "newest", vendor: sellerProfile?.id })
+      ? getProducts({ limit: 6, sort: "newest", seller: sellerProfile?.id })
       : Promise.resolve(null),
   ]);
   const firstName = userName.split(" ")[0] ?? userName;
@@ -283,7 +283,7 @@ export default async function Dashboard() {
                       2. Keep inventory healthy so out-of-stock and low-stock items do not break the storefront story.
                     </Typography>
                     <Typography variant="body2">
-                      3. Watch vendor reports, follower growth, and top products so marketplace trust stays strong.
+                      3. Watch seller reports, follower growth, and top products so marketplace trust stays strong.
                     </Typography>
                   </Stack>
                 </Stack>
@@ -308,17 +308,17 @@ export default async function Dashboard() {
                   {sellerProfile ? (
                     <>
                       <Typography variant="body2" color="text.secondary">
-                        vendor status: {sellerProfile.sellerStatus}
+                        seller status: {sellerProfile.sellerStatus}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        vendor badge: {sellerProfile.sellerBadge || "Not assigned"}
+                        seller badge: {sellerProfile.sellerBadge || "Not assigned"}
                       </Typography>
                     </>
                   ) : null}
                   {isAdmin ? (
                     <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ pt: 1 }}>
                       <Button
-                        href="/dashboard/sellers"
+                        href="/dashboard/vendors"
                         variant="outlined"
                         sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
                       >

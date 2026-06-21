@@ -13,7 +13,7 @@ export interface ProductQueryParams {
   category?: string;
   brand?: string;
   collection?: string;
-  vendor?: string;
+  seller?: string;
   tag?: string;
   search?: string;
   sort?: CatalogSort;

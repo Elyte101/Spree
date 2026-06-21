@@ -5,7 +5,7 @@ export type CatalogSort =
   | "price-desc"
   | "rating";
 
-export type UserRole = "customer" | "vendor" | "admin";
+export type UserRole = "customer" | "seller" | "admin";
 export type PaymentMethod = "card" | "bank-transfer" | "mobile_money";
 export type SellerStatus =
   | "buyer"

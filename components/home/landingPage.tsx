@@ -65,8 +65,8 @@ const trustPillars = [
   },
   {
     icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
-    title: "Verified Sellers",
-    desc: "Every vendor submits a Ghana Card and selfie before listing.",
+    title: "Verified Vendors",
+    desc: "Every seller submits a Ghana Card and selfie before listing.",
     color: "#22C55E",
     bg: "rgba(34,197,94,0.1)",
   },
@@ -90,21 +90,21 @@ const escrowSteps = [
   {
     step: "01",
     title: "You pay into escrow",
-    body: "Place your order and pay via MoMo, card, or Telecel Cash. Your money is held safely — the vendor receives nothing yet.",
+    body: "Place your order and pay via MoMo, card, or Telecel Cash. Your money is held safely — the seller receives nothing yet.",
     accent: "#655AFF",
     icon: <SecurityRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "02",
-    title: "vendor dispatches",
-    body: "The verified vendor packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
+    title: "seller dispatches",
+    body: "The verified seller packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
     accent: "#0EA5E9",
     icon: <LocalShippingRounded sx={{ fontSize: 22 }} />,
   },
   {
     step: "03",
-    title: "You confirm — vendor gets paid",
-    body: "Once you confirm delivery, Spree releases payment instantly to the vendor's MoMo or bank. No delivery = no payment.",
+    title: "You confirm — seller gets paid",
+    body: "Once you confirm delivery, Spree releases payment instantly to the seller's MoMo or bank. No delivery = no payment.",
     accent: "#22C55E",
     icon: <VerifiedRounded sx={{ fontSize: 22 }} />,
   },
@@ -225,7 +225,7 @@ export function LandingPage({
                   })}
                 >
                   {hero?.subtitle ??
-                    "Buy from verified Ghanaian sellers with full escrow protection. Pay with Mobile Money or card — your money stays safe until your order arrives."}
+                    "Buy from verified Ghanaian vendors with full escrow protection. Pay with Mobile Money or card — your money stays safe until your order arrives."}
                 </Typography>
               </motion.div>
 
@@ -620,7 +620,7 @@ export function LandingPage({
               sx={{ maxWidth: 500, mx: "auto", lineHeight: 1.75 }}
             >
               Online shopping in Ghana comes with uncertainty. Spree eliminates that —
-              with escrow payments, verified sellers, and real-time tracking.
+              with escrow payments, verified vendors, and real-time tracking.
             </Typography>
           </Box>
           </motion.div>
@@ -937,7 +937,7 @@ export function LandingPage({
               viewport={{ once: true, margin: "-60px" }}
               transition={{ duration: 0.5, ease }}
             >
-              <Typography variant="overline" color="primary.main" fontWeight={700}>For sellers</Typography>
+              <Typography variant="overline" color="primary.main" fontWeight={700}>For vendors</Typography>
               <Typography variant="h3" fontWeight={800} lineHeight={1.05} mt={0.5} color="text.primary">
                 Sell across Ghana.<br />Get paid instantly.
               </Typography>
@@ -1044,7 +1044,7 @@ export function LandingPage({
               sx={{ color: alpha("#fff", 0.72), maxWidth: 440, mx: "auto" }}
             >
               {hasProducts
-                ? `${totalProducts.toLocaleString()} products from verified Ghanaian sellers — escrow protection on every order.`
+                ? `${totalProducts.toLocaleString()} products from verified Ghanaian vendors — escrow protection on every order.`
                 : "We're setting up the store. Check back soon for the first arrivals."}
             </Typography>
 

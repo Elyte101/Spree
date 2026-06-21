@@ -52,7 +52,7 @@ def orders_list(
     return []
 
 
-@router.get("/vendor/orders", response_model=list[OrderListItemOut])
+@router.get("/seller/orders", response_model=list[OrderListItemOut])
 def seller_orders_list(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
     if not actor_id:
         return []

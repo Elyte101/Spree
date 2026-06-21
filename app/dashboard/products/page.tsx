@@ -60,7 +60,7 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
     getProducts({
       limit: 48,
       sort: "newest",
-      vendor: sellerProfile?.id,
+      seller: sellerProfile?.id,
       includeBlacklisted: isAdmin,
     }),
     isAdmin ? getAdminOverview() : Promise.resolve(null),
