@@ -141,19 +141,34 @@ const FIELD_TO_STEP: Record<string, number> = {
 
 // ── LocalStorage helpers ───────────────────────────────────────────────────────
 
-function saveDraft(data: WizardData) {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch { /* quota / SSR */ }
+interface DraftPayload extends WizardData { _step?: number }
+
+function saveDraft(data: WizardData, step: number) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ ...data, _step: step })); } catch { /* quota / SSR */ }
 }
 
-function loadDraft(): Partial<WizardData> | null {
+function loadDraft(): DraftPayload | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? (JSON.parse(raw) as Partial<WizardData>) : null;
+    return raw ? (JSON.parse(raw) as DraftPayload) : null;
   } catch { return null; }
 }
 
 function clearDraft() {
   try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+
+// ── Error serialisation ────────────────────────────────────────────────────────
+
+function toErrorMessage(detail: unknown): string {
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) => (d && typeof d === "object" && "msg" in d) ? String((d as { msg: unknown }).msg) : null)
+      .filter(Boolean) as string[];
+    return msgs.length ? msgs.join("; ") : "Validation failed — please check your information.";
+  }
+  return "An unexpected error occurred. Please try again.";
 }
 
 // ── Image validation ───────────────────────────────────────────────────────────
@@ -291,6 +306,13 @@ function validateStep(
 }
 
 // ── Initial data from profile + draft ─────────────────────────────────────────
+
+function buildInitialStep(): number {
+  const d = loadDraft();
+  // Never restore directly to the Review step (step 7) — user should confirm
+  const saved = d?._step ?? 0;
+  return Math.min(saved, STEP_LABELS.length - 2);
+}
 
 function buildInitialData(profile: UserProfile): WizardData {
   const d = loadDraft();
@@ -590,10 +612,13 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  const [step, setStep] = React.useState(0);
+  const [step, setStep] = React.useState(() => buildInitialStep());
   const [data, setData] = React.useState<WizardData>(() => buildInitialData(profile));
   const [errors, setErrors] = React.useState<StepErrors>({});
-  const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(new Set());
+  const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(() => {
+    const s = buildInitialStep();
+    return new Set(Array.from({ length: s }, (_, i) => i));
+  });
   const [submitting, setSubmitting] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = React.useState(false);
@@ -611,8 +636,8 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
   const [errBack, setErrBack] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
   const [errSelfie, setErrSelfie] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
 
-  // Auto-save draft
-  React.useEffect(() => { saveDraft(data); }, [data]);
+  // Auto-save draft (include current step so it survives page reload)
+  React.useEffect(() => { saveDraft(data, step); }, [data, step]);
 
   // Cleanup object URLs
   React.useEffect(() => {
@@ -711,8 +736,8 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
         if (idSelfie) fd.append("selfie", idSelfie);
         const docsRes = await fetch("/api/auth/id-documents", { method: "POST", body: fd });
         if (!docsRes.ok) {
-          const d = (await docsRes.json()) as { detail?: string };
-          throw new Error(d.detail ?? "Document upload failed. Please try again.");
+          const d = (await docsRes.json()) as { detail?: unknown };
+          throw new Error(d.detail !== undefined ? toErrorMessage(d.detail) : "Document upload failed. Please try again.");
         }
       }
 
@@ -778,7 +803,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
       });
 
       if (!res.ok) {
-        const body = (await res.json()) as { detail?: string; errors?: Record<string, string> };
+        const body = (await res.json()) as { detail?: unknown; errors?: Record<string, string> };
         if (res.status === 422 && body.errors) {
           for (const [field, msg] of Object.entries(body.errors)) {
             const stepIdx = FIELD_TO_STEP[field];
@@ -790,7 +815,9 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
             }
           }
         }
-        throw new Error(body.detail ?? `Save failed (${res.status}). Please try again.`);
+        throw new Error(body.detail !== undefined
+          ? toErrorMessage(body.detail)
+          : `Save failed (${res.status}). Please try again.`);
       }
 
       clearDraft();
@@ -798,6 +825,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
       await update();
       setTimeout(() => router.push("/profile"), 2400);
     } catch (err) {
+      console.error("[VendorApplicationWizard] submit error:", err);
       setServerError(err instanceof Error ? err.message : "An unexpected error occurred. Please try again.");
     } finally {
       setSubmitting(false);
@@ -1097,7 +1125,9 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
       <Typography variant="body2" color="text.secondary">
         Review your application before submitting. Click any section to make changes.
       </Typography>
-      {serverError && <Alert severity="error" sx={{ borderRadius: 2 }}>{serverError}</Alert>}
+      {typeof serverError === "string" && serverError.length > 0 && (
+        <Alert severity="error" sx={{ borderRadius: 2 }}>{serverError}</Alert>
+      )}
       {submitSuccess && <Alert severity="success" sx={{ borderRadius: 2 }}>Application submitted! Returning to your profile…</Alert>}
       {[
         { title: "Account", idx: 0, rows: [["Display name", data.name], ["Email", data.email]] },
