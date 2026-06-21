@@ -106,6 +106,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         paymentInfo: { ...p.paymentInfo, accountName: paymentMomoResolve.resolvedName! },
       }));
       setPaymentNameVerified(true);
+    } else if (paymentMomoResolve.status === "failed") {
+      setPaymentNameVerified((prev) => {
+        if (prev) {
+          setProfile((p) => ({ ...p, paymentInfo: { ...p.paymentInfo, accountName: "" } }));
+        }
+        return false;
+      });
     }
   }, [paymentMomoResolve.status, paymentMomoResolve.resolvedName]);
 
@@ -118,6 +125,11 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     if (payoutMomoResolve.status === "resolved" && payoutMomoResolve.resolvedName) {
       setPayout((p) => ({ ...p, accountName: payoutMomoResolve.resolvedName! }));
       setPayoutNameVerified(true);
+    } else if (payoutMomoResolve.status === "failed") {
+      setPayoutNameVerified((prev) => {
+        if (prev) setPayout((p) => ({ ...p, accountName: "" }));
+        return false;
+      });
     }
   }, [payoutMomoResolve.status, payoutMomoResolve.resolvedName]);
 

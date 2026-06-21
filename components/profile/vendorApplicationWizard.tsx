@@ -659,6 +659,9 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
   React.useEffect(() => {
     if (momoResolve.status === "resolved" && momoResolve.resolvedName) {
       setData((d) => ({ ...d, momoAccountName: momoResolve.resolvedName!, momoNameVerified: true }));
+    } else if (momoResolve.status === "failed") {
+      // Clear any previously auto-verified name (e.g. stale mock value from draft)
+      setData((d) => d.momoNameVerified ? { ...d, momoAccountName: "", momoNameVerified: false } : d);
     }
   }, [momoResolve.status, momoResolve.resolvedName]);
 

@@ -2,15 +2,19 @@
  * Mobile-money name-enquiry providers.
  *
  * Active provider is selected by MOMO_PROVIDER env var:
- *   mock        – returns a fake name (default; safe for dev with no credentials)
- *   flutterwave – uses FLW /v3/accounts/resolve (recommended for Ghana)
- *   paystack    – uses Paystack /bank/resolve
+ *   paystack    – uses Paystack /bank/resolve (recommended; reuses PAYSTACK_SECRET_KEY)
+ *   flutterwave – uses FLW /v3/accounts/resolve
  *
- * Required env vars per provider:
- *   mock:        none
+ * When MOMO_PROVIDER is unset or set to any other value, the endpoint returns
+ * { resolved: false } so the UI falls back to manual name entry — no fake names
+ * are ever generated.
+ *
+ * Required env vars:
+ *   paystack:    PAYSTACK_SECRET_KEY=sk_live_...   (already used for checkout)
  *   flutterwave: FLUTTERWAVE_SECRET_KEY=FLWSECK_...
- *   paystack:    PAYSTACK_SECRET_KEY=sk_live_...    (already used for checkout)
  */
+
+const FETCH_TIMEOUT_MS = 8_000;
 
 export interface MomoResolveResult {
   name: string;
@@ -22,7 +26,6 @@ export interface MomoProvider {
 }
 
 // ── Network code maps ─────────────────────────────────────────────────────────
-// Keys are our internal MOMO_NETWORKS values (mtn / telecel / airteltigo).
 
 const FLW_NETWORK: Record<string, string> = {
   mtn: "MTN",
@@ -36,50 +39,16 @@ const PAYSTACK_NETWORK: Record<string, string> = {
   airteltigo: "ATL",
 };
 
-// ── Mock (dev / no credentials) ───────────────────────────────────────────────
+// ── Not-configured (safe default) ────────────────────────────────────────────
 
-export class MockMomoProvider implements MomoProvider {
-  readonly providerName = "mock";
+class NotConfiguredProvider implements MomoProvider {
+  readonly providerName = "none";
 
-  async resolve(phoneNumber: string): Promise<MomoResolveResult> {
-    await new Promise((r) => setTimeout(r, 700));
-    const seed = parseInt(phoneNumber.slice(-2), 10) % 6;
-    const names = ["Kofi Mensah", "Ama Asante", "Kwame Boateng", "Akosua Adom", "Yaw Darko", "Abena Owusu"];
-    return { name: names[seed] };
-  }
-}
-
-// ── Flutterwave ───────────────────────────────────────────────────────────────
-
-export class FlutterwaveMomoProvider implements MomoProvider {
-  readonly providerName = "flutterwave";
-  constructor(private readonly secretKey: string) {}
-
-  async resolve(phoneNumber: string, network: string): Promise<MomoResolveResult> {
-    const bankCode = FLW_NETWORK[network.toLowerCase()];
-    if (!bankCode) throw new Error(`Unsupported network for Flutterwave: ${network}`);
-
-    const number = phoneNumber.startsWith("+233") ? "0" + phoneNumber.slice(4) : phoneNumber;
-
-    const res = await fetch("https://api.flutterwave.com/v3/accounts/resolve", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.secretKey}`,
-      },
-      body: JSON.stringify({ account_number: number, account_bank: bankCode }),
-    });
-
-    const data = (await res.json()) as {
-      status: string;
-      message: string;
-      data?: { account_number: string; account_name: string };
-    };
-
-    if (data.status !== "success" || !data.data?.account_name) {
-      throw new Error(data.message || "Name enquiry failed");
-    }
-    return { name: data.data.account_name };
+  resolve(): Promise<MomoResolveResult> {
+    throw new Error(
+      "MoMo name enquiry is not configured. " +
+      "Set MOMO_PROVIDER=paystack and PAYSTACK_SECRET_KEY (or MOMO_PROVIDER=flutterwave and FLUTTERWAVE_SECRET_KEY).",
+    );
   }
 }
 
@@ -91,13 +60,18 @@ export class PaystackMomoProvider implements MomoProvider {
 
   async resolve(phoneNumber: string, network: string): Promise<MomoResolveResult> {
     const bankCode = PAYSTACK_NETWORK[network.toLowerCase()];
-    if (!bankCode) throw new Error(`Unsupported network for Paystack: ${network}`);
+    if (!bankCode) throw new Error(`Unsupported network: ${network}`);
 
     const number = phoneNumber.startsWith("+233") ? "0" + phoneNumber.slice(4) : phoneNumber;
 
-    const url = `https://api.paystack.co/bank/resolve?account_number=${encodeURIComponent(number)}&bank_code=${encodeURIComponent(bankCode)}`;
+    const url =
+      `https://api.paystack.co/bank/resolve` +
+      `?account_number=${encodeURIComponent(number)}` +
+      `&bank_code=${encodeURIComponent(bankCode)}`;
+
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${this.secretKey}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     const data = (await res.json()) as {
@@ -107,7 +81,42 @@ export class PaystackMomoProvider implements MomoProvider {
     };
 
     if (!data.status || !data.data?.account_name) {
-      throw new Error(data.message || "Name enquiry failed");
+      throw new Error(data.message || "Account not found");
+    }
+    return { name: data.data.account_name };
+  }
+}
+
+// ── Flutterwave ───────────────────────────────────────────────────────────────
+
+export class FlutterwaveMomoProvider implements MomoProvider {
+  readonly providerName = "flutterwave";
+  constructor(private readonly secretKey: string) {}
+
+  async resolve(phoneNumber: string, network: string): Promise<MomoResolveResult> {
+    const bankCode = FLW_NETWORK[network.toLowerCase()];
+    if (!bankCode) throw new Error(`Unsupported network: ${network}`);
+
+    const number = phoneNumber.startsWith("+233") ? "0" + phoneNumber.slice(4) : phoneNumber;
+
+    const res = await fetch("https://api.flutterwave.com/v3/accounts/resolve", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.secretKey}`,
+      },
+      body: JSON.stringify({ account_number: number, account_bank: bankCode }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+
+    const data = (await res.json()) as {
+      status: string;
+      message: string;
+      data?: { account_number: string; account_name: string };
+    };
+
+    if (data.status !== "success" || !data.data?.account_name) {
+      throw new Error(data.message || "Account not found");
     }
     return { name: data.data.account_name };
   }
@@ -116,21 +125,20 @@ export class PaystackMomoProvider implements MomoProvider {
 // ── Factory ───────────────────────────────────────────────────────────────────
 
 export function createMomoProvider(): MomoProvider {
-  const providerName = (process.env.MOMO_PROVIDER ?? "mock").toLowerCase();
+  const providerName = (process.env.MOMO_PROVIDER ?? "").toLowerCase();
 
   switch (providerName) {
-    case "flutterwave": {
-      const key = process.env.FLUTTERWAVE_SECRET_KEY;
-      if (!key) throw new Error("MOMO_PROVIDER=flutterwave but FLUTTERWAVE_SECRET_KEY is not set");
-      return new FlutterwaveMomoProvider(key);
-    }
     case "paystack": {
       const key = process.env.PAYSTACK_SECRET_KEY;
       if (!key) throw new Error("MOMO_PROVIDER=paystack but PAYSTACK_SECRET_KEY is not set");
       return new PaystackMomoProvider(key);
     }
-    case "mock":
+    case "flutterwave": {
+      const key = process.env.FLUTTERWAVE_SECRET_KEY;
+      if (!key) throw new Error("MOMO_PROVIDER=flutterwave but FLUTTERWAVE_SECRET_KEY is not set");
+      return new FlutterwaveMomoProvider(key);
+    }
     default:
-      return new MockMomoProvider();
+      return new NotConfiguredProvider();
   }
 }
