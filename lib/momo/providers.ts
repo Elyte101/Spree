@@ -28,15 +28,15 @@ export interface MomoProvider {
 // ── Network code maps ─────────────────────────────────────────────────────────
 
 const FLW_NETWORK: Record<string, string> = {
-  mtn: "MTN",
-  telecel: "VDF",
-  airteltigo: "ATL",
+  "mtn mobile money": "MTN",
+  "telecel cash": "VDF",
+  "airteltigo money": "ATL",
 };
 
 const PAYSTACK_NETWORK: Record<string, string> = {
-  mtn: "MTN",
-  telecel: "VOD",
-  airteltigo: "ATL",
+  "mtn mobile money": "MTN",
+  "telecel cash": "VOD",
+  "airteltigo money": "ATL",
 };
 
 // ── Not-configured (safe default) ────────────────────────────────────────────
