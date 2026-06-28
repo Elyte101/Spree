@@ -140,6 +140,7 @@ export function LandingPage({
           position: "relative",
           pt: { xs: 6, md: 7 },
           pb: { xs: 4, md: 5 },
+          height: { xs: "auto", md: "calc(80vh - 64px)" },
           overflow: "hidden",
           background:
             theme.palette.mode === "dark"
@@ -169,6 +170,7 @@ export function LandingPage({
               gridTemplateColumns: { xs: "1fr", lg: "1fr 380px" },
               gap: { xs: 5, lg: 8 },
               alignItems: "center",
+              marginTop: "60px"
             }}
           >
             {/* Left — copy */}
@@ -639,7 +641,7 @@ export function LandingPage({
                 initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.45, delay: 0.1 * i, ease }}
+                transition={{ duration: 0.9, delay: 0.4 * i, ease }}
                 style={{ height: "100%" }}
               >
                 <Box

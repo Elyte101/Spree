@@ -99,7 +99,7 @@ export function ProductDetailsPage({
     {
       icon: <ReplayOutlined fontSize="small" color="primary" />,
       title: "Easy returns",
-      body: "30-day returns policy on eligible unworn items.",
+      body: "5-day returns policy on eligible unworn items.",
     },
     {
       icon: <WorkspacePremiumRounded fontSize="small" color="primary" />,

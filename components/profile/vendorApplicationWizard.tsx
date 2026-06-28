@@ -1037,7 +1037,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
           />
           {data.momoProvider && data.momoNumber && !errors.momoNumber && (
             <Alert severity="success" icon={false} sx={{ borderRadius: 2, py: 1 }}>
-              Payouts will be sent to <strong>{data.momoNumber}</strong> via <strong>{data.momoProvider}</strong>.
+              Payouts will be sent to <strong>{data.momoAccountName}</strong> via <strong>{data.momoProvider}</strong>.
             </Alert>
           )}
           <Box sx={(theme) => ({ p: 1.5, borderRadius: 2, bgcolor: theme.palette.action.hover })}>
