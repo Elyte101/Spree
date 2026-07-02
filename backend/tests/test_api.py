@@ -1,5 +1,13 @@
 import os
+from pathlib import Path
 from uuid import uuid4
+
+# Load the backend .env file so that INTERNAL_KEY matches the running Settings
+# instance (which pydantic-settings loads from the same file).
+_env_path = Path(__file__).resolve().parents[1] / ".env"
+if _env_path.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_path, override=False)
 
 from fastapi.testclient import TestClient
 
@@ -265,7 +273,7 @@ def test_product_details_endpoint_returns_created_product():
             "/api/v1/products",
             json=_create_product_payload(),
             headers={
-                "X-Internal-Api-Key": "spree-internal-dev-key",
+                "X-Internal-Api-Key": INTERNAL_KEY,
                 "X-Actor-User-Id": "user-admin",
             },
         )
@@ -292,7 +300,7 @@ def test_admin_product_creation_requires_internal_api_key():
             "/api/v1/products",
             json=payload,
             headers={
-                "X-Internal-Api-Key": "spree-internal-dev-key",
+                "X-Internal-Api-Key": INTERNAL_KEY,
                 "X-Actor-User-Id": "user-admin",
             },
         )
