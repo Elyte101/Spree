@@ -1002,3 +1002,23 @@ def toggle_product_blacklist(db: Session, product_id: str, blacklisted: bool) ->
         _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(Product.id == product.id)
     )
     return _product_to_dict(refreshed)
+
+
+def toggle_product_featured(db: Session, product_id: str, featured: bool) -> dict:
+    """G28: Admin toggle for whether a product appears in the featured home feed."""
+    product = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(
+            or_(Product.id == product_id, Product.slug == product_id)
+        )
+    )
+    if product is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    product.is_featured = featured
+    db.add(product)
+    db.commit()
+
+    refreshed = db.scalar(
+        _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(Product.id == product.id)
+    )
+    return _product_to_dict(refreshed)

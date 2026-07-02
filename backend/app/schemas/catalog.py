@@ -71,6 +71,10 @@ class ProductBlacklistIn(BaseModel):
     blacklisted: bool
 
 
+class ProductFeaturedIn(BaseModel):
+    featured: bool
+
+
 class ProductOut(BaseModel):
     id: str
     slug: str

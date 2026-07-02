@@ -10,6 +10,7 @@ from app.schemas.catalog import (
     HomeFeedOut,
     ProductBlacklistIn,
     ProductCreateIn,
+    ProductFeaturedIn,
     ProductOut,
     ProductUpdateIn,
     SearchResponseOut,
@@ -28,6 +29,7 @@ from app.services.catalog import (
     list_products,
     search_storefront,
     toggle_product_blacklist,
+    toggle_product_featured,
     update_product,
 )
 
@@ -140,6 +142,20 @@ def product_blacklist(
     if actor_role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return toggle_product_blacklist(db, product_id, payload.blacklisted)
+
+
+@router.patch("/products/{product_id}/featured", response_model=ProductOut)
+def product_featured(
+    product_id: str,
+    payload: ProductFeaturedIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+):
+    """G28: Admin-only toggle for whether a product appears in the featured home feed."""
+    if actor_role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
+    return toggle_product_featured(db, product_id, payload.featured)
 
 
 @router.get("/products/{identifier}/related", response_model=list[ProductOut])

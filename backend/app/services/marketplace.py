@@ -413,9 +413,10 @@ def update_admin_seller_status(
     return get_admin_seller_detail(db, vendor.id)
 
 
-def delete_seller(db: Session, seller_id: str) -> None:
+def delete_seller(db: Session, seller_id: str, admin_id: str = "") -> None:
     """G26: soft-delete — set deleted_at timestamp instead of removing the row."""
     from datetime import datetime, timezone  # noqa: PLC0415
+    from app.services.audit import log_action  # noqa: PLC0415
 
     vendor = _resolve_seller(db, seller_id, include_inactive=True)
     if vendor.role == "admin":
@@ -423,24 +424,53 @@ def delete_seller(db: Session, seller_id: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Admin accounts cannot be deleted via the vendor console",
         )
+    now = datetime.now(timezone.utc)
+    prev_status = vendor.seller_status
     # Soft-delete: mark the account as removed and set deleted_at.
-    vendor.deleted_at = datetime.now(timezone.utc)
+    vendor.deleted_at = now
     vendor.seller_status = "removed"
+
+    # G27: audit log
+    log_action(
+        db,
+        actor_id=admin_id or None,
+        action="seller.delete",
+        target_type="user",
+        target_id=seller_id,
+        payload={"from_status": prev_status, "to_status": "removed", "soft_deleted": True},
+    )
     db.commit()
 
 
-def toggle_seller_blacklist(db: Session, seller_id: str, blacklisted: bool) -> dict:
+def toggle_seller_blacklist(
+    db: Session, seller_id: str, blacklisted: bool, admin_id: str = ""
+) -> dict:
+    from app.services.audit import log_action  # noqa: PLC0415
+
     vendor = _resolve_seller(db, seller_id, include_inactive=True)
     if vendor.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Admin accounts cannot be blacklisted",
         )
+    prev = vendor.is_blacklisted
     vendor.is_blacklisted = blacklisted
     # Cascade blacklist state to all vendor products
     products = db.scalars(select(Product).where(Product.seller_id == vendor.id)).all()
     for product in products:
         product.is_blacklisted = blacklisted
+
+    # G27: audit log
+    action = "seller.blacklist" if blacklisted else "seller.unblacklist"
+    log_action(
+        db,
+        actor_id=admin_id or None,
+        action=action,
+        target_type="user",
+        target_id=seller_id,
+        payload={"from": prev, "to": blacklisted, "products_affected": len(products)},
+    )
+
     db.commit()
     db.refresh(vendor)
     return get_admin_seller_detail(db, vendor.id)
@@ -459,6 +489,8 @@ def list_verification_queue(db: Session) -> list[dict]:
 
 
 def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
+    from app.services.audit import log_action  # noqa: PLC0415
+
     vendor = db.get(User, seller_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="vendor not found")
@@ -470,11 +502,23 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
         )
     from datetime import datetime, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
+    prev_status = vendor.seller_status
     vendor.seller_status = "verified"
     vendor.government_id_verified = True
     vendor.rejection_reason = None
     vendor.role = "vendor"
     vendor.verified_at = now  # G37: record timestamp of verification
+    db.commit()
+
+    # G27: audit log
+    log_action(
+        db,
+        actor_id=admin_id,
+        action="seller.approve",
+        target_type="user",
+        target_id=seller_id,
+        payload={"from_status": prev_status, "to_status": "verified"},
+    )
     db.commit()
 
     from app.services import notifications as notif_svc
@@ -494,6 +538,8 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
 
 
 def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> dict:
+    from app.services.audit import log_action  # noqa: PLC0415
+
     if not reason or not reason.strip():
         raise HTTPException(status_code=400, detail="A rejection reason is required")
     vendor = db.get(User, seller_id)
@@ -502,10 +548,22 @@ def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> di
 
     from datetime import datetime, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
+    prev_status = vendor.seller_status
     vendor.seller_status = "rejected"
     vendor.rejection_reason = reason.strip()
     vendor.government_id_verified = False
     vendor.rejected_at = now  # G37: record timestamp of rejection
+    db.commit()
+
+    # G27: audit log
+    log_action(
+        db,
+        actor_id=admin_id,
+        action="seller.reject",
+        target_type="user",
+        target_id=seller_id,
+        payload={"from_status": prev_status, "to_status": "rejected", "reason": reason.strip()},
+    )
     db.commit()
 
     from app.services import notifications as notif_svc

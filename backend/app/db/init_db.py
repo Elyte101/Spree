@@ -28,6 +28,12 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("notifications", "is_sent", "BOOLEAN NOT NULL DEFAULT TRUE", "INTEGER NOT NULL DEFAULT 1"),
     # Tiered commission rate recorded per order item for accurate vendor payout
     ("order_items", "commission_rate", "NUMERIC(12,8)", "REAL"),
+    # G26: soft-delete for users
+    ("users", "deleted_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    # G37: seller state-change timestamps
+    ("users", "verified_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    ("users", "rejected_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    ("users", "suspended_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.
