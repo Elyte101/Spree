@@ -503,7 +503,9 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
     from datetime import datetime, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
     prev_status = vendor.seller_status
-    vendor.seller_status = "verified"
+    # G16: set to "active" — the canonical "approved and can list products" state.
+    # The spec calls this "verified" but the entire catalog/order stack checks "active".
+    vendor.seller_status = "active"
     vendor.government_id_verified = True
     vendor.rejection_reason = None
     vendor.role = "vendor"
@@ -517,7 +519,7 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
         action="seller.approve",
         target_type="user",
         target_id=seller_id,
-        payload={"from_status": prev_status, "to_status": "verified"},
+        payload={"from_status": prev_status, "to_status": "active"},
     )
     db.commit()
 
