@@ -23,6 +23,14 @@ interface CartStoreState {
   removeItem: (id: string) => void;
   clearCart: () => void;
   refreshPrices: (priceMap: Record<string, number>) => void;
+  /**
+   * G20: Merge guest cart items into the authenticated user's cart.
+   *
+   * Called after login. Combines the persisted guest cart (in localStorage)
+   * with `serverItems` (any items previously saved server-side for this user).
+   * Items are deduped by productId + color + size; quantities are summed.
+   */
+  mergeGuestCart: (serverItems: CartItem[]) => void;
 }
 
 const DEFAULT_STANDARD_SHIPPING = 12;
@@ -216,6 +224,37 @@ export const useCartStore = create<CartStoreState>()(
             : item
         );
         set({ cart: normalizeCart({ ...currentCart, items: updatedItems }, standardShipping) });
+      },
+      // G20: merge guest cart (localStorage) with server items on login
+      mergeGuestCart: (serverItems) => {
+        const currentCart = get().cart;
+        const standardShipping =
+          currentCart.standardShipping ?? currentCart.shipping ?? DEFAULT_STANDARD_SHIPPING;
+
+        // Combine guest cart (localStorage) with server-side saved items.
+        // Guest cart items take priority for price (they're fresher from the catalog).
+        // Quantities are summed for matching items (same product + color + size).
+        const mergedItems = [...currentCart.items];
+        for (const serverItem of serverItems) {
+          const existingIdx = mergedItems.findIndex(
+            (item) =>
+              item.productId === serverItem.productId &&
+              (item.color ?? null) === (serverItem.color ?? null) &&
+              (item.size ?? null) === (serverItem.size ?? null)
+          );
+          if (existingIdx >= 0) {
+            mergedItems[existingIdx] = {
+              ...mergedItems[existingIdx],
+              quantity: mergedItems[existingIdx].quantity + serverItem.quantity,
+            };
+          } else {
+            mergedItems.push(serverItem);
+          }
+        }
+
+        set({
+          cart: normalizeCart({ ...currentCart, items: mergedItems }, standardShipping),
+        });
       },
     }),
     {
