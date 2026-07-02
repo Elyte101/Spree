@@ -1,5 +1,5 @@
 import { proxyBackend } from "@/lib/serverApi";
 
 export async function GET() {
-  return proxyBackend("/cart");
+  return proxyBackend("/cart", undefined, { internal: true });
 }

@@ -13,12 +13,12 @@ router = APIRouter()
 
 
 @router.get("/notifications", response_model=list[NotificationOut])
-def notifications(db: DBSession, actor_id: ActorUserId):
+def notifications(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
     return list_notifications(db, recipient_id=actor_id)
 
 
 @router.get("/notifications/unread-count", response_model=UnreadCountOut)
-def notifications_unread_count(db: DBSession, actor_id: ActorUserId):
+def notifications_unread_count(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
     if not actor_id:
         return {"count": 0}
     return {"count": get_unread_count(db, actor_id)}

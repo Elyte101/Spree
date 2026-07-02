@@ -55,12 +55,18 @@ class ShippingAddress(BaseModel):
 
 
 class PaymentInfo(BaseModel):
-    method: Literal["card", "bank-transfer"] = "card"
+    method: Literal["card", "bank-transfer", "mobile_money"] = "card"
+    # Card / bank fields
     cardholderName: str = Field(default="", max_length=120)
     cardLast4: str = Field(default="", max_length=4)
     expiryMonth: str = Field(default="", max_length=2)
     expiryYear: str = Field(default="", max_length=4)
     billingPostalCode: str = Field(default="", max_length=40)
+    # MoMo fields (present when method == "mobile_money")
+    mobileMoneyNetwork: str = Field(default="", max_length=20)
+    mobileMoneyNumber: str = Field(default="", max_length=20)
+    accountName: str = Field(default="", max_length=120)
+    momoNameVerified: bool = False
 
 
 GhanaIdType = Literal["ghana-card", "voters-id", "drivers-license", "passport", "ecowas-card", "ssnit"]
@@ -94,7 +100,7 @@ class PayoutInfoRequest(BaseModel):
     bankCode: str = Field(default="", max_length=20)
     mobileMoneyNetwork: str = Field(default="", max_length=20)
     mobileMoneyNumber: str = Field(default="", max_length=20)
-    currency: str = Field(default="$", max_length=8)
+    currency: str = Field(default="GHS", max_length=8)
     accountName: str = Field(default="", max_length=120)
 
 
