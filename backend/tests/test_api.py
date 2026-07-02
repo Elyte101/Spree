@@ -1,10 +1,11 @@
+import os
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 
-INTERNAL_KEY = "spree-internal-dev-key"
+INTERNAL_KEY = os.environ.get("BACKEND_INTERNAL_API_KEY", "spree-internal-dev-key")
 INTERNAL_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY}
 ADMIN_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY, "X-Actor-Role": "admin"}
 

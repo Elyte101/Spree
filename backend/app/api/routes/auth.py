@@ -183,7 +183,6 @@ def onboarding_submit(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
 def get_notification_prefs(db: DBSession, _: InternalAPIKey, actor_id: ActorUserId):
     if not actor_id:
         raise HTTPException(status_code=401, detail="Authentication required")
-    user = db.get_one if False else db.get(type(None), None)  # just to hint type
     from app.db.models import User as _User
     user = db.get(_User, actor_id)
     if user is None:

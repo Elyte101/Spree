@@ -155,8 +155,8 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
     if (!ids.length) return;
     fetch(`/api/products?ids=${ids.join(",")}`)
       .then((r) => r.ok ? r.json() : null)
-      .then((data: { products?: Product[] } | null) => {
-        const products = data?.products ?? [];
+      .then((data: { items?: Product[] } | null) => {
+        const products = data?.items ?? [];
         if (!products.length) return;
         const priceMap: Record<string, number> = {};
         for (const p of products) priceMap[p.id] = p.price;
