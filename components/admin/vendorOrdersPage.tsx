@@ -34,9 +34,15 @@ const rowVariants = {
   }),
 };
 
+const DEFAULT_STATUS_META = {
+  label: "Unknown",
+  color: "default" as const,
+  icon: <ReceiptLongOutlined sx={{ fontSize: 14 }} />,
+};
+
 const statusMeta: Record<
-  OrderStatus,
-  { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
+  string,
+  { label: string; color: "warning" | "info" | "success" | "error" | "default"; icon: React.ReactElement }
 > = {
   pending: {
     label: "Pending payment",
@@ -93,6 +99,17 @@ const statusMeta: Record<
     color: "error",
     icon: <CancelOutlined sx={{ fontSize: 14 }} />,
   },
+  // Legacy statuses in DB from before the spec-aligned state machine
+  shipped: {
+    label: "Shipped",
+    color: "info",
+    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
+  },
+  completed: {
+    label: "Completed",
+    color: "success",
+    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
+  },
 };
 
 const formatDate = (iso: string) =>
@@ -103,7 +120,7 @@ const formatDate = (iso: string) =>
   });
 
 function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
-  const meta = statusMeta[order.status];
+  const meta = statusMeta[order.status] ?? DEFAULT_STATUS_META;
 
   return (
     <motion.div custom={index} initial="hidden" animate="visible" variants={rowVariants}>
