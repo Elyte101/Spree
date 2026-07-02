@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Header, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey, OptionalInternalKey
+from app.api.deps import ActorRole, ActorUserId, CommentRateLimit, DBSession, InternalAPIKey, OptionalInternalKey
 from app.schemas.catalog import (
     AdminOverviewOut,
     BrandOut,
@@ -224,6 +224,7 @@ def post_comment(
     db: DBSession,
     _: InternalAPIKey,
     actor_id: ActorUserId,
+    _rl: CommentRateLimit,  # G31: rate limit 5 comments per 60s per user
 ):
     """G21: Authenticated buyers can post a comment/review on a product."""
     if not actor_id:
