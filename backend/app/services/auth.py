@@ -12,6 +12,7 @@ from app.core.security import hash_password, verify_password
 from app.db.models import User, VerificationToken
 from app.schemas.auth import OAuthUpsertRequest, PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
 from app.services import paystack as paystack_svc
+from app.services.encryption import decrypt, encrypt
 from app.services.notifications import notify_safe
 from app.services.uploads import delete_upload, save_upload
 
@@ -120,6 +121,28 @@ def _clean_seller_contact(contact: dict) -> dict:
     }
 
 
+def _decrypt_payout_info(payout_info: dict | None) -> dict:
+    """G13: Decrypt payout_info blob.
+
+    Payout info is stored as either:
+    - ``{"__enc__": "<encrypted-json>"}`` (new encrypted format), or
+    - plain dict (legacy unencrypted values).
+    """
+    if not payout_info:
+        return {}
+    if "__enc__" in payout_info:
+        import json  # noqa: PLC0415
+        raw = decrypt(payout_info["__enc__"])
+        if raw:
+            try:
+                return json.loads(raw)
+            except Exception:
+                return {}
+        return {}
+    # Legacy plaintext payout_info — return as-is (G13: migrate on next save)
+    return payout_info
+
+
 def _serialize_profile(user: User) -> dict:
     shipping_info = user.shipping_info or {}
     payment_info = user.payment_info or {}
@@ -164,12 +187,13 @@ def _serialize_profile(user: User) -> dict:
         "sellerNotice": user.seller_notice or "",
         "adminNote": user.admin_note or "",
         "governmentIdType": user.government_id_type or "ghana-card",
-        "governmentIdNumber": user.government_id_number or "",
+        # G13: decrypt sensitive fields before returning to the caller.
+        "governmentIdNumber": decrypt(user.government_id_number) or "",
         "governmentIdVerified": bool(user.government_id_verified),
         "sellerStartedAt": user.seller_started_at,
         "sellerIdentity": {
             "governmentIdType": user.government_id_type or "ghana-card",
-            "governmentIdNumber": user.government_id_number or "",
+            "governmentIdNumber": decrypt(user.government_id_number) or "",
             "storeTagline": user.store_tagline or "",
         },
         "shippingAddress": {
@@ -180,10 +204,10 @@ def _serialize_profile(user: User) -> dict:
             **_default_payment_info(user.name),
             **payment_info,
         },
-        "payoutInfo": user.payout_info or {},
-        "idFrontUrl": user.id_front_url or "",
-        "idBackUrl": user.id_back_url or "",
-        "selfieUrl": user.selfie_url or "",
+        "payoutInfo": _decrypt_payout_info(user.payout_info),
+        "idFrontUrl": decrypt(user.id_front_url) or "",
+        "idBackUrl": decrypt(user.id_back_url) or "",
+        "selfieUrl": decrypt(user.selfie_url) or "",
         "onboardingStep": user.onboarding_step or 0,
         "rejectionReason": user.rejection_reason,
     }
@@ -439,7 +463,8 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
     user.seller_contact = seller_contact if wants_seller_access or store_name else None
     user.seller_type = seller_type if wants_seller_access or store_name else "retail"
     user.government_id_type = government_id_type if wants_seller_access else None
-    user.government_id_number = government_id_number if wants_seller_access else None
+    # G13: encrypt government ID number at rest.
+    user.government_id_number = encrypt(government_id_number) if (wants_seller_access and government_id_number) else None
     user.shipping_info = payload.shippingAddress.model_dump()
     user.payment_info = payload.paymentInfo.model_dump()
 
@@ -501,31 +526,34 @@ def upload_id_documents(
 
 
 def update_payout_info(db: Session, user_id: str, payload: "PayoutInfoRequest") -> dict:
+    import json  # noqa: PLC0415
+
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    payout = {
+    # G2: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
+    payout_plain = {
         "method": payload.method,
-        "bankName": payload.bankName,
-        "accountNumber": payload.accountNumber,
-        "bankCode": payload.bankCode,
-        "mobileMoneyNetwork": payload.mobileMoneyNetwork,
-        "mobileMoneyNumber": payload.mobileMoneyNumber,
-        "currency": payload.currency,
-        "accountName": payload.accountName,
+        "mobileMoneyNetwork": payload.mobileMoneyNetwork or "",
+        "mobileMoneyNumber": payload.mobileMoneyNumber or "",
+        "cardLast4": payload.cardLast4 or "",
+        "cardholderName": payload.cardholderName or "",
+        "currency": payload.currency or "GHS",
+        "accountName": payload.accountName or "",
     }
-    user.payout_info = payout
+    # G13: store payout details as an encrypted JSON blob.
+    user.payout_info = {"__enc__": encrypt(json.dumps(payout_plain))}
 
-    # Create or refresh the Paystack transfer recipient
-    if settings.paystack_secret_key and payload.accountNumber:
+    # Create or refresh the Paystack transfer recipient for MoMo
+    if settings.paystack_secret_key and payload.method == "mobile_money" and payload.mobileMoneyNumber:
         try:
             recipient_code = paystack_svc.create_transfer_recipient(
                 name=payload.accountName or user.name,
-                account_number=payload.accountNumber,
-                bank_code=payload.bankCode,
+                account_number=payload.mobileMoneyNumber,
+                bank_code="",
                 mobile_money_network=payload.mobileMoneyNetwork,
-                currency=payload.currency,
+                currency=payload.currency or "GHS",
             )
             user.paystack_recipient_code = recipient_code
         except Exception as exc:

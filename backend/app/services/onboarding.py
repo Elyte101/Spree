@@ -19,6 +19,7 @@ from app.schemas.auth import (
 )
 from app.services import notifications as notif_svc
 from app.services.auth import _serialize_profile, _slugify_store
+from app.services.encryption import encrypt
 
 GHANA_CARD_PATTERN = re.compile(r"^[A-Z0-9-]{8,32}$")
 
@@ -124,10 +125,11 @@ def save_step4(db: Session, user_id: str, payload: OnboardingStep4Request) -> di
         )
 
     user.government_id_type = payload.governmentIdType
-    user.government_id_number = id_number
-    user.id_front_url = payload.idFrontUrl
-    user.id_back_url = payload.idBackUrl
-    user.selfie_url = payload.selfieUrl
+    # G13: encrypt sensitive fields at rest.
+    user.government_id_number = encrypt(id_number)
+    user.id_front_url = encrypt(payload.idFrontUrl)
+    user.id_back_url = encrypt(payload.idBackUrl)
+    user.selfie_url = encrypt(payload.selfieUrl)
     user.government_id_verified = False
     if user.onboarding_step < 4:
         user.onboarding_step = 4
@@ -143,16 +145,20 @@ def save_step5(db: Session, user_id: str, payload: OnboardingStep5Request) -> di
     if user.onboarding_step < 4:
         raise HTTPException(status_code=400, detail="Complete step 4 first")
 
-    user.payout_info = {
+    # G2: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
+    # G13: payout details encrypted at rest via encryption.encrypt().
+    import json as _json  # noqa: PLC0415
+    payout_plain = {
         "method": payload.method,
-        "bankName": payload.bankName,
-        "accountNumber": payload.accountNumber,
-        "bankCode": payload.bankCode,
-        "mobileMoneyNetwork": payload.mobileMoneyNetwork,
-        "mobileMoneyNumber": payload.mobileMoneyNumber,
-        "currency": payload.currency,
+        "mobileMoneyNetwork": payload.mobileMoneyNetwork or "",
+        "mobileMoneyNumber": payload.mobileMoneyNumber or "",
+        "cardLast4": payload.cardLast4 or "",
+        "cardholderName": payload.cardholderName or "",
+        "currency": payload.currency or "GHS",
         "accountName": payload.accountName,
     }
+    # Store as encrypted JSON blob.
+    user.payout_info = {"__enc__": encrypt(_json.dumps(payout_plain))}
     if user.onboarding_step < 5:
         user.onboarding_step = 5
     db.commit()

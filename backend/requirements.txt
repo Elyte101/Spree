@@ -7,3 +7,5 @@ python-multipart>=0.0.9,<1.0.0
 python-dotenv>=1.0.0,<2.0.0
 resend>=2.0.0,<3.0.0
 pywebpush>=2.0.0,<3.0.0
+# G13: field-level encryption for sensitive data (Ghana Card, payout details, document URLs)
+cryptography>=43.0.0,<45.0.0

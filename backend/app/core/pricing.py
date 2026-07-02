@@ -1,7 +1,30 @@
+"""Pricing engine — commission brackets and processing fees.
+
+G11: Both the processing fee rate and commission brackets can be overridden
+at runtime by an admin via SiteSetting rows (see /admin/site-settings).
+
+Settings keys:
+  processing_fee_rate   — decimal string, e.g. "0.015"
+  commission_brackets   — JSON array of [ceiling_or_null, rate] pairs, e.g.
+                          [[500, "0.08"], [2000, "0.05"], [5000, "0.03"], [null, "0.01"]]
+
+If the settings keys are absent, the module falls back to the hardcoded defaults below.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
 from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple
 
-PROCESSING_FEE_RATE = Decimal("0.015")
+logger = logging.getLogger(__name__)
+
+# Hardcoded defaults — overridden by admin via SiteSetting.
+_DEFAULT_PROCESSING_FEE_RATE = Decimal("0.015")
+
+# G11: runtime-configurable processing fee rate (updated by load_settings_from_db).
+PROCESSING_FEE_RATE = _DEFAULT_PROCESSING_FEE_RATE
 
 
 def calc_processing_fee(subtotal: Decimal) -> Decimal:
@@ -20,6 +43,35 @@ _BRACKETS: list[tuple[Decimal | None, Decimal]] = [
 
 # Fallback for orders created before tiered pricing (commission_rate column = NULL).
 LEGACY_COMMISSION_RATE = Decimal("0.05")
+
+
+def load_settings_from_db(db) -> None:  # db: Session — avoid circular import
+    """G11: Load admin-configurable pricing settings from SiteSetting rows at startup.
+
+    Called once during app startup in init_db.py after the DB is ready.
+    Also call this after an admin updates a pricing setting so the runtime
+    values are refreshed without a server restart.
+    """
+    global PROCESSING_FEE_RATE, _BRACKETS  # noqa: PLW0603
+
+    try:
+        from app.db.models import SiteSetting  # noqa: PLC0415
+
+        fee_row = db.get(SiteSetting, "processing_fee_rate")
+        if fee_row:
+            PROCESSING_FEE_RATE = Decimal(fee_row.value)
+            logger.info("[pricing] processing_fee_rate=%s (from DB)", PROCESSING_FEE_RATE)
+
+        brackets_row = db.get(SiteSetting, "commission_brackets")
+        if brackets_row:
+            raw = json.loads(brackets_row.value)
+            _BRACKETS = [
+                (Decimal(str(ceiling)) if ceiling is not None else None, Decimal(str(rate)))
+                for ceiling, rate in raw
+            ]
+            logger.info("[pricing] commission_brackets loaded from DB: %s", _BRACKETS)
+    except Exception:  # noqa: BLE001
+        logger.warning("[pricing] Could not load pricing settings from DB — using defaults")
 
 
 class CommissionResult(NamedTuple):

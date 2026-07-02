@@ -5,7 +5,7 @@ from sqlalchemy import inspect, select, text
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.db.models import Base, User
+from app.db.models import Base, SiteSetting, User
 from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
@@ -122,3 +122,20 @@ def initialize_database() -> None:
             )
             session.commit()
             logger.info("Seeded admin user: %s", settings.seed_admin_email)
+
+        # G11: seed default pricing settings if not already present.
+        import json  # noqa: PLC0415
+        _PRICING_DEFAULTS = {
+            "processing_fee_rate": "0.015",
+            "commission_brackets": json.dumps([[500, "0.08"], [2000, "0.05"], [5000, "0.03"], [None, "0.01"]]),
+            "auto_release_days": "7",
+            "main_tagline": "Shop Safe. Pay Smart. Delivered.",
+        }
+        for key, default_value in _PRICING_DEFAULTS.items():
+            if not session.get(SiteSetting, key):
+                session.add(SiteSetting(key=key, value=default_value))
+        session.commit()
+
+        # G11: load current pricing settings into the pricing engine.
+        from app.core.pricing import load_settings_from_db  # noqa: PLC0415
+        load_settings_from_db(session)
