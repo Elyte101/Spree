@@ -147,6 +147,8 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
   // Holds reference + orderId across async steps
   const pendingPaymentRef = React.useRef<{ reference: string; orderId: string } | null>(null);
   const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  // Stable idempotency key for this checkout session — prevents duplicate orders on retries.
+  const idempotencyKeyRef = React.useRef<string>(crypto.randomUUID());
 
   // Refresh item prices from the catalog on mount so stale localStorage prices
   // don't cause a mismatch with the server's recomputed totals.
@@ -235,6 +237,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
     tax: cart.tax,
     total,
     currency: "GHS",
+    idempotencyKey: idempotencyKeyRef.current,
     items: cart.items.map((item) => ({
       productId: item.productId,
       name: item.name,
@@ -272,8 +275,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
       setSubmitting(false);
       setStage("idle");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [clearCart]);
 
   const startPolling = React.useCallback((reference: string, orderId: string) => {
     setStage("polling");
@@ -295,7 +297,6 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         // Network error during poll — keep trying
       }
     }, 3000);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [verifyAndComplete]);
 
   const handleOtpSubmit = async () => {

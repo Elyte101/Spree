@@ -432,10 +432,11 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
     vendor = db.get(User, seller_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="vendor not found")
-    if vendor.seller_status not in ("pending_verification", "incomplete", "rejected"):
+    if vendor.seller_status != "pending_verification":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot approve a vendor with status '{vendor.seller_status}'",
+            detail=f"Cannot approve a vendor with status '{vendor.seller_status}'. "
+                   "Only vendors with status 'pending_verification' can be approved.",
         )
     vendor.seller_status = "verified"
     vendor.government_id_verified = True
@@ -476,7 +477,7 @@ def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> di
         db,
         event_type="seller_rejected",
         recipient_id=vendor.id,
-        title="vendor application not approved",
+        title="Vendor application not approved",
         body=f"We reviewed your documents and could not verify your account at this time. "
              f"Reason: {reason.strip()}. "
              "Please update your information and re-submit.",

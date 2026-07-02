@@ -74,10 +74,6 @@ class AdminSellerDetailOut(AdminSellerSummaryOut):
     reports: list[SellerReportOut]
 
 
-class SellerApproveRequest(BaseModel):
-    pass
-
-
 class SellerRejectRequest(BaseModel):
     reason: str = Field(min_length=10, max_length=600)
 

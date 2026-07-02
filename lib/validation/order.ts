@@ -27,6 +27,7 @@ export const CreateOrderSchema = z.object({
   tax: z.number().nonnegative(),
   total: z.number().nonnegative(),
   currency: z.string().length(3),
+  idempotencyKey: z.string().uuid().optional(),
   items: z.array(OrderItemSchema).min(1, "Cart must have at least one item"),
 });
 

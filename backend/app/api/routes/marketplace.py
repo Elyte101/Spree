@@ -7,7 +7,6 @@ from app.schemas.marketplace import (
     AdminSellerSummaryOut,
     FollowSellerRequest,
     ReportSellerRequest,
-    SellerApproveRequest,
     SellerBlacklistIn,
     SellerDetailOut,
     SellerRejectRequest,

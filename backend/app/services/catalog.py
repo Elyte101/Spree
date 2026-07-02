@@ -69,7 +69,7 @@ def _extract_unique_values(variants: list[dict], key: str) -> list[str]:
     return values
 
 
-def _seller_badge_label(vendor: User | None) -> str | None:
+def _seller_badge_label(vendor: User | None, purchase_count: int = 0) -> str | None:
     if vendor is None:
         return None
 
@@ -84,6 +84,9 @@ def _seller_badge_label(vendor: User | None) -> str | None:
 
     if average_delivery_days is not None and average_delivery_days <= 2 and completed_deliveries >= 5:
         return "Fast delivery"
+
+    if purchase_count >= 25 and completed_deliveries >= 10:
+        return "Trusted vendor"
 
     if vendor.seller_status == "active" and vendor.government_id_verified:
         return "Verified vendor"
@@ -133,7 +136,7 @@ def _product_to_dict(product: Product) -> dict:
         "storeName": product.vendor.store_name if product.vendor else None,
         "storeSlug": product.vendor.store_slug if product.vendor else None,
         "sellerType": product.vendor.seller_type if product.vendor else None,
-        "sellerBadge": _seller_badge_label(product.vendor),
+        "sellerBadge": _seller_badge_label(product.vendor, product.purchase_count),
         "sellerLocation": _seller_location_label(product.vendor),
         "collection": product.collection.slug if product.collection else None,
         "collectionId": product.collection.id if product.collection else None,

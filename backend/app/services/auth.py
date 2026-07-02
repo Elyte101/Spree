@@ -179,6 +179,8 @@ def _serialize_profile(user: User) -> dict:
         "idFrontUrl": user.id_front_url or "",
         "idBackUrl": user.id_back_url or "",
         "selfieUrl": user.selfie_url or "",
+        "onboardingStep": user.onboarding_step or 0,
+        "rejectionReason": user.rejection_reason,
     }
 
 
