@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 # ── Default notification preferences (all channels on for mandatory events) ───
 
 DEFAULT_PREFS: dict[str, dict[str, bool]] = {
+    # ── Vendor / seller lifecycle ─────────────────────────────────────────────
     "seller_created":           {"in_app": True,  "email": True,  "push": True},
     "docs_submitted":           {"in_app": True,  "email": True,  "push": False},
     "new_verification_pending": {"in_app": True,  "email": True,  "push": False},
@@ -33,10 +34,32 @@ DEFAULT_PREFS: dict[str, dict[str, bool]] = {
     "seller_rejected":          {"in_app": True,  "email": True,  "push": True},
     "payout_saved":             {"in_app": True,  "email": True,  "push": False},
     "onboarding_reminder":      {"in_app": False, "email": True,  "push": True},
+    # ── Order events (buyer) ─────────────────────────────────────────────────
+    "order_placed":             {"in_app": True,  "email": True,  "push": True},
+    "order_shipped":            {"in_app": True,  "email": True,  "push": True},
+    "order_delivered":          {"in_app": True,  "email": True,  "push": False},
+    "order_cancelled":          {"in_app": True,  "email": True,  "push": False},
+    "order_refunded":           {"in_app": True,  "email": True,  "push": False},
+    "order_payment_failed":     {"in_app": True,  "email": True,  "push": True},
+    # ── Order events (vendor) ────────────────────────────────────────────────
+    "order_placed_seller":      {"in_app": True,  "email": True,  "push": True},
+    "payout_released":          {"in_app": True,  "email": True,  "push": False},
+    "payout_failed":            {"in_app": True,  "email": True,  "push": True},
+    # ── Stock alerts (vendor) ─────────────────────────────────────────────────
+    "low_stock":                {"in_app": True,  "email": True,  "push": False},
 }
 
 # Events that cannot be disabled by the user
-MANDATORY_EVENTS = {"seller_approved", "seller_rejected"}
+MANDATORY_EVENTS = {
+    "seller_approved",
+    "seller_rejected",
+    "order_placed",
+    "order_shipped",
+    "order_payment_failed",
+    "order_placed_seller",
+    "payout_released",
+    "payout_failed",
+}
 
 
 def _get_user_prefs(user: User | None, event_type: str) -> dict[str, bool]:
@@ -46,6 +69,7 @@ def _get_user_prefs(user: User | None, event_type: str) -> dict[str, bool]:
     user_event_prefs = user.notification_prefs.get(event_type, {})
     merged = {**defaults, **user_event_prefs}
     if event_type in MANDATORY_EVENTS:
+        merged["in_app"] = True
         merged["email"] = True
     return merged
 
@@ -193,6 +217,45 @@ def notify(
     except Exception:
         db.rollback()
         raise
+
+
+def notify_safe(
+    db: Session,
+    event_type: str,
+    recipient_id: str | None,
+    title: str,
+    body: str,
+    notif_type: str = "account",
+    href: str | None = None,
+    email_subject: str | None = None,
+    cta_label: str | None = None,
+    cta_url: str | None = None,
+    recipient_email: str | None = None,
+) -> None:
+    """Like notify() but silently logs and continues on any failure.
+
+    Use this variant when the notification is secondary to the main DB operation
+    (e.g. inside a service that has already committed the primary transaction).
+    """
+    try:
+        notify(
+            db,
+            event_type=event_type,
+            recipient_id=recipient_id,
+            title=title,
+            body=body,
+            notif_type=notif_type,
+            href=href,
+            email_subject=email_subject,
+            cta_label=cta_label,
+            cta_url=cta_url,
+            recipient_email=recipient_email,
+        )
+    except Exception as exc:
+        logger.warning(
+            "notify_safe swallowed error for event=%s recipient=%s: %s",
+            event_type, recipient_id, exc,
+        )
 
 
 # ── Backward-compatible helpers ───────────────────────────────────────────────

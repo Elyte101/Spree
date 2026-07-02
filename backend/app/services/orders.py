@@ -12,7 +12,8 @@ from app.core.config import settings
 from app.db.models import Order, OrderItem, Product, User
 from app.schemas.order import ChargeMomoIn, OrderCreateIn, OrderTrackingIn
 from app.services import paystack as paystack_svc
-from app.services.notifications import create_notification
+from app.services.notifications import create_notification, notify_safe
+from app.services import dev_notifier
 
 logger = logging.getLogger(__name__)
 
@@ -92,12 +93,18 @@ def _check_stock(db: Session, items: list) -> None:
             )
 
 
+_LOW_STOCK_THRESHOLD = 5
+
+
 def _decrement_stock(db: Session, order: Order) -> None:
     """
     Atomically decrement stock for every order item using a conditional UPDATE.
     The WHERE stock >= quantity guard prevents the column going negative if two
     concurrent payments arrive for the same last unit.  An oversell is logged
     as a warning for manual review rather than blocking the already-taken payment.
+
+    After decrement, fires a low-stock in-app + email alert to the vendor if the
+    product stock falls to or below _LOW_STOCK_THRESHOLD.
     """
     for item in order.items:
         if not item.product_id or item.quantity <= 0:
@@ -114,6 +121,30 @@ def _decrement_stock(db: Session, order: Order) -> None:
                 order.id,
                 item.product_id,
                 item.quantity,
+            )
+            continue
+
+        # Check for low-stock condition and alert the vendor
+        product = db.get(Product, item.product_id)
+        if (
+            product is not None
+            and product.seller_id
+            and 0 < product.stock <= _LOW_STOCK_THRESHOLD
+        ):
+            notify_safe(
+                db,
+                event_type="low_stock",
+                recipient_id=product.seller_id,
+                title="Low stock alert",
+                body=(
+                    f"Your product '{product.name}' has only {product.stock} unit(s) remaining. "
+                    "Restock soon to avoid lost sales."
+                ),
+                notif_type="stock",
+                href="/dashboard/products",
+                email_subject=f"Low stock: {product.name}",
+                cta_label="Manage inventory",
+                cta_url=f"{settings.frontend_url}/dashboard/products",
             )
 
 
@@ -329,7 +360,7 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
 
 
 def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
-    """Transition order to paid, decrement stock, and notify sellers."""
+    """Transition order to paid, decrement stock, and notify buyer + sellers."""
     now = datetime.now(timezone.utc)
     order.status = "paid"
     order.paid_at = now
@@ -337,13 +368,37 @@ def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
         order.paystack_tx_id = tx_id
 
     _decrement_stock(db, order)
+    db.commit()
 
+    # Notify buyer
+    if order.user_id:
+        notify_safe(
+            db,
+            event_type="order_placed",
+            recipient_id=order.user_id,
+            title="Order confirmed!",
+            body=(
+                f"Your order has been received and payment confirmed. "
+                f"Total: {order.currency} {float(order.total):.2f}. "
+                "We'll notify you once it ships."
+            ),
+            notif_type="order",
+            href=f"/orders/{order.id}",
+            email_subject="Your Spree order is confirmed",
+            cta_label="View order",
+            cta_url=f"{settings.frontend_url}/orders/{order.id}",
+            recipient_email=order.email,
+        )
+
+    # Notify each vendor with products in this order
     seller_ids_notified: set[str] = set()
     for item in order.items:
         if item.seller_id and item.seller_id not in seller_ids_notified:
             seller_ids_notified.add(item.seller_id)
-            create_notification(
+            notify_safe(
                 db,
+                event_type="order_placed_seller",
+                recipient_id=item.seller_id,
                 title="New order received",
                 body=(
                     f"{order.full_name} placed an order containing your product(s). "
@@ -351,9 +406,10 @@ def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
                 ),
                 notif_type="order",
                 href="/dashboard/orders",
-                recipient_id=item.seller_id,
+                email_subject="You have a new order on Spree",
+                cta_label="View orders",
+                cta_url=f"{settings.frontend_url}/dashboard/orders",
             )
-    db.commit()
 
 
 def verify_payment(db: Session, reference: str) -> dict:
@@ -541,10 +597,20 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
         )
         if order and order.status == "pending":
             order.status = "cancelled"
+            db.commit()
             logger.info("Webhook: cancelled order %s — charge failed (ref=%s)", order.id, reference)
+            # Dev alert
+            dev_notifier.alert(
+                "payment_failure",
+                f"Charge failed for order {order.id}",
+                {"order_id": order.id, "reference": reference, "email": order.email},
+            )
+            # User notification
             if order.user_id:
-                create_notification(
+                notify_safe(
                     db,
+                    event_type="order_payment_failed",
+                    recipient_id=order.user_id,
                     title="Payment failed",
                     body=(
                         "Your payment could not be processed and your order has been cancelled. "
@@ -552,9 +618,11 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
                     ),
                     notif_type="order",
                     href="/orders",
-                    recipient_id=order.user_id,
+                    email_subject="Your Spree payment failed",
+                    cta_label="Try again",
+                    cta_url=f"{settings.frontend_url}/cart",
+                    recipient_email=order.email,
                 )
-            db.commit()
 
     elif event == "transfer.success":
         # Paystack confirmed the vendor payout transfer
@@ -569,23 +637,36 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
         vendor = db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
         if vendor:
             amount = amount_minor / 100
+            currency = (vendor.payout_info or {}).get("currency", "GHS")
             logger.warning(
                 "Webhook: payout transfer failed for vendor %s (recipient=%s, amount=%.2f)",
                 vendor.id, recipient_code, amount,
             )
-            create_notification(
+            dev_notifier.alert(
+                "payout_transfer_failure",
+                f"Payout transfer failed for vendor {vendor.id}",
+                {
+                    "vendor_id": vendor.id,
+                    "vendor_email": vendor.email,
+                    "recipient_code": recipient_code,
+                    "amount": f"{currency} {amount:.2f}",
+                },
+            )
+            notify_safe(
                 db,
+                event_type="payout_failed",
+                recipient_id=vendor.id,
                 title="Payout failed — action required",
                 body=(
-                    f"We couldn't send your payout of {(vendor.payout_info or {}).get('currency', 'GHS')} "
-                    f"{amount:.2f}. Please update your payout account details in your profile "
-                    "so we can retry."
+                    f"We couldn't send your payout of {currency} {amount:.2f}. "
+                    "Please update your payout account details in your profile so we can retry."
                 ),
                 notif_type="account",
                 href="/settings?tab=payout",
-                recipient_id=vendor.id,
+                email_subject="Action required: your Spree payout failed",
+                cta_label="Update payout details",
+                cta_url=f"{settings.frontend_url}/settings?tab=payout",
             )
-            db.commit()
 
 
 def create_order(db: Session, payload: OrderCreateIn) -> dict:
@@ -646,20 +727,48 @@ def create_order(db: Session, payload: OrderCreateIn) -> dict:
 
         if seller_id and seller_id not in seller_ids_notified:
             seller_ids_notified.add(seller_id)
-            create_notification(
-                db,
-                title="New order received",
-                body=(
-                    f"{payload.fullName} placed an order containing your product(s). "
-                    "Please prepare for shipping."
-                ),
-                notif_type="order",
-                href="/dashboard/orders",
-                recipient_id=seller_id,
-            )
 
     db.commit()
     db.refresh(order)
+
+    # Notify buyer
+    if order.user_id:
+        notify_safe(
+            db,
+            event_type="order_placed",
+            recipient_id=order.user_id,
+            title="Order confirmed!",
+            body=(
+                f"Your order has been received. "
+                f"Total: {order.currency} {float(order.total):.2f}. "
+                "We'll notify you once it ships."
+            ),
+            notif_type="order",
+            href=f"/orders/{order.id}",
+            email_subject="Your Spree order is confirmed",
+            cta_label="View order",
+            cta_url=f"{settings.frontend_url}/orders/{order.id}",
+            recipient_email=order.email,
+        )
+
+    # Notify sellers
+    for sid in seller_ids_notified:
+        notify_safe(
+            db,
+            event_type="order_placed_seller",
+            recipient_id=sid,
+            title="New order received",
+            body=(
+                f"{payload.fullName} placed an order containing your product(s). "
+                "Please prepare for shipping."
+            ),
+            notif_type="order",
+            href="/dashboard/orders",
+            email_subject="You have a new order on Spree",
+            cta_label="View orders",
+            cta_url=f"{settings.frontend_url}/dashboard/orders",
+        )
+
     return _order_to_dict(order)
 
 
@@ -737,6 +846,9 @@ def add_tracking(
         order.estimated_delivery_days = payload.estimatedDeliveryDays
         order.estimated_delivery_date = now + timedelta(days=payload.estimatedDeliveryDays)
 
+    db.commit()
+    db.refresh(order)
+
     if order.user_id:
         carrier_str = f" via {payload.carrier.strip()}" if payload.carrier.strip() else ""
         eta_str = (
@@ -744,20 +856,23 @@ def add_tracking(
             if order.estimated_delivery_days
             else ""
         )
-        create_notification(
+        body = (
+            f"Your order has been dispatched{carrier_str}. "
+            f"Tracking: {payload.trackingNumber.strip()}.{eta_str}"
+        )
+        notify_safe(
             db,
+            event_type="order_shipped",
+            recipient_id=order.user_id,
             title="Your order has shipped!",
-            body=(
-                f"Your order has been dispatched{carrier_str}. "
-                f"Tracking: {payload.trackingNumber.strip()}.{eta_str}"
-            ),
+            body=body,
             notif_type="order",
             href=f"/orders/{order_id}",
-            recipient_id=order.user_id,
+            email_subject="Your Spree order is on its way",
+            cta_label="Track order",
+            cta_url=f"{settings.frontend_url}/orders/{order_id}",
         )
 
-    db.commit()
-    db.refresh(order)
     return _order_to_dict(order)
 
 
@@ -800,6 +915,31 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
 
     order.payout_amount = total_payout
 
+    # Increment completed deliveries for each vendor before commit
+    for sid in seller_payouts:
+        vendor = db.get(User, sid)
+        if vendor:
+            vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
+
+    db.commit()
+    db.refresh(order)
+
+    # Notify buyer that delivery is confirmed
+    if order.user_id:
+        notify_safe(
+            db,
+            event_type="order_delivered",
+            recipient_id=order.user_id,
+            title="Delivery confirmed",
+            body="You have confirmed receipt of your order. Thank you for shopping on Spree!",
+            notif_type="order",
+            href=f"/orders/{order.id}",
+            email_subject="Your Spree order has been delivered",
+            cta_label="View order",
+            cta_url=f"{settings.frontend_url}/orders/{order.id}",
+        )
+
+    # Notify each vendor with their payout
     for sid, payout in seller_payouts.items():
         vendor = db.get(User, sid)
         payout_minor = int(payout * 100)
@@ -810,7 +950,7 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
                 paystack_svc.initiate_transfer(
                     amount_minor=payout_minor,
                     recipient_code=vendor.paystack_recipient_code,
-                    reason=f"Spree payout for order {order_id}",
+                    reason=f"Spree payout for order {order.id}",
                 )
                 transfer_ok = True
             except Exception as exc:
@@ -824,19 +964,19 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
                 "Please ensure your payout details are up to date in your profile."
             )
         )
-        create_notification(
+        notify_safe(
             db,
+            event_type="payout_released",
+            recipient_id=sid,
             title="Delivery confirmed — payout released",
             body=f"The buyer confirmed receipt of their order. {payout_note}",
             notif_type="order",
             href="/dashboard/orders",
-            recipient_id=sid,
+            email_subject="Your Spree payout has been released",
+            cta_label="View orders",
+            cta_url=f"{settings.frontend_url}/dashboard/orders",
         )
-        if vendor:
-            vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
 
-    db.commit()
-    db.refresh(order)
     return _order_to_dict(order)
 
 
@@ -857,6 +997,21 @@ def cancel_order(db: Session, order_id: str, actor_id: str, actor_role: str) -> 
     order.status = "cancelled"
     db.commit()
     db.refresh(order)
+
+    if order.user_id:
+        notify_safe(
+            db,
+            event_type="order_cancelled",
+            recipient_id=order.user_id,
+            title="Order cancelled",
+            body="Your order has been cancelled. If you paid, a refund will be processed.",
+            notif_type="order",
+            href="/orders",
+            email_subject="Your Spree order has been cancelled",
+            cta_label="View orders",
+            cta_url=f"{settings.frontend_url}/orders",
+        )
+
     return _order_to_dict(order)
 
 
@@ -882,8 +1037,10 @@ def refund_order(db: Session, order_id: str) -> dict:
     db.commit()
 
     if order.user_id:
-        create_notification(
+        notify_safe(
             db,
+            event_type="order_refunded",
+            recipient_id=order.user_id,
             title="Your order has been refunded",
             body=(
                 f"Your order has been cancelled and a refund of "
@@ -892,7 +1049,9 @@ def refund_order(db: Session, order_id: str) -> dict:
             ),
             notif_type="order",
             href="/orders",
-            recipient_id=order.user_id,
+            email_subject="Your Spree order has been refunded",
+            cta_label="View orders",
+            cta_url=f"{settings.frontend_url}/orders",
         )
 
     db.refresh(order)

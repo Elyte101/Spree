@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     email_from: str = "Spree <no-reply@spree.com>"
     frontend_url: str = "http://localhost:3000"
 
+    # Developer alert email (sent by dev_notifier on critical events)
+    # Requires resend_api_key to be configured.
+    dev_alert_email: str = ""
+
     # Web Push VAPID keys (generate once with: pywebpush --gen-vapid-keys)
     vapid_private_key: str = ""
     vapid_public_key: str = ""

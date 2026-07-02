@@ -273,6 +273,7 @@ export interface AdminOverview {
 export type NotificationType = "promo" | "order" | "stock" | "account";
 
 export type NotificationEventType =
+  // Vendor / seller lifecycle
   | "seller_created"
   | "docs_submitted"
   | "new_verification_pending"
@@ -280,6 +281,20 @@ export type NotificationEventType =
   | "seller_rejected"
   | "payout_saved"
   | "onboarding_reminder"
+  // Order events (buyer)
+  | "order_placed"
+  | "order_shipped"
+  | "order_delivered"
+  | "order_cancelled"
+  | "order_refunded"
+  | "order_payment_failed"
+  // Order events (vendor)
+  | "order_placed_seller"
+  | "payout_released"
+  | "payout_failed"
+  // Stock alerts (vendor)
+  | "low_stock"
+  // Generic / legacy
   | "promo"
   | "order"
   | "stock"
