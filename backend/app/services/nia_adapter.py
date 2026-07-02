@@ -170,6 +170,13 @@ class NIAAdapter:
                 )
         except httpx.TimeoutException:
             logger.exception("[NIA] timeout verifying %s", id_number)
+            # G30: alert dev team on NIA API failure
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert(
+                "nia_api_timeout",
+                "NIA verification timed out",
+                {"id_number_suffix": id_number[-4:] if len(id_number) >= 4 else "****"},
+            )
             return NIAResult(
                 success=False,
                 id_number=id_number,
@@ -178,6 +185,12 @@ class NIAAdapter:
             )
         except Exception:  # noqa: BLE001
             logger.exception("[NIA] unexpected error verifying %s", id_number)
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert(
+                "nia_api_error",
+                "NIA verification network error",
+                {"id_number_suffix": id_number[-4:] if len(id_number) >= 4 else "****"},
+            )
             return NIAResult(
                 success=False,
                 id_number=id_number,
@@ -189,6 +202,12 @@ class NIAAdapter:
             data = resp.json()
         except Exception:  # noqa: BLE001
             logger.error("[NIA] non-JSON response: %s %s", resp.status_code, resp.text[:200])
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert(
+                "nia_api_parse_error",
+                "NIA returned non-JSON response",
+                {"status_code": resp.status_code},
+            )
             return NIAResult(
                 success=False,
                 id_number=id_number,

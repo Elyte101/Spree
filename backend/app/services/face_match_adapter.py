@@ -163,6 +163,9 @@ class FaceMatchAdapter:
                 )
         except httpx.TimeoutException:
             logger.exception("[FaceMatch] timeout")
+            # G30: alert dev team on face-match API failure
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert("face_match_timeout", "Face verification service timed out", {})
             return FaceMatchResult(
                 success=False,
                 error_code="TIMEOUT",
@@ -170,6 +173,8 @@ class FaceMatchAdapter:
             )
         except Exception:  # noqa: BLE001
             logger.exception("[FaceMatch] unexpected network error")
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert("face_match_network_error", "Face verification network error", {})
             return FaceMatchResult(
                 success=False,
                 error_code="NETWORK_ERROR",
@@ -180,6 +185,12 @@ class FaceMatchAdapter:
             data = resp.json()
         except Exception:  # noqa: BLE001
             logger.error("[FaceMatch] non-JSON response: %s %s", resp.status_code, resp.text[:200])
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert(
+                "face_match_parse_error",
+                "Face verification returned non-JSON response",
+                {"status_code": resp.status_code},
+            )
             return FaceMatchResult(
                 success=False,
                 error_code="PARSE_ERROR",

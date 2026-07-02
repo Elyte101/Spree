@@ -167,10 +167,34 @@ def save_step5(db: Session, user_id: str, payload: OnboardingStep5Request) -> di
 
 
 def submit_onboarding(db: Session, user_id: str) -> dict:
-    """Finalise onboarding — validate all steps complete, set pending_verification."""
+    """Finalise onboarding — validate all steps complete, set pending_verification.
+
+    G35: Rejected sellers can resubmit after updating their documents.
+    Blocked states: pending_verification (already submitted, awaiting review),
+    active/verified (already approved), suspended/removed (admin action required).
+    """
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # G35: guard against invalid resubmit states
+    blocked_statuses = {"pending_verification", "active", "suspended", "removed"}
+    if user.seller_status in blocked_statuses:
+        if user.seller_status == "pending_verification":
+            raise HTTPException(
+                status_code=409,
+                detail="Your application is already under review. We'll notify you once a decision is made.",
+            )
+        if user.seller_status in ("active", "verified"):
+            raise HTTPException(
+                status_code=409,
+                detail="Your seller account is already active.",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="Your account is not eligible for resubmission. Please contact support.",
+        )
+
     if user.onboarding_step < 5:
         raise HTTPException(
             status_code=400,
@@ -183,19 +207,30 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
     if not user.store_name:
         raise HTTPException(status_code=400, detail="Store details are required")
 
+    is_resubmit = user.seller_status == "rejected"
     user.seller_status = "pending_verification"
     user.role = "vendor"
     user.seller_started_at = user.seller_started_at or datetime.now(timezone.utc)
+    # Clear rejection timestamps on resubmit so the timeline is clean
+    if is_resubmit:
+        user.rejected_at = None
+        user.rejection_reason = None
     db.commit()
 
     # Notify the vendor
+    notif_body = (
+        "We've received your updated documents and will re-review your application shortly. "
+        "We aim to verify accounts within 1–2 business days."
+        if is_resubmit
+        else "We've received your identity documents and will review them shortly. "
+             "We aim to verify accounts within 1–2 business days."
+    )
     notif_svc.notify(
         db,
         event_type="docs_submitted",
         recipient_id=user_id,
-        title="Documents submitted",
-        body="We've received your identity documents and will review them shortly. "
-             "We aim to verify accounts within 1–2 business days.",
+        title="Documents submitted" if not is_resubmit else "Documents resubmitted",
+        body=notif_body,
         href="/settings",
         email_subject="Your Spree vendor application is under review",
         cta_label="View your profile",
@@ -210,11 +245,11 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
             db,
             event_type="new_verification_pending",
             recipient_id=admin.id,
-            title="New vendor awaiting verification",
-            body=f"{user.name} ({user.email}) has submitted their documents. "
+            title="Vendor resubmitted documents" if is_resubmit else "New vendor awaiting verification",
+            body=f"{user.name} ({user.email}) has {'resubmitted' if is_resubmit else 'submitted'} their documents. "
                  "Review their application in the verification queue.",
             href="/dashboard/verification",
-            email_subject="New vendor verification request",
+            email_subject="Vendor verification request" + (" (resubmit)" if is_resubmit else ""),
             cta_label="Review now",
             cta_url=f"{settings.frontend_url}/dashboard/verification",
         )
