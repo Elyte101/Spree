@@ -1053,6 +1053,147 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
     return _order_to_dict(order)
 
 
+def auto_release_delivered_orders(db: Session) -> dict:
+    """G10: Auto-release escrow for orders that have been 'delivered' but buyer never confirmed.
+
+    Reads the `auto_release_days` SiteSetting (default: 7).
+    For each eligible order, runs the same payout logic as confirm_delivery()
+    but without requiring buyer action (system-triggered).
+
+    Returns summary: {"checked": N, "released": N, "errors": [...]}.
+    """
+    from app.db.models import SiteSetting  # noqa: PLC0415
+
+    setting = db.get(SiteSetting, "auto_release_days")
+    try:
+        release_days = int(setting.value) if setting else 7
+    except (ValueError, TypeError):
+        release_days = 7
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=release_days)
+
+    # Find all orders that have been 'delivered' longer than the release window.
+    stale_orders = db.scalars(
+        select(Order).where(
+            Order.status == "delivered",
+            Order.delivered_at != None,  # noqa: E711
+            Order.delivered_at < cutoff,
+        )
+    ).all()
+
+    released = 0
+    errors: list[str] = []
+
+    for order in stale_orders:
+        try:
+            now = datetime.now(timezone.utc)
+            order.status = "confirmed"
+            order.payout_released_at = now
+
+            seller_payouts: dict[str, Decimal] = {}
+            total_payout = Decimal("0")
+
+            for item in order.items:
+                item_payout = (
+                    pricing_svc.seller_payout_from_listed(
+                        Decimal(str(item.price)), item.commission_rate
+                    )
+                    * item.quantity
+                )
+                total_payout += item_payout
+                if item.seller_id:
+                    seller_payouts[item.seller_id] = (
+                        seller_payouts.get(item.seller_id, Decimal("0")) + item_payout
+                    )
+
+            order.payout_amount = total_payout
+
+            for sid in seller_payouts:
+                vendor = db.get(User, sid)
+                if vendor:
+                    vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
+
+            db.commit()
+            db.refresh(order)
+
+            # Notify buyer
+            if order.user_id:
+                notify_safe(
+                    db,
+                    event_type="order_auto_released",
+                    recipient_id=order.user_id,
+                    title="Order auto-confirmed",
+                    body=(
+                        f"Your order has been automatically confirmed after {release_days} days. "
+                        "If you have not received your items, please contact support."
+                    ),
+                    notif_type="order",
+                    href=f"/orders/{order.id}",
+                    email_subject="Your Spree order has been auto-confirmed",
+                    cta_label="View order",
+                    cta_url=f"{settings.frontend_url}/orders/{order.id}",
+                )
+
+            # Release payouts
+            all_transfers_ok = True
+            for sid, payout in seller_payouts.items():
+                vendor = db.get(User, sid)
+                payout_minor = int(payout * 100)
+                transfer_ok = False
+
+                if vendor and vendor.paystack_recipient_code and settings.paystack_secret_key:
+                    idempotency_key = f"payout-{order.id}-{sid}"
+                    try:
+                        paystack_svc.initiate_transfer(
+                            amount_minor=payout_minor,
+                            recipient_code=vendor.paystack_recipient_code,
+                            reason=f"Spree auto-release payout for order {order.id}",
+                            idempotency_key=idempotency_key,
+                        )
+                        transfer_ok = True
+                    except Exception as exc:
+                        logger.error(
+                            "Auto-release Paystack transfer failed for vendor %s order %s: %s",
+                            sid, order.id, exc,
+                        )
+                        all_transfers_ok = False
+
+                payout_ghs = payout.quantize(Decimal("0.01"))
+                notify_safe(
+                    db,
+                    event_type="payout_released",
+                    recipient_id=sid,
+                    title="Auto-release payout sent",
+                    body=(
+                        f"Order {order.id} was auto-confirmed after {release_days} days. "
+                        f"Your payout of {order.currency} {payout_ghs} "
+                        + ("has been sent." if transfer_ok else "is being processed.")
+                    ),
+                    notif_type="order",
+                    href="/dashboard/orders",
+                    email_subject="Spree auto-release payout",
+                    cta_label="View orders",
+                    cta_url=f"{settings.frontend_url}/dashboard/orders",
+                )
+
+            if all_transfers_ok and seller_payouts:
+                order.status = "paid_out"
+                db.commit()
+                db.refresh(order)
+
+            released += 1
+
+        except Exception as exc:
+            logger.error("auto_release failed for order %s: %s", order.id, exc)
+            errors.append(f"{order.id}: {exc}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    return {"checked": len(stale_orders), "released": released, "errors": errors}
+
+
 def cancel_order(db: Session, order_id: str, actor_id: str, actor_role: str) -> dict:
     order = db.get(Order, order_id)
     if order is None:

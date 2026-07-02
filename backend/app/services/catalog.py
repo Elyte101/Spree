@@ -9,7 +9,7 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
-from app.db.models import Brand, Category, Collection, Product, PromoBanner, SellerReport, User
+from app.db.models import Brand, Category, Collection, Comment, Product, ProductLike, PromoBanner, SellerReport, User
 from app.schemas.catalog import ProductCreateIn, ProductUpdateIn
 
 
@@ -1022,3 +1022,151 @@ def toggle_product_featured(db: Session, product_id: str, featured: bool) -> dic
         _base_product_query(include_inactive_sellers=True, include_blacklisted=True).where(Product.id == product.id)
     )
     return _product_to_dict(refreshed)
+
+
+# ── G21: Product comments / reviews ──────────────────────────────────────────
+
+def _comment_to_dict(comment: Comment, user: User | None = None) -> dict:
+    return {
+        "id": comment.id,
+        "productId": comment.product_id,
+        "userId": comment.user_id,
+        "authorName": user.name if user else "User",
+        "body": comment.body,
+        "rating": comment.rating,
+        "isFlagged": comment.is_flagged,
+        "createdAt": comment.created_at.isoformat() if comment.created_at else None,
+    }
+
+
+def list_comments(db: Session, product_id: str) -> list[dict]:
+    """Return non-flagged comments for a product, newest first."""
+    comments = db.scalars(
+        select(Comment).where(
+            Comment.product_id == product_id,
+            Comment.is_flagged.is_(False),
+        ).order_by(Comment.created_at.desc())
+    ).all()
+    result = []
+    for c in comments:
+        user = db.get(User, c.user_id)
+        result.append(_comment_to_dict(c, user))
+    return result
+
+
+def create_comment(
+    db: Session,
+    product_id: str,
+    user_id: str,
+    body: str,
+    rating: int | None,
+) -> dict:
+    """G21: Create a comment/review on a product. One per buyer per product (enforced by UQ or check)."""
+    # Basic XSS: strip angle-brackets from free text (G32 partial mitigation).
+    import re as _re  # noqa: PLC0415
+    clean_body = _re.sub(r"<[^>]+>", "", body).strip()
+    if not clean_body:
+        raise HTTPException(status_code=422, detail="Comment body cannot be empty")
+    if rating is not None and not (1 <= rating <= 5):
+        raise HTTPException(status_code=422, detail="Rating must be between 1 and 5")
+
+    product = db.scalar(select(Product).where(Product.id == product_id))
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    comment = Comment(
+        id=str(uuid4()),
+        product_id=product_id,
+        user_id=user_id,
+        body=clean_body,
+        rating=rating,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+
+    user = db.get(User, user_id)
+    return _comment_to_dict(comment, user)
+
+
+def delete_comment(db: Session, comment_id: str, actor_id: str, actor_role: str) -> None:
+    """Owner or admin can delete a comment."""
+    comment = db.get(Comment, comment_id)
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if actor_role != "admin" and comment.user_id != actor_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    db.delete(comment)
+    db.commit()
+
+
+def flag_comment(db: Session, comment_id: str, actor_role: str) -> dict:
+    """Admin-only: flag a comment so it's hidden from public."""
+    if actor_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    comment = db.get(Comment, comment_id)
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    comment.is_flagged = True
+    db.commit()
+    db.refresh(comment)
+    user = db.get(User, comment.user_id)
+    return _comment_to_dict(comment, user)
+
+
+# ── G22: Product likes / favourites ──────────────────────────────────────────
+
+def toggle_product_like(db: Session, product_id: str, user_id: str) -> dict:
+    """G22: Idempotent like/unlike. Returns {liked: bool, likeCount: int}."""
+    product = db.scalar(select(Product).where(Product.id == product_id))
+    if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    existing = db.scalar(
+        select(ProductLike).where(
+            ProductLike.product_id == product_id,
+            ProductLike.user_id == user_id,
+        )
+    )
+    if existing:
+        db.delete(existing)
+        db.commit()
+        liked = False
+    else:
+        db.add(ProductLike(id=str(uuid4()), product_id=product_id, user_id=user_id))
+        db.commit()
+        liked = True
+
+    like_count = db.scalar(
+        select(func.count()).select_from(ProductLike).where(ProductLike.product_id == product_id)
+    ) or 0
+    return {"liked": liked, "likeCount": like_count}
+
+
+def get_product_likes(db: Session, product_id: str, user_id: str | None) -> dict:
+    """Return like count and whether the requesting user has liked the product."""
+    like_count = db.scalar(
+        select(func.count()).select_from(ProductLike).where(ProductLike.product_id == product_id)
+    ) or 0
+    liked = False
+    if user_id:
+        liked = db.scalar(
+            select(ProductLike).where(
+                ProductLike.product_id == product_id,
+                ProductLike.user_id == user_id,
+            )
+        ) is not None
+    return {"likeCount": like_count, "liked": liked}
+
+
+def list_user_liked_products(db: Session, user_id: str) -> list[dict]:
+    """Return all products liked by a user, most-recent first."""
+    likes = db.scalars(
+        select(ProductLike).where(ProductLike.user_id == user_id).order_by(ProductLike.created_at.desc())
+    ).all()
+    result = []
+    for like in likes:
+        product = db.scalar(_base_product_query().where(Product.id == like.product_id))
+        if product:
+            result.append(_product_to_dict(product))
+    return result

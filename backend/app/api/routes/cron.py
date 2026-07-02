@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.core.config import settings
 from app.db.models import User
 from app.services import notifications as notif_svc
+from app.services.orders import auto_release_delivered_orders
 
 router = APIRouter(prefix="/cron", dependencies=[Depends(require_internal_api_key)])
 
@@ -48,3 +49,13 @@ def onboarding_reminder(db: Session = Depends(get_db)) -> dict:
         reminded += 1
 
     return {"reminded": reminded}
+
+
+@router.post("/auto-release")
+def auto_release(db: Session = Depends(get_db)) -> dict:
+    """G10: Auto-release escrow for orders that have been delivered but buyer never confirmed.
+
+    Reads the `auto_release_days` SiteSetting (default: 7 days).
+    Should be called once daily via the Next.js cron scheduler or external cron.
+    """
+    return auto_release_delivered_orders(db)

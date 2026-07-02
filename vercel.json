@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "npm install --legacy-peer-deps"
+  "installCommand": "npm install --legacy-peer-deps",
+  "crons": [
+    {
+      "path": "/api/cron/onboarding-reminder",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/auto-release",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

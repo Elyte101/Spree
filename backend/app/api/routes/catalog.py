@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Header, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey, OptionalInternalKey
 from app.schemas.catalog import (
@@ -17,21 +20,33 @@ from app.schemas.catalog import (
 )
 from app.services.catalog import (
     ProductListParams,
+    create_comment,
     create_product,
+    delete_comment,
     delete_product,
+    flag_comment,
     get_admin_overview,
     get_home_feed,
     get_product,
+    get_product_likes,
     get_related_products,
     list_brands,
     list_categories,
     list_collections,
+    list_comments,
     list_products,
+    list_user_liked_products,
     search_storefront,
     toggle_product_blacklist,
     toggle_product_featured,
+    toggle_product_like,
     update_product,
 )
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+    rating: int | None = Field(default=None, ge=1, le=5)
 
 router = APIRouter()
 
@@ -192,3 +207,87 @@ def admin_overview(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
     if actor_role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return get_admin_overview(db)
+
+
+# ── G21: Comments ─────────────────────────────────────────────────────────────
+
+@router.get("/products/{product_id}/comments")
+def get_comments(product_id: str, db: DBSession):
+    """Return all non-flagged comments for a product."""
+    return list_comments(db, product_id)
+
+
+@router.post("/products/{product_id}/comments", status_code=status.HTTP_201_CREATED)
+def post_comment(
+    product_id: str,
+    payload: CommentIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    """G21: Authenticated buyers can post a comment/review on a product."""
+    if not actor_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return create_comment(db, product_id, actor_id, payload.body, payload.rating)
+
+
+@router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_comment(
+    comment_id: str,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+    actor_role: ActorRole,
+):
+    """Owner or admin can delete a comment."""
+    if not actor_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    delete_comment(db, comment_id, actor_id, actor_role)
+
+
+@router.post("/admin/comments/{comment_id}/flag")
+def admin_flag_comment(
+    comment_id: str,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_role: ActorRole,
+):
+    """Admin-only: flag a comment so it's hidden from public."""
+    return flag_comment(db, comment_id, actor_role)
+
+
+# ── G22: Product likes / favourites ──────────────────────────────────────────
+
+@router.post("/products/{product_id}/like")
+def like_product(
+    product_id: str,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    """G22: Idempotent like/unlike toggle. Returns {liked, likeCount}."""
+    if not actor_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return toggle_product_like(db, product_id, actor_id)
+
+
+@router.get("/products/{product_id}/likes")
+def product_likes(
+    product_id: str,
+    db: DBSession,
+    actor_id: ActorUserId,
+):
+    """Return like count and whether the requesting user has liked the product."""
+    return get_product_likes(db, product_id, actor_id)
+
+
+@router.get("/users/me/likes")
+def my_liked_products(
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    """Return all products liked by the current user."""
+    if not actor_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return list_user_liked_products(db, actor_id)

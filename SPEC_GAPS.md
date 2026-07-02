@@ -4,139 +4,107 @@
 
 | ID  | Spec Item | Status | Severity | File(s) | Notes |
 |-----|-----------|--------|----------|---------|-------|
-| G1  | Only Ghana Card accepted for ID verification | partial | high | `backend/app/schemas/auth.py:72`, `lib/ghana.ts:210-216`, `components/vendor/steps/Step4Identity.tsx:558` | `GhanaIdType` allows voters-id, drivers-license, passport, ecowas-card, ssnit. Frontend Step4Identity and old vendorApplicationWizard show all types. Spec says Ghana Card ONLY. |
-| G2  | No bank account payout fields | partial | high | `backend/app/schemas/auth.py:97-104`, `components/vendor/steps/Step5Payout.tsx`, `backend/app/services/onboarding.py:146-155` | Bank transfer method and bank fields exist throughout. Spec says card OR MoMo (MTN/Telecel only). |
-| G3  | MoMo restricted to MTN and Telecel ONLY | partial | medium | `lib/ghana.ts:344-348`, `lib/momo/providers.ts`, `components/vendor/steps/Step5Payout.tsx` | MOMO_NETWORKS includes AirtelTigo Money. Spec says MTN and Telecel ONLY. Backend MoMo charge sends provider string to Paystack without restricting to MTN/Telecel. |
-| G4  | NIA API adapter with mock/sandbox mode | missing | high | N/A | No `backend/app/services/nia_adapter.py` exists. ID number is saved but never verified against NIA. No NIA call, no returned details for applicant to confirm, no retry path. |
-| G5  | Face-match adapter with mock/sandbox mode | missing | high | N/A | No `backend/app/services/face_match_adapter.py` exists. Selfie is uploaded but never matched against card photo. |
-| G6  | Ledger service for every money movement | missing | high | N/A | No `backend/app/services/ledger.py`. No ledger entries recorded. Spec requires record_charge, record_escrow_hold, record_fee_deduction, record_payout, record_refund, assert_balance. |
-| G7  | Logistics adapter with mock/sandbox mode | missing | high | N/A | No `backend/app/services/logistics_adapter.py`. Shipment/tracking is manual (seller enters tracking number via UI). No rider-pickup vs seller-dropoff modes. No webhook endpoint for logistics status updates. |
-| G8  | Order state machine — spec states vs implemented | partial | critical | `backend/app/services/orders.py` | Spec states: `pending_payment→paid(escrow)→processing→pre_transit→in_transit→delivered→confirmed→paid_out`. Implemented: `pending→paid→shipped→completed→cancelled`. Missing states: `pending_payment`, `processing`, `pre_transit`, `in_transit`, `delivered`, `confirmed`, `paid_out`. |
-| G9  | Escrow: release requires BOTH delivered AND buyer confirms | partial | critical | `backend/app/services/orders.py:879-980` | Payout triggered on `confirm_delivery` (buyer action only), which is correct. But order goes directly to `completed` and payout fires. No separate `delivered` status before buyer confirms. `shipped→completed` skips `delivered` state. |
-| G10 | Auto-release after configurable window (default 7 days) | missing | high | N/A | No cron job or task to auto-release escrow if buyer never confirms after delivery. No configurable window in settings. |
-| G11 | Commission % and processing fee admin-configurable | partial | high | `backend/app/core/pricing.py` | Processing fee (1.5%) and commission brackets are hardcoded in `pricing.py`. Spec requires admin-configurable, snapshotted at checkout time. |
-| G12 | Amounts in minor units (pesewas) or Decimal — no floats | partial | high | `backend/app/services/orders.py:167-177` | `_order_to_dict` uses `float()` throughout. Payout amounts, totals serialized as Python floats. DB stores `Numeric(10,2)` which is correct, but API output uses float. |
-| G13 | Ghana Card data, NIA response, payout details encrypted at rest | missing | critical | `backend/app/db/models.py:171-177,184-186` | `government_id_number`, `payout_info`, `id_front_url`, `id_back_url`, `selfie_url` stored as plain text/JSON. No encryption. |
-| G14 | Seller verification state machine: unverified→pending→verified|rejected | partial | high | `backend/app/services/marketplace.py:441,463`, `backend/app/services/onboarding.py:180` | Transitions exist but only partially. State `unverified` maps to `buyer`. `pending_verification` is set on submit. `verified`/`rejected` set on admin action. But `_serialize_profile` in auth.py strips `pending_verification`, `verified`, `rejected` from valid statuses (line 128-134). |
-| G15 | `_serialize_profile` strips valid seller statuses | critical | critical | `backend/app/services/auth.py:128-134` | `seller_status` defaults to `"buyer"` for any value not in `{"buyer","pending","active","suspended","removed"}`. Statuses `pending_verification`, `verified`, `rejected`, `incomplete` get coerced to `"buyer"`, losing state. |
-| G16 | ONLY verified sellers can create products | partial | critical | `backend/app/services/catalog.py:613` | Check is `seller_status != "active"`. With G15 bug, `pending_verification`/`verified` vendors show as `buyer` in profile serialization. The product route checks actual DB value correctly, but state inconsistency is confusing. Per spec, only `verified` sellers should create products — enforced as `active` in current code. |
-| G17 | Seller contact info not leaked to buyers | partial | high | `backend/app/services/marketplace.py:116-156`, `backend/app/schemas/marketplace.py:16-43` | `SellerSummaryOut` includes `email`, `phone`, `sellerContact` (businessEmail, businessPhone, whatsapp). These are visible to anyone who calls `/sellers/{id}`. Spec: guests never see seller contact info. |
-| G18 | Payout details viewable by ADMIN ONLY | partial | critical | `backend/app/services/auth.py:178`, `backend/app/schemas/auth.py:148` | `_serialize_profile` returns `payoutInfo` to the profile owner (self). The route at `GET /auth/profile/{user_id}` allows admin or self to read. Self seeing own payout info is fine. But `AdminSellerDetailOut` is correct (only admin). However `UserProfileOut.payoutInfo` is currently sent via the `/api/profile` route to the user themselves — which may be intentional for settings. Need to audit whether buyer profile endpoint leaks other users' payout. Route checks `actor_id == user_id` — looks correct. |
-| G19 | Seller coordinates (location) — buyers never see them | partial | high | `backend/app/services/marketplace.py:130-133` | `storeLocation` dict returned in `SellerSummaryOut` includes `addressLine1`, `city`, `state`, `postalCode`, `country`. Full address visible. Spec: only admin and logistics can read coordinates. City/country for display may be ok; full address line is over-exposed. |
-| G20 | Guest cart merges into account cart on login | missing | medium | N/A | No cart merge logic in auth flow. Guest adds to localStorage cart; on login, no merge-and-dedupe happens. |
-| G21 | Comments under products — CRUD | missing | high | N/A | No Comment model, no comment routes in backend. No comment UI in frontend product detail page. |
-| G22 | Buyer likes products — idempotent, unlikeable, counts | missing | high | N/A | No ProductLike model or routes in backend. FavoritesPage and favoritesStore exist in frontend but appear to be local/client-side only. |
-| G23 | Admin editable main-page tagline (events, seasonal) | missing | medium | N/A | No `SiteSetting` model or admin endpoint for editing homepage tagline. |
+| G1  | Only Ghana Card accepted for ID verification | **done** | high | `backend/app/schemas/auth.py`, `lib/ghana.ts`, `types/types.ts` | `GhanaIdType` restricted to `"ghana-card"` only in schemas, lib, and types. Frontend Step4Identity updated. |
+| G2  | No bank account payout fields | **done** | high | `backend/app/schemas/auth.py`, `components/vendor/steps/Step5Payout.tsx`, `components/profile/profilePage.tsx`, `lib/api/types.ts` | Bank fields removed from all payout schemas and UI. Method is now `"card" | "mobile_money"`. |
+| G3  | MoMo restricted to MTN and Telecel ONLY | **done** | medium | `lib/ghana.ts`, `backend/app/schemas/auth.py` | AirtelTigo removed from `MOMO_NETWORKS`. Backend validates network against MTN/Telecel only. |
+| G4  | NIA API adapter with mock/sandbox mode | **done** | high | `backend/app/services/nia_adapter.py` | NIAAdapter with mock mode (`NIA_MOCK=true`). Returns `NIAResult` dataclass. Numbers ending in "0" = NOT_FOUND in mock. |
+| G5  | Face-match adapter with mock/sandbox mode | **done** | high | `backend/app/services/face_match_adapter.py` | FaceMatchAdapter with mock mode (`FACE_MATCH_MOCK_FAIL=true` to simulate failure). Returns `FaceMatchResult` dataclass. |
+| G6  | Ledger service for every money movement | **done** | high | `backend/app/services/ledger.py`, `backend/app/db/models.py` | `LedgerEntry` model added. Service has record_payment_received, record_commission_held, record_seller_credit, record_payout_initiated, record_refund_initiated, get_order_ledger, get_seller_ledger. Idempotency-keyed. |
+| G7  | Logistics adapter with mock/sandbox mode | **done** | high | `backend/app/services/logistics_adapter.py` | LogisticsAdapter with get_rate, create_shipment, get_tracking, verify_webhook, parse_webhook. Mock mode default. |
+| G8  | Order state machine — spec states vs implemented | **done** | critical | `backend/app/services/orders.py`, `types/types.ts`, all order UI components | All spec states added: `pending→paid→processing→pre_transit→in_transit→delivered→confirmed→paid_out`. Frontend status maps updated in all 4 components. |
+| G9  | Escrow: release requires BOTH delivered AND buyer confirms | **done** | critical | `backend/app/services/orders.py`, `backend/app/api/routes/orders.py` | `mark_delivered` endpoint (seller: in_transit→delivered). `confirm_delivery` requires `delivered` status (buyer: delivered→confirmed→paid_out). |
+| G10 | Auto-release after configurable window (default 7 days) | **done** | high | `backend/app/services/orders.py`, `backend/app/api/routes/cron.py`, `app/api/cron/auto-release/route.ts`, `vercel.json` | `auto_release_delivered_orders()` service function. `POST /cron/auto-release` backend endpoint. Next.js cron route at `/api/cron/auto-release`. Vercel cron scheduled daily at 03:00 UTC. Reads `auto_release_days` SiteSetting (default 7). |
+| G11 | Commission % and processing fee admin-configurable | **done** | high | `backend/app/core/pricing.py`, `backend/app/db/init_db.py`, `backend/app/db/models.py` | `load_settings_from_db()` reads `processing_fee_rate` and `commission_brackets` from SiteSetting. Defaults seeded on first boot. |
+| G12 | Amounts in minor units (pesewas) or Decimal — no floats | **done** | high | `backend/app/services/orders.py` | `_order_to_dict` uses `Decimal` helper `_d()`. Payout amounts returned as string. `_order_to_list_dict` returns `total` as `str(order.total.quantize(...))`. |
+| G13 | Ghana Card data, NIA response, payout details encrypted at rest | **done** | critical | `backend/app/services/encryption.py`, `backend/app/services/onboarding.py`, `backend/app/services/auth.py` | Fernet-based encryption service (`enc1:` prefix). government_id_number, id_front/back_url, selfie_url, payout_info encrypted on write, decrypted on read. Graceful fallback with WARNING when key not set. |
+| G14 | Seller verification state machine: unverified→pending→verified\|rejected | **done** | high | `backend/app/services/auth.py`, `backend/app/services/marketplace.py` | Fixed via G15. All status values pass through `_serialize_profile` correctly. `approve_seller`/`reject_seller` transitions wired. |
+| G15 | `_serialize_profile` strips valid seller statuses | **done** | critical | `backend/app/services/auth.py` | Valid status set expanded to include all defined statuses: `pending_verification`, `verified`, `rejected`, `incomplete`. |
+| G16 | ONLY verified sellers can create products | partial | critical | `backend/app/services/catalog.py` | Check is `seller_status != "active"`. With G15 fixed, status values flow correctly. `verified`/`active` sellers only can create — enforced at DB level. |
+| G17 | Seller contact info not leaked to buyers | **done** | high | `backend/app/services/marketplace.py` | Split into `_serialize_seller_summary` (public, no PII) and `_serialize_admin_seller_summary` (PII for admin). Email/phone/sellerContact removed from public response. |
+| G18 | Payout details viewable by ADMIN ONLY | partial | critical | `backend/app/services/auth.py`, `backend/app/schemas/auth.py` | `payoutInfo` returned to self (settings page) and admin only. Route checks `actor_id == user_id` or admin role. Correct per spec. |
+| G19 | Seller coordinates (location) — buyers never see them | **done** | high | `backend/app/services/marketplace.py` | `storeLocation` in public view restricted to `{city, state, country}` only. Full address only in admin view. |
+| G20 | Guest cart merges into account cart on login | missing | medium | N/A | Client-side Zustand persist handles basic persistence. Backend cart-per-user merge not implemented. |
+| G21 | Comments under products — CRUD | **done** | high | `backend/app/db/models.py`, `backend/app/services/catalog.py`, `backend/app/api/routes/catalog.py` | `Comment` model. `GET/POST /products/{id}/comments`, `DELETE /comments/{id}`, `POST /admin/comments/{id}/flag`. XSS strip on body (G32 partial). |
+| G22 | Buyer likes products — idempotent, unlikeable, counts | **done** | high | `backend/app/db/models.py`, `backend/app/services/catalog.py`, `backend/app/api/routes/catalog.py` | `ProductLike` model. `POST /products/{id}/like` (toggle), `GET /products/{id}/likes`, `GET /users/me/likes`. |
+| G23 | Admin editable main-page tagline (events, seasonal) | **done** | medium | `backend/app/db/models.py`, `backend/app/api/routes/marketplace.py` | `SiteSetting` model added. `GET /site-settings/{key}`, `PUT /admin/site-settings/{key}`, `GET /admin/site-settings` endpoints added. Default tagline seeded. |
 | G24 | Admin: in-app chat seller/buyer↔admin ONLY | missing | medium | N/A | No chat/support messaging model or routes. |
-| G25 | Buyer↔seller direct messaging blocked | partial | medium | N/A | No messaging system exists at all, which means no DM capability either. Good. But `sellerContact` fields (phone, whatsapp, email) leak contact info (see G17). |
-| G26 | Soft-delete users — orders and money records stay intact | missing | medium | `backend/app/services/marketplace.py:391-399` | `delete_seller` does a hard `db.delete(vendor)`. No soft-delete. Orders with `user_id` / `seller_id` FK would break or cascade-delete. |
-| G27 | Admin actions audited: who, what, when | missing | medium | N/A | No `AuditLog` model. Admin approve/reject/blacklist/deactivate actions not recorded with actor+timestamp. |
-| G28 | Admin: select featured products, orderable | partial | low | `backend/app/db/models.py:97` | `is_featured` column exists, `is_new_arrival` column exists. Admin top-products endpoint exists. But no API to toggle featured on a specific product or reorder featured products. |
-| G29 | Payouts idempotent — idempotency key prevents double-payout | partial | high | `backend/app/services/orders.py:950` | Paystack transfer called inside `confirm_delivery`. No idempotency key passed to `paystack_svc.initiate_transfer`. If confirm_delivery is retried, transfer could fire twice. |
-| G30 | Dev alerts for NIA/face-scan API failures | missing | medium | N/A | NIA and face-match adapters don't exist yet. Once added, dev_notifier should fire on API failures. |
-| G31 | Rate-limit comment endpoints | missing | medium | N/A | Comments don't exist yet. When added, rate-limiting needed. |
-| G32 | Sanitize user input against XSS | partial | high | N/A | Backend uses Pydantic validation. No explicit HTML sanitization for text fields that could be rendered (product descriptions, store descriptions, comments). |
-| G33 | All secrets via env vars — audit for hardcoded keys | partial | high | `backend/.env` | Live Paystack keys (`sk_live_...`) committed to `.env`. Should be in `.env` (not committed) or env var injection. `.env.local` also has live keys and DB passwords. Neither file is in `.gitignore` apparently — need to verify. |
-| G34 | Seller status enforcement: deactivated products hidden | partial | medium | `backend/app/services/catalog.py:205-216` | Products hidden when `seller_status != "active"`. But the status enum confusion (G15) means `verified`/`pending_verification` sellers' products appear based on DB value not serialized value. |
-| G35 | Rejected seller can resubmit | partial | medium | `backend/app/services/marketplace.py:463-488` | `seller_status = "rejected"` is set. Resubmit path: unclear, but onboarding submit checks no guard against rejected state (could resubmit). However `_serialize_profile` strips `rejected` to `buyer` (G15). |
-| G36 | Payout flow: deduct commission + processing fee → seller net | partial | high | `backend/app/services/orders.py:903-916` | `confirm_delivery` uses `seller_payout_from_listed` which recovers seller price from commission. But processing fee (buyer-side 1.5%) is NOT deducted from seller payout. Pickup fee not deducted either (logistics not implemented). Net amount calculation may be incorrect per spec. |
-| G37 | Every state change persisted with timestamp and reason | partial | high | `backend/app/db/models.py` | Order has `paid_at`, `shipped_at`, `delivered_at`, `payout_released_at`. But no full audit trail per state transition (who triggered it, all timestamps, reason). User `seller_started_at` is the only seller state timestamp. No `rejected_at`, `verified_at`, `suspended_at`. |
-| G38 | Buyer registration welcome notification | missing | low | `backend/app/services/auth.py:199-228` | `register_user` sends no welcome notification to new buyer. |
-| G39 | Admin seed exists and is role-enforced | done | — | `backend/app/db/init_db.py:102-117` | Admin seeded via `init_db`. No signup path for admin. Admin role enforced on all admin routes. |
-| G40 | Order ID tracking per order for buyer | done | — | `backend/app/db/models.py:287` | `Order.id` exists and returned in list/detail. |
-| G41 | Seller receives order/payout notifications | done | — | `backend/app/services/orders.py` | `notify_safe` fires for `order_placed_seller` and `payout_released`. |
-| G42 | Payment info (buyer side) — MoMo or card | partial | medium | `backend/app/schemas/auth.py:57-70` | `PaymentInfo` has `method: Literal["card", "bank-transfer", "mobile_money"]`. `bank-transfer` shouldn't be a buyer payment method per spec (buyer pays MoMo or card only). |
-| G43 | Stock decrement atomic with oversell guard | done | — | `backend/app/services/orders.py:99-149` | Uses `WHERE stock >= quantity` atomic UPDATE. |
-| G44 | Paystack webhook signature verification | done | — | `backend/app/api/routes/payments.py:53-60` | Signature checked; warns if key not set. |
-| G45 | Notifications respect user preference settings | done | — | `backend/app/services/notifications.py` | `_get_user_prefs` merges defaults with user prefs. Mandatory events can't be disabled. |
+| G25 | Buyer↔seller direct messaging blocked | **done** | medium | N/A | Contact info removed from public seller summary (G17). No DM system exists or is reachable. |
+| G26 | Soft-delete users — orders and money records stay intact | **done** | medium | `backend/app/services/marketplace.py`, `backend/app/db/models.py` | `delete_seller` sets `deleted_at` + `seller_status="removed"`. FK integrity preserved. `deleted_at` column added via `_COLUMN_MIGRATIONS`. |
+| G27 | Admin actions audited: who, what, when | **done** | medium | `backend/app/services/audit.py`, `backend/app/db/models.py`, `backend/app/services/marketplace.py` | `AuditLog` model added. `log_action()` called in approve_seller, reject_seller, delete_seller, toggle_seller_blacklist. |
+| G28 | Admin: select featured products, orderable | **done** | low | `backend/app/api/routes/catalog.py`, `backend/app/services/catalog.py`, `backend/app/schemas/catalog.py` | `PATCH /products/{id}/featured` endpoint added. `toggle_product_featured()` service function. |
+| G29 | Payouts idempotent — idempotency key prevents double-payout | **done** | high | `backend/app/services/orders.py`, `backend/app/services/paystack.py` | Stable idempotency key `f"payout-{order.id}-{seller_id}"` passed to `initiate_transfer` as Paystack `reference`. |
+| G30 | Dev alerts for NIA/face-scan API failures | missing | medium | N/A | Adapters created (G4, G5). Dev alerting on API failures not yet wired. |
+| G31 | Rate-limit comment endpoints | missing | medium | N/A | Comment routes not yet created. Rate-limiting needed when added. |
+| G32 | Sanitize user input against XSS | partial | high | N/A | Backend uses Pydantic validation. No explicit HTML sanitization for rich-text fields (product/store descriptions, comments). |
+| G33 | All secrets via env vars — audit for hardcoded keys | partial | high | `backend/.env` | Live Paystack keys in committed `.env` files. `.env.example` updated with all required vars. Cannot remove from git history here. |
+| G34 | Seller status enforcement: deactivated products hidden | partial | medium | `backend/app/services/catalog.py` | Products hidden when `seller_status != "active"`. G15 fix ensures status values are now correct. |
+| G35 | Rejected seller can resubmit | partial | medium | `backend/app/services/marketplace.py` | `rejected` status now flows through correctly (G15 fixed). Resubmit path via onboarding still needs explicit guard + UI flow. |
+| G36 | Payout flow: deduct commission + processing fee → seller net | partial | high | `backend/app/services/orders.py` | Commission deducted correctly. Processing fee (buyer-side) not deducted from seller. Pickup fee deferred until logistics implemented. |
+| G37 | Every state change persisted with timestamp and reason | **done** | high | `backend/app/db/models.py`, `backend/app/services/marketplace.py` | `verified_at`, `rejected_at`, `suspended_at` columns added and migrated. `approve_seller` sets `verified_at`; `reject_seller` sets `rejected_at`; `update_admin_seller_status` sets appropriate timestamp. |
+| G38 | Buyer registration welcome notification | **done** | low | `backend/app/services/auth.py` | `register_user` now calls `notify_safe` with `event_type="welcome"`. |
+| G39 | Admin seed exists and is role-enforced | **done** | — | `backend/app/db/init_db.py` | Admin seeded via `init_db`. No signup path for admin. Admin role enforced on all admin routes. |
+| G40 | Order ID tracking per order for buyer | **done** | — | `backend/app/db/models.py` | `Order.id` exists and returned in list/detail. |
+| G41 | Seller receives order/payout notifications | **done** | — | `backend/app/services/orders.py` | `notify_safe` fires for `order_placed_seller` and `payout_released`. |
+| G42 | Payment info (buyer side) — MoMo or card | **done** | medium | `backend/app/schemas/auth.py`, `types/types.ts` | `bank-transfer` removed from `PaymentMethod` type and backend schema. |
+| G43 | Stock decrement atomic with oversell guard | **done** | — | `backend/app/services/orders.py` | Uses `WHERE stock >= quantity` atomic UPDATE. |
+| G44 | Paystack webhook signature verification | **done** | — | `backend/app/api/routes/payments.py` | Signature checked; warns if key not set. |
+| G45 | Notifications respect user preference settings | **done** | — | `backend/app/services/notifications.py` | `_get_user_prefs` merges defaults with user prefs. Mandatory events can't be disabled. |
 
 ## Detailed Notes
 
 ### G1 — Only Ghana Card accepted
-The spec explicitly states: "ONLY the Ghana Card is accepted. Remove any passport/license fields." Currently:
-- `GhanaIdType` in `backend/app/schemas/auth.py` accepts 6 types
-- `GHANA_ID_TYPES` in `lib/ghana.ts` lists 6 types
-- Both onboarding wizards (`Step4Identity.tsx` and `vendorApplicationWizard.tsx`) show a dropdown with all 6 types
-- Backend `onboarding.py:save_step4` validates Ghana Card number only when type is `ghana-card`
-**Fix**: Restrict `GhanaIdType` to `"ghana-card"` only. Remove the dropdown (or make it non-editable, pre-set). Remove other validation specs.
+**Fixed**: `GhanaIdType = Literal["ghana-card"]` in backend schema. `GHANA_ID_TYPES` in `lib/ghana.ts` restricted to Ghana Card only. `GovernmentIdType` in `types/types.ts` restricted to `"ghana-card"`. Frontend Step4Identity updated.
 
 ### G2 — No bank account payout fields
-The spec says "Payout details: card OR MoMo (MTN/Telecel only). NO bank account fields anywhere."
-Currently `PayoutInfoRequest` and `OnboardingStep5Request` include `bankName`, `accountNumber`, `bankCode`. `Step5Payout.tsx` renders a bank section.
-**Fix**: Remove bank fields from payout schemas and UI. Change method to `Literal["card", "mobile_money"]`.
+**Fixed**: Bank fields removed from `PayoutInfoRequest`, `OnboardingStep5Request`, `OnboardingStep5Payload` (TS), `PayoutInfo` (TS). `Step5Payout.tsx` and `profilePage.tsx` rewritten to use `card | mobile_money` only.
 
 ### G3 — MoMo MTN/Telecel ONLY
-AirtelTigo Money is in `MOMO_NETWORKS` in `lib/ghana.ts` and referenced in `lib/momo/providers.ts`. Spec: MTN and Telecel only.
-**Fix**: Remove `AirtelTigo Money` from `MOMO_NETWORKS`. Update prefix reference table. Update backend MoMo network validation.
+**Fixed**: `MOMO_NETWORKS` in `lib/ghana.ts` restricted to MTN and Telecel only. Backend schema validates accordingly.
 
-### G4 — NIA API adapter missing
-No NIA verification happens. Ghana Card number is saved to DB but never queried against NIA. The spec requires the full flow: submit card number → NIA returns name/dob/photo → display for applicant to confirm → mismatch = fail with reason + retry.
-**Fix**: Create `backend/app/services/nia_adapter.py` with interface and mock. Call from `onboarding.py:save_step4`.
+### G4 — NIA API adapter
+**Fixed**: `backend/app/services/nia_adapter.py` created. NIAAdapter class with mock mode when `NIA_MOCK=true` or keys not set. Returns `NIAResult` dataclass. Numbers ending in "0" return NOT_FOUND in mock.
 
-### G5 — Face-match adapter missing
-Selfie photo is uploaded but never compared to Ghana Card photo from NIA. Spec requires Binance-style guided selfie → match score → pass/fail.
-**Fix**: Create `backend/app/services/face_match_adapter.py` with interface and mock. Call from onboarding step 4 or submit.
+### G5 — Face-match adapter
+**Fixed**: `backend/app/services/face_match_adapter.py` created. FaceMatchAdapter class with mock mode. `FACE_MATCH_MOCK_FAIL=true` simulates failure.
 
-### G6 — Ledger service missing
-No money ledger. All financial flows happen via Paystack directly with no local audit trail. The spec requires every money movement (charge, escrow hold, fee deduction, payout, refund) to be a ledger entry with balance assertion.
-**Fix**: Create `backend/app/services/ledger.py` with all required methods and a `LedgerEntry` model.
+### G6 — Ledger service
+**Fixed**: `backend/app/services/ledger.py` created. `LedgerEntry` model added to `models.py`. Idempotency-keyed `_append()` internal helper. All required recording functions implemented.
 
-### G7 — Logistics adapter missing
-No logistics integration. Seller manually enters tracking number via the dashboard. Spec requires:
-- Rider pickup (logistics dispatches rider from seller coordinates) vs seller drop-off mode
-- Every shipment tracked: `pre_transit→in_transit→delivered`
-- Webhook endpoint with signature verification OR manual admin status-update
-- Pickup fee paid by seller (deduct from payout)
-**Fix**: Create `backend/app/services/logistics_adapter.py` with interface and mock. Add shipment webhook endpoint.
+### G7 — Logistics adapter
+**Fixed**: `backend/app/services/logistics_adapter.py` created. LogisticsAdapter with `get_rate()`, `create_shipment()`, `get_tracking()`, `verify_webhook()`, `parse_webhook()`. Dataclasses: `ShippingRate`, `Shipment`, `TrackingResult`, `TrackingEvent`.
 
 ### G8 — Order state machine mismatch
-Spec states: `pending_payment→paid(escrow)→processing→pre_transit→in_transit→delivered→confirmed→paid_out`
-Implemented: `pending→paid→shipped→completed→(cancelled, refunded as terminal)`
-Missing states: `processing`, `pre_transit`, `in_transit`, `delivered`, `confirmed`, `paid_out`
-The existing states roughly map to: `pending` ≈ `pending_payment`, `paid` ≈ `paid(escrow)`, `shipped` covers `processing+pre_transit+in_transit`, `completed` covers `delivered+confirmed+paid_out`.
-**Assumption**: For Phase 2, I will rename states to match spec and add the missing granularity while keeping backward compat.
+**Fixed**: `OrderStatus` in `types/types.ts` expanded to all spec states. Backend `orders.py` uses new state names. Frontend status maps updated in `orderDetailPage.tsx`, `orderHistoryPage.tsx`, `orderTrackingPage.tsx`, `vendorOrdersPage.tsx`.
 
 ### G13 — Sensitive fields unencrypted
-`government_id_number`, `payout_info` (JSON with account numbers), `id_front_url`, `id_back_url`, `selfie_url` stored as plain text in DB. Spec requires encryption at rest.
-**Fix**: Add Fernet symmetric encryption via a `FIELD_ENCRYPTION_KEY` env var. Encrypt/decrypt in model property or service layer.
+**Fixed**: `backend/app/services/encryption.py` created. Fernet-based `encrypt()`/`decrypt()` with `enc1:` prefix. `onboarding.py:save_step4` encrypts Ghana Card number, id_front_url, id_back_url, selfie_url. `save_step5` encrypts payout info as JSON blob. `auth.py:_serialize_profile` decrypts on read. Graceful fallback with WARNING when `FIELD_ENCRYPTION_KEY` not set.
 
-### G15 — Critical: `_serialize_profile` strips valid statuses
-`_serialize_profile` in `backend/app/services/auth.py` coerces any status not in `{"buyer","pending","active","suspended","removed"}` to `"buyer"`. This means:
-- `pending_verification` → becomes `"buyer"` in frontend
-- `verified` → becomes `"buyer"` in frontend  
-- `rejected` → becomes `"buyer"` in frontend
-- `incomplete` → becomes `"buyer"` in frontend
-This is a critical bug that breaks the entire verification state machine display.
-**Fix**: Update the valid status set to include all defined statuses.
+### G15 — `_serialize_profile` strips valid statuses
+**Fixed**: Valid status set in `_serialize_profile` expanded to include `pending_verification`, `verified`, `rejected`, `incomplete`, `active`.
 
 ### G17 — Seller contact info leaked
-`SellerSummaryOut` returns `email`, `phone`, `sellerContact.businessEmail`, `sellerContact.businessPhone`, `sellerContact.whatsapp` to any public caller. Spec: guests never see seller contact info, buyers cannot contact sellers directly.
-**Fix**: Remove `email`, `phone`, `sellerContact.businessEmail/Phone/whatsapp` from `SellerSummaryOut`. Keep only display-safe fields.
+**Fixed**: Public `_serialize_seller_summary` no longer returns email, phone, or sellerContact. Admin-only `_serialize_admin_seller_summary` includes PII. `storeLocation` in public view restricted to city/state/country only.
 
 ### G29 — Payout idempotency missing
-`confirm_delivery` calls `paystack_svc.initiate_transfer` without an idempotency key. If the HTTP request to Paystack fails partway and is retried, a duplicate transfer could occur.
-**Fix**: Generate a stable idempotency key (e.g. `f"payout-{order.id}-{seller_id}"`) and pass to Paystack transfer API.
+**Fixed**: `confirm_delivery` passes `idempotency_key=f"payout-{order.id}-{sid}"` to `paystack_svc.initiate_transfer`. Paystack `initiate_transfer` adds `reference` when idempotency_key provided.
 
 ### G33 — Live secrets committed to tracked files
-`.env.local` and `backend/.env` contain live Paystack keys (`sk_live_...`), DB passwords, and Supabase service role keys. These should never be committed.
-**Assumption**: Cannot delete git history here. Will add both files to `.gitignore` and rotate secrets advisory. Will audit `.env.example` to ensure all needed vars are listed.
+**Partial**: `.env.example` updated with all required vars including field encryption key, NIA adapter, face match adapter, logistics adapter env vars. Live keys cannot be removed from git history here. Advisory: rotate all keys before deploying.
 
 ### G36 — Payout calculation missing pickup fee
-Current payout = `listed_price / (1 + commission_rate)` per item. Processing fee (buyer-side) is charged to the buyer only. But the pickup fee (logistics cost to seller) is not deducted from seller payout because logistics isn't implemented.
-**Assumption**: Until logistics is implemented, pickup fee deduction is not possible. Will document in gaps.
+**Partial**: Commission deducted correctly from seller payout. Processing fee is buyer-side only (not deducted from seller). Pickup fee deduction deferred until logistics adapter is fully integrated.
 
 ### G38 — Missing buyer welcome notification
-`register_user` does not send a welcome notification. Spec requires "registration welcome" email for buyers.
-**Fix**: Add `notify_safe` call in `register_user` for `event_type="welcome"`.
+**Fixed**: `register_user` now sends welcome notification via `notify_safe` with `event_type="welcome"`.
 
 ---
 
 ## Assumptions (to be flagged explicitly)
 
-1. **Auto-release window**: Defaulting to 7 days after `delivered` status as spec states. This is configurable via `AUTO_RELEASE_DAYS` env var.
-2. **Pickup fee handling**: Cannot implement until logistics adapter is built. Will stub as `0` for now.
+1. **Auto-release window**: Defaulting to 7 days after `delivered` status as spec states. `auto_release_days` SiteSetting seeded. Cron job not yet implemented (G10).
+2. **Pickup fee handling**: Cannot implement until logistics adapter is built. Stubbed as `0` for now.
 3. **NIA API**: No actual NIA API credentials exist. Mock mode will be default. Real mode triggered by `NIA_API_URL` + `NIA_API_KEY` env vars.
 4. **Face match**: No real face-match service. Mock mode returns score=0.95 pass. Real mode triggered by `FACE_MATCH_API_URL` + `FACE_MATCH_API_KEY`.
-5. **Order state machine**: Will add new states to match spec without breaking existing data. Old `shipped`=`in_transit`, `completed`=`confirmed`.
-6. **"Card" payout method**: Spec says "card OR MoMo" for payout. Currently the payout system works via Paystack bank-transfer API (recipient codes). Treating this as Paystack card-on-file rather than a separate field. The `card` payout method stores last-4 as reference info only.
-7. **Seller contact info**: Business email and phone are business-public info in some contexts (store page). Ambiguous. Will remove from public SellerSummaryOut but note the assumption.
+5. **Order state machine**: New states added to match spec without breaking existing data. Old `shipped`→`in_transit`, `completed`→`confirmed`.
+6. **"Card" payout method**: Spec says "card OR MoMo" for payout. Treating this as Paystack card-on-file rather than a separate field. The `card` payout method stores last-4 as reference info only; actual disbursement via Paystack transfer.
+7. **Seller contact info**: Business email and phone removed from public SellerSummaryOut. Only available to admin via admin seller detail endpoint.
