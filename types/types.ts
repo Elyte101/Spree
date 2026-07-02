@@ -6,7 +6,8 @@ export type CatalogSort =
   | "rating";
 
 export type UserRole = "customer" | "vendor" | "admin";
-export type PaymentMethod = "card" | "bank-transfer" | "mobile_money";
+// Spec: card OR MoMo only. NO bank transfer.
+export type PaymentMethod = "card" | "mobile_money";
 export type SellerStatus =
   | "buyer"
   | "incomplete"
@@ -18,13 +19,8 @@ export type SellerStatus =
   | "suspended"
   | "removed";
 export type SellerType = "retail" | "wholesale";
-export type GovernmentIdType =
-  | "ghana-card"
-  | "voters-id"
-  | "drivers-license"
-  | "passport"
-  | "ecowas-card"
-  | "ssnit";
+// Spec: ONLY the Ghana Card is accepted for vendor identity verification.
+export type GovernmentIdType = "ghana-card";
 
 export interface ProductVariant {
   id: string;
@@ -41,7 +37,22 @@ export interface PriceRange {
   max: number;
 }
 
-export type OrderStatus = "paid" | "shipped" | "completed" | "cancelled";
+// Spec order state machine:
+// pending → paid → processing → pre_transit → in_transit → delivered → confirmed → paid_out
+// Backend uses "pending" for the initial payment-pending state.
+// cancelled and refunded are terminal error states.
+export type OrderStatus =
+  | "pending"
+  | "pending_payment"
+  | "paid"
+  | "processing"
+  | "pre_transit"
+  | "in_transit"
+  | "delivered"
+  | "confirmed"
+  | "paid_out"
+  | "cancelled"
+  | "refunded";
 
 export interface OrderListItem {
   id: string;
@@ -102,13 +113,13 @@ export interface OrderDetail {
   items: OrderDetailItem[];
 }
 
+// Spec: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
 export interface PayoutInfo {
-  method: "bank" | "mobile_money";
-  bankName?: string;
-  accountNumber?: string;
-  bankCode?: string;
+  method: "card" | "mobile_money";
   mobileMoneyNetwork?: string;
   mobileMoneyNumber?: string;
+  cardLast4?: string;
+  cardholderName?: string;
   currency?: string;
   accountName?: string;
 }

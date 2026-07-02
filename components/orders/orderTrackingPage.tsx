@@ -65,12 +65,23 @@ interface TrackStep {
   timestamp: string | null | undefined;
 }
 
+// G8/G9: updated step order to match spec state machine.
+const STEP_STATES = ["ordered", "paid", "in_transit", "delivered", "confirmed"] as const;
+type StepState = typeof STEP_STATES[number];
+
+function statusToStep(status: string): StepState {
+  if (["confirmed", "paid_out"].includes(status)) return "confirmed";
+  if (status === "delivered") return "delivered";
+  if (["in_transit", "shipped", "pre_transit", "processing"].includes(status)) return "in_transit";
+  if (status === "paid") return "paid";
+  return "ordered";
+}
+
 function buildSteps(order: OrderDetail): TrackStep[] {
-  const currentIdx = order.status === "cancelled"
-    ? -1
-    : ["ordered", "paid", "shipped", "completed"].indexOf(
-        order.status === "paid" ? "paid" : order.status === "shipped" ? "shipped" : order.status === "completed" ? "completed" : "ordered"
-      );
+  const currentStep = order.status === "cancelled" || order.status === "refunded"
+    ? null
+    : statusToStep(order.status);
+  const currentIdx = currentStep ? STEP_STATES.indexOf(currentStep) : -1;
 
   return [
     {
@@ -78,7 +89,7 @@ function buildSteps(order: OrderDetail): TrackStep[] {
       label: "Order placed",
       sublabel: formatDate(order.createdAt),
       done: true,
-      active: order.status === "paid" && !order.shippedAt,
+      active: currentStep === "ordered",
       icon: <StorefrontOutlined />,
       timestamp: order.createdAt,
     },
@@ -86,32 +97,41 @@ function buildSteps(order: OrderDetail): TrackStep[] {
       key: "paid",
       label: "Payment confirmed",
       sublabel: order.paidAt ? formatDate(order.paidAt) : null,
-      done: !!order.paidAt,
-      active: !!order.paidAt && !order.shippedAt,
+      done: currentIdx >= 1,
+      active: currentStep === "paid",
       icon: <PaymentOutlined />,
       timestamp: order.paidAt,
     },
     {
-      key: "shipped",
+      key: "in_transit",
       label: "Shipped",
       sublabel: order.shippedAt ? formatDate(order.shippedAt) : "Awaiting dispatch from vendor",
-      done: !!order.shippedAt,
-      active: !!order.shippedAt && !order.deliveredAt,
+      done: currentIdx >= 2,
+      active: currentStep === "in_transit",
       icon: <LocalShippingOutlined />,
       timestamp: order.shippedAt,
     },
     {
-      key: "completed",
+      key: "delivered",
       label: "Delivered",
       sublabel: order.deliveredAt
         ? formatDate(order.deliveredAt)
         : order.estimatedDeliveryDate
         ? `Expected ${formatDateShort(order.estimatedDeliveryDate)}`
         : null,
-      done: !!order.deliveredAt,
-      active: !!order.deliveredAt,
+      done: currentIdx >= 3,
+      active: currentStep === "delivered",
       icon: <CheckCircleOutlined />,
       timestamp: order.deliveredAt,
+    },
+    {
+      key: "confirmed",
+      label: "Delivery confirmed",
+      sublabel: order.payoutReleasedAt ? formatDate(order.payoutReleasedAt) : null,
+      done: currentIdx >= 4,
+      active: currentStep === "confirmed",
+      icon: <CheckCircleOutlined />,
+      timestamp: order.payoutReleasedAt,
     },
   ];
 }

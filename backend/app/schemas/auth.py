@@ -69,7 +69,7 @@ class PaymentInfo(BaseModel):
     momoNameVerified: bool = False
 
 
-GhanaIdType = Literal["ghana-card", "voters-id", "drivers-license", "passport", "ecowas-card", "ssnit"]
+GhanaIdType = Literal["ghana-card"]
 
 
 class SellerIdentityInfo(BaseModel):
@@ -94,12 +94,14 @@ class SellerContact(BaseModel):
 
 
 class PayoutInfoRequest(BaseModel):
-    method: Literal["bank", "mobile_money"] = "bank"
-    bankName: str = Field(default="", max_length=120)
-    accountNumber: str = Field(default="", max_length=32)
-    bankCode: str = Field(default="", max_length=20)
+    # Spec: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
+    method: Literal["card", "mobile_money"] = "mobile_money"
+    # MoMo fields (used when method == "mobile_money")
     mobileMoneyNetwork: str = Field(default="", max_length=20)
     mobileMoneyNumber: str = Field(default="", max_length=20)
+    # Card fields (used when method == "card" — stored as reference info for Paystack recipient)
+    cardLast4: str = Field(default="", max_length=4)
+    cardholderName: str = Field(default="", max_length=120)
     currency: str = Field(default="GHS", max_length=8)
     accountName: str = Field(default="", max_length=120)
 
@@ -199,13 +201,14 @@ class OnboardingStep4Request(BaseModel):
 
 
 class OnboardingStep5Request(BaseModel):
-    """Payout details."""
-    method: Literal["bank", "mobile_money"] = "bank"
-    bankName: str = Field(default="", max_length=120)
-    accountNumber: str = Field(default="", max_length=32)
-    bankCode: str = Field(default="", max_length=20)
+    """Payout details. Spec: card OR MoMo (MTN/Telecel only). NO bank account fields."""
+    method: Literal["card", "mobile_money"] = "mobile_money"
+    # MoMo fields
     mobileMoneyNetwork: str = Field(default="", max_length=20)
     mobileMoneyNumber: str = Field(default="", max_length=20)
+    # Card fields (stored as reference info — not raw card data)
+    cardLast4: str = Field(default="", max_length=4)
+    cardholderName: str = Field(default="", max_length=120)
     currency: str = Field(default="GHS", max_length=8)
     accountName: str = Field(min_length=2, max_length=120)
 

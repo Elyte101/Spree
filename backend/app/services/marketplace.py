@@ -119,23 +119,21 @@ def _serialize_seller_summary(vendor: User, metrics: dict) -> dict:
         float(vendor.average_delivery_days) if vendor.average_delivery_days is not None else None
     )
 
+    # G17: Public seller summary must NOT expose email, phone, or sellerContact PII.
+    # G19: storeLocation in public view is restricted to city/state/country only (no addressLine1).
+    raw_location = vendor.store_location or {}
     return {
         "id": vendor.id,
         "name": vendor.name,
-        "email": vendor.email,
         "role": vendor.role,
-        "phone": vendor.phone or "",
         "storeName": vendor.store_name or vendor.name,
         "storeSlug": vendor.store_slug or "",
         "storeTagline": vendor.store_tagline or "",
         "storeDescription": vendor.store_description or "",
         "storeLocation": {
-            **_default_store_location(),
-            **(vendor.store_location or {}),
-        },
-        "sellerContact": {
-            **_default_seller_contact(vendor.email, vendor.phone or ""),
-            **(vendor.seller_contact or {}),
+            "city": raw_location.get("city", ""),
+            "state": raw_location.get("state", ""),
+            "country": raw_location.get("country", "Ghana"),
         },
         "sellerType": seller_type,
         "sellerStatus": vendor.seller_status or "buyer",
@@ -157,9 +155,23 @@ def _serialize_seller_summary(vendor: User, metrics: dict) -> dict:
 
 
 def _serialize_admin_seller_summary(vendor: User, metrics: dict) -> dict:
-    """Like _serialize_seller_summary but includes admin-only fields."""
+    """Like _serialize_seller_summary but adds PII and admin-only fields."""
+    raw_location = vendor.store_location or {}
+    base = _serialize_seller_summary(vendor, metrics)
     return {
-        **_serialize_seller_summary(vendor, metrics),
+        **base,
+        # PII fields: admin-only — never exposed in public summary (G17)
+        "email": vendor.email,
+        "phone": vendor.phone or "",
+        "sellerContact": {
+            **_default_seller_contact(vendor.email, vendor.phone or ""),
+            **(vendor.seller_contact or {}),
+        },
+        # Full store address for admin (G19 restricts public view to city/state/country)
+        "storeLocation": {
+            **_default_store_location(),
+            **raw_location,
+        },
         "adminNote": vendor.admin_note or "",
     }
 
@@ -372,6 +384,10 @@ def update_admin_seller_status(
             detail="Admin-managed stores cannot be suspended or removed from the admin console",
         )
 
+    from datetime import datetime, timezone  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
+
+    prev_status = vendor.seller_status
     vendor.seller_status = status_value
     vendor.seller_notice = seller_notice.strip() or None
     vendor.admin_note = admin_note.strip() or None
@@ -381,6 +397,15 @@ def update_admin_seller_status(
     # government_id_verified must be explicitly set by the admin; setting status to
     # "active" does NOT automatically mark the ID as verified.
     vendor.government_id_verified = government_id_verified
+
+    # G37: record state-change timestamps.
+    if status_value == "suspended" and prev_status != "suspended":
+        vendor.suspended_at = now
+    elif status_value == "verified" and prev_status != "verified":
+        vendor.verified_at = now
+    elif status_value == "rejected" and prev_status != "rejected":
+        vendor.rejected_at = now
+
     db.add(vendor)
     db.commit()
     db.refresh(vendor)
@@ -389,13 +414,18 @@ def update_admin_seller_status(
 
 
 def delete_seller(db: Session, seller_id: str) -> None:
+    """G26: soft-delete — set deleted_at timestamp instead of removing the row."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+
     vendor = _resolve_seller(db, seller_id, include_inactive=True)
     if vendor.role == "admin":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Admin accounts cannot be deleted via the vendor console",
         )
-    db.delete(vendor)
+    # Soft-delete: mark the account as removed and set deleted_at.
+    vendor.deleted_at = datetime.now(timezone.utc)
+    vendor.seller_status = "removed"
     db.commit()
 
 
@@ -438,10 +468,13 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
             detail=f"Cannot approve a vendor with status '{vendor.seller_status}'. "
                    "Only vendors with status 'pending_verification' can be approved.",
         )
+    from datetime import datetime, timezone  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
     vendor.seller_status = "verified"
     vendor.government_id_verified = True
     vendor.rejection_reason = None
     vendor.role = "vendor"
+    vendor.verified_at = now  # G37: record timestamp of verification
     db.commit()
 
     from app.services import notifications as notif_svc
@@ -467,9 +500,12 @@ def reject_seller(db: Session, seller_id: str, admin_id: str, reason: str) -> di
     if vendor is None:
         raise HTTPException(status_code=404, detail="vendor not found")
 
+    from datetime import datetime, timezone  # noqa: PLC0415
+    now = datetime.now(timezone.utc)
     vendor.seller_status = "rejected"
     vendor.rejection_reason = reason.strip()
     vendor.government_id_verified = False
+    vendor.rejected_at = now  # G37: record timestamp of rejection
     db.commit()
 
     from app.services import notifications as notif_svc

@@ -46,18 +46,48 @@ const statusMeta: Record<
   OrderStatus,
   { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
 > = {
+  pending: {
+    label: "Pending payment",
+    color: "warning",
+    icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
+  },
+  pending_payment: {
+    label: "Pending payment",
+    color: "warning",
+    icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
+  },
   paid: {
     label: "Payment confirmed",
     color: "warning",
     icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
   },
-  shipped: {
-    label: "Shipped",
+  processing: {
+    label: "Processing",
     color: "info",
     icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
   },
-  completed: {
+  pre_transit: {
+    label: "Pre-transit",
+    color: "info",
+    icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
+  },
+  in_transit: {
+    label: "In transit",
+    color: "info",
+    icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
+  },
+  delivered: {
     label: "Delivered",
+    color: "success",
+    icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
+  },
+  confirmed: {
+    label: "Delivery confirmed",
+    color: "success",
+    icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
+  },
+  paid_out: {
+    label: "Payout released",
     color: "success",
     icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
   },
@@ -66,19 +96,32 @@ const statusMeta: Record<
     color: "error",
     icon: <CancelOutlined sx={{ fontSize: 16 }} />,
   },
+  refunded: {
+    label: "Refunded",
+    color: "error",
+    icon: <CancelOutlined sx={{ fontSize: 16 }} />,
+  },
 };
 
 const statusSteps: { key: OrderStatus; label: string }[] = [
   { key: "paid", label: "Order placed" },
-  { key: "shipped", label: "Shipped" },
-  { key: "completed", label: "Delivered" },
+  { key: "in_transit", label: "Shipped" },
+  { key: "delivered", label: "Delivered" },
+  { key: "confirmed", label: "Confirmed" },
 ];
 
 const stepOrder: Record<OrderStatus, number> = {
+  pending: -1,
+  pending_payment: -1,
   paid: 0,
-  shipped: 1,
-  completed: 2,
+  processing: 0,
+  pre_transit: 0,
+  in_transit: 1,
+  delivered: 2,
+  confirmed: 3,
+  paid_out: 3,
   cancelled: -1,
+  refunded: -1,
 };
 
 const formatPrice = (n: number) =>
@@ -188,9 +231,10 @@ export function OrderDetailPage({
   const isAdmin = sessionUserRole === "admin";
   const isBuyer = order.userId === sessionUserId;
   const isSeller = order.items.some((item) => item.sellerId === sessionUserId);
-  const canConfirm = isBuyer && order.status === "shipped";
-  const canCancel = isBuyer && order.status === "paid";
-  const canRefund = isAdmin && ["paid", "shipped", "completed"].includes(order.status);
+  // G8/G9: buyer confirms from 'delivered' state (not 'shipped').
+  const canConfirm = isBuyer && order.status === "delivered";
+  const canCancel = isBuyer && ["paid", "processing", "pre_transit"].includes(order.status);
+  const canRefund = isAdmin && ["paid", "processing", "pre_transit", "in_transit", "delivered"].includes(order.status);
   const canAddTracking = isSeller && order.status === "paid";
 
   const handleConfirmDelivery = async () => {
@@ -363,7 +407,7 @@ export function OrderDetailPage({
                     variant="outlined"
                     sx={{ fontWeight: 700, fontSize: 13 }}
                   />
-                  {(order.status === "shipped" || order.status === "completed") && (
+                  {["in_transit", "delivered", "confirmed", "paid_out"].includes(order.status) && (
                     <Button
                       component={Link}
                       href={`/orders/${order.id}/tracking`}
@@ -675,9 +719,9 @@ export function OrderDetailPage({
                 >
                   <LockOutlined color="success" sx={{ fontSize: 16 }} />
                   <Typography variant="caption" color="success.main" fontWeight={600}>
-                    {order.status === "completed"
+                    {["confirmed", "paid_out"].includes(order.status)
                       ? "Payment released to vendor"
-                      : order.status === "cancelled"
+                      : ["cancelled", "refunded"].includes(order.status)
                       ? "Order cancelled"
                       : "Payment held securely by Spree"}
                   </Typography>

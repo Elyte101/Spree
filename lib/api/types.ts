@@ -152,13 +152,13 @@ export interface OnboardingStep4Payload {
   selfieUrl: string;
 }
 
+// Spec: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
 export interface OnboardingStep5Payload {
-  method: "bank" | "mobile_money";
-  bankName?: string;
-  accountNumber?: string;
-  bankCode?: string;
+  method: "card" | "mobile_money";
   mobileMoneyNetwork?: string;
   mobileMoneyNumber?: string;
+  cardLast4?: string;
+  cardholderName?: string;
   currency?: string;
   accountName: string;
 }

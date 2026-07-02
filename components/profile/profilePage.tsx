@@ -12,6 +12,7 @@ import {
   CameraAltRounded,
   CheckCircleOutlined,
   CheckCircleRounded,
+  CreditCardRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
@@ -73,14 +74,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [docsError, setDocsError] = React.useState<string | null>(null);
   const [docsSuccess, setDocsSuccess] = React.useState<string | null>(null);
 
-  // Payout info state
+  // Payout info state — spec: card OR MoMo (MTN/Telecel only). NO bank fields.
   const [payout, setPayout] = React.useState({
-    method: (profile.payoutInfo?.method ?? "mobile_money") as "bank" | "mobile_money",
-    bankName: profile.payoutInfo?.bankName ?? "",
-    accountNumber: profile.payoutInfo?.accountNumber ?? "",
-    bankCode: profile.payoutInfo?.bankCode ?? "",
+    method: (profile.payoutInfo?.method ?? "mobile_money") as "card" | "mobile_money",
     mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
     mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
+    cardLast4: profile.payoutInfo?.cardLast4 ?? "",
+    cardholderName: profile.payoutInfo?.cardholderName ?? "",
     currency: "GHS",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
@@ -243,8 +243,8 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         const momoErr = validateMoMoNumber(payout.mobileMoneyNumber);
         if (momoErr) fieldErrs.mobileMoneyNumber = momoErr;
       }
-    } else {
-      if (!payout.accountNumber.trim()) fieldErrs.accountNumber = "Account number is required";
+    } else if (payout.method === "card") {
+      if (!payout.cardLast4.trim()) fieldErrs.cardLast4 = "Last 4 card digits are required";
     }
     setPayoutFieldErrors(fieldErrs);
     if (Object.keys(fieldErrs).length > 0) return;
@@ -579,7 +579,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     </Stack>
                   </MenuItem>
                   <MenuItem value="card">Card</MenuItem>
-                  <MenuItem value="bank-transfer">Bank transfer</MenuItem>
                 </TextField>
 
                 {profile.paymentInfo.method === "mobile_money" ? (
@@ -914,18 +913,18 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   {payoutError && <Alert severity="error" onClose={() => setPayoutError(null)}>{payoutError}</Alert>}
                   {payoutSuccess && <Alert severity="success" onClose={() => setPayoutSuccess(null)}>{payoutSuccess}</Alert>}
 
-                  {/* Method toggle */}
+                  {/* Method toggle — spec: card OR MoMo only. NO bank account. */}
                   <Stack direction="row" spacing={1}>
-                    {(["bank", "mobile_money"] as const).map((m) => (
+                    {(["mobile_money", "card"] as const).map((m) => (
                       <Button
                         key={m}
                         variant={payout.method === m ? "contained" : "outlined"}
                         size="small"
-                        startIcon={m === "bank" ? <AccountBalanceRounded fontSize="small" /> : <PhoneAndroidRounded fontSize="small" />}
+                        startIcon={m === "mobile_money" ? <PhoneAndroidRounded fontSize="small" /> : <CreditCardRounded fontSize="small" />}
                         onClick={() => setPayout((p) => ({ ...p, method: m }))}
                         sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                       >
-                        {m === "bank" ? "Bank account" : "Mobile money"}
+                        {m === "mobile_money" ? "Mobile money" : "Card"}
                       </Button>
                     ))}
                   </Stack>
@@ -966,35 +965,17 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     fullWidth
                   />
 
-                  {payout.method === "bank" ? (
+                  {payout.method === "card" ? (
                     <Stack spacing={2}>
-                      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                        <TextField
-                          label="Bank name"
-                          value={payout.bankName}
-                          onChange={(e) => setPayout((p) => ({ ...p, bankName: e.target.value }))}
-                          size="small"
-                          fullWidth
-                        />
-                        <TextField
-                          label="Account number"
-                          value={payout.accountNumber}
-                          onChange={(e) => setPayout((p) => ({ ...p, accountNumber: e.target.value }))}
-                          error={!!payoutFieldErrors.accountNumber}
-                          helperText={payoutFieldErrors.accountNumber}
-                          size="small"
-                          fullWidth
-                          slotProps={{ htmlInput: { maxLength: 20 } }}
-                        />
-                      </Stack>
                       <TextField
-                        label="Bank code / sort code (optional)"
-                        value={payout.bankCode}
-                        onChange={(e) => setPayout((p) => ({ ...p, bankCode: e.target.value }))}
+                        label="Card last 4 digits"
+                        value={payout.cardLast4}
+                        onChange={(e) => setPayout((p) => ({ ...p, cardLast4: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
                         size="small"
                         fullWidth
-                        helperText="Some banks require this for transfers"
-                        slotProps={{ htmlInput: { maxLength: 10 } }}
+                        placeholder="1234"
+                        helperText="Last 4 digits of your Spree-registered card"
+                        slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 4 } }}
                       />
                     </Stack>
                   ) : (

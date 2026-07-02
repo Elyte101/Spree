@@ -207,13 +207,12 @@ export const COUNTRY_PHONE_CODES: { code: string; label: string }[] = [
   { code: "+971", label: "+971 UAE" },
 ];
 
+/**
+ * Spec: ONLY the Ghana Card (NIA) is accepted for vendor identity verification.
+ * Other ID types removed per product requirement.
+ */
 export const GHANA_ID_TYPES: { value: string; label: string }[] = [
   { value: "ghana-card", label: "Ghana Card (NIA)" },
-  { value: "voters-id", label: "Voter's ID" },
-  { value: "drivers-license", label: "Driver's License (DVLA)" },
-  { value: "passport", label: "Passport" },
-  { value: "ecowas-card", label: "ECOWAS Identity Card" },
-  { value: "ssnit", label: "SSNIT Card" },
 ];
 
 /**
@@ -340,11 +339,13 @@ export function normalizeMoMoNumber(v: string): string {
   return s;
 }
 
-/** Consistent mobile network options used across onboarding and profile. */
+/**
+ * Consistent mobile network options used across onboarding and profile.
+ * Spec: MTN Mobile Money and Telecel Cash ONLY.
+ */
 export const MOMO_NETWORKS = [
   { value: "MTN Mobile Money", label: "MTN Mobile Money" },
   { value: "Telecel Cash", label: "Telecel Cash" },
-  { value: "AirtelTigo Money", label: "AirtelTigo Money" },
 ];
 
 /**

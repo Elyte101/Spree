@@ -38,23 +38,58 @@ const statusMeta: Record<
   OrderStatus,
   { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
 > = {
+  pending: {
+    label: "Pending payment",
+    color: "warning",
+    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
+  },
+  pending_payment: {
+    label: "Pending payment",
+    color: "warning",
+    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
+  },
   paid: {
     label: "Payment confirmed",
     color: "warning",
     icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
   },
-  shipped: {
-    label: "Shipped",
+  processing: {
+    label: "Processing",
     color: "info",
     icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
   },
-  completed: {
+  pre_transit: {
+    label: "Pre-transit",
+    color: "info",
+    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
+  },
+  in_transit: {
+    label: "In transit",
+    color: "info",
+    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
+  },
+  delivered: {
     label: "Delivered",
+    color: "success",
+    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
+  },
+  confirmed: {
+    label: "Delivery confirmed",
+    color: "success",
+    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
+  },
+  paid_out: {
+    label: "Payout released",
     color: "success",
     icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
   },
   cancelled: {
     label: "Cancelled",
+    color: "error",
+    icon: <CancelOutlined sx={{ fontSize: 14 }} />,
+  },
+  refunded: {
+    label: "Refunded",
     color: "error",
     icon: <CancelOutlined sx={{ fontSize: 14 }} />,
   },

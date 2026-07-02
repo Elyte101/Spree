@@ -149,6 +149,10 @@ def _decrement_stock(db: Session, order: Order) -> None:
 
 
 def _order_to_dict(order: Order) -> dict:
+    # G12: use Decimal arithmetic throughout — no float() casting.
+    def _d(v: Decimal | None) -> str | None:
+        return str(v.quantize(Decimal("0.01"))) if v is not None else None
+
     return {
         "id": order.id,
         "userId": order.user_id,
@@ -164,17 +168,17 @@ def _order_to_dict(order: Order) -> dict:
         "country": order.country,
         "shippingMethod": order.shipping_method,
         "paymentMethod": order.payment_method,
-        "subtotal": float(order.subtotal),
-        "shippingCost": float(order.shipping_cost),
-        "tax": float(order.tax),
-        "total": float(order.total),
+        "subtotal": _d(order.subtotal),
+        "shippingCost": _d(order.shipping_cost),
+        "tax": _d(order.tax),
+        "total": _d(order.total),
         "currency": order.currency,
         "trackingNumber": order.tracking_number,
         "trackingCarrier": order.tracking_carrier,
         "paidAt": order.paid_at,
         "shippedAt": order.shipped_at,
         "deliveredAt": order.delivered_at,
-        "payoutAmount": float(order.payout_amount) if order.payout_amount is not None else None,
+        "payoutAmount": _d(order.payout_amount),
         "payoutReleasedAt": order.payout_released_at,
         "paystackReference": order.paystack_reference,
         "estimatedDeliveryDays": order.estimated_delivery_days,
@@ -187,7 +191,7 @@ def _order_to_dict(order: Order) -> dict:
                 "sellerId": item.seller_id,
                 "name": item.name,
                 "image": item.image,
-                "price": float(item.price),
+                "price": _d(item.price),
                 "quantity": item.quantity,
                 "color": item.color,
                 "size": item.size,
@@ -203,7 +207,7 @@ def _order_to_list_dict(order: Order) -> dict:
         "status": order.status,
         "fullName": order.full_name,
         "email": order.email,
-        "total": float(order.total),
+        "total": str(order.total.quantize(Decimal("0.01"))),
         "currency": order.currency,
         "itemCount": sum(item.quantity for item in order.items),
         "shippingMethod": order.shipping_method,
@@ -839,7 +843,8 @@ def add_tracking(
     now = datetime.now(timezone.utc)
     order.tracking_number = payload.trackingNumber.strip()
     order.tracking_carrier = payload.carrier.strip() or None
-    order.status = "shipped"
+    # G8/G9: paid → in_transit (tracking added means shipment is underway).
+    order.status = "in_transit"
     order.shipped_at = now
 
     if payload.estimatedDeliveryDays and payload.estimatedDeliveryDays > 0:
@@ -876,7 +881,62 @@ def add_tracking(
     return _order_to_dict(order)
 
 
+def mark_delivered(db: Session, order_id: str, seller_id: str) -> dict:
+    """Seller marks an in_transit order as delivered (carrier dropped off).
+
+    G8/G9: This creates the 'delivered' state.  The buyer must then call
+    confirm_delivery() to transition to 'confirmed' and release the payout.
+    An auto-release cron (G10) handles the case where the buyer doesn't confirm.
+    """
+    order = db.scalar(
+        select(Order).where(Order.id == order_id).with_for_update()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    is_seller = any(item.seller_id == seller_id for item in order.items)
+    if not is_seller:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if order.status != "in_transit":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot mark delivered — order status is '{order.status}' (expected 'in_transit')",
+        )
+
+    now = datetime.now(timezone.utc)
+    order.status = "delivered"
+    order.delivered_at = now
+    db.commit()
+    db.refresh(order)
+
+    if order.user_id:
+        notify_safe(
+            db,
+            event_type="order_delivered",
+            recipient_id=order.user_id,
+            title="Your order has been delivered",
+            body=(
+                "Your order has been marked as delivered. "
+                "Please confirm receipt so your seller gets paid."
+            ),
+            notif_type="order",
+            href=f"/orders/{order_id}",
+            email_subject="Your Spree order was delivered — please confirm",
+            cta_label="Confirm receipt",
+            cta_url=f"{settings.frontend_url}/orders/{order_id}",
+        )
+
+    return _order_to_dict(order)
+
+
 def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
+    """Buyer confirms receipt of a delivered order.
+
+    G8/G9: requires status='delivered' (set by seller or auto-release cron).
+    Transitions to 'confirmed', then releases payout → 'paid_out'.
+    G29: idempotency key passed to Paystack transfer so retries don't double-pay.
+    """
     # Use FOR UPDATE so two concurrent confirm-delivery calls can't both pass
     # the status check and double-release the vendor payout.
     order = db.scalar(
@@ -888,15 +948,16 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
     if order.user_id != buyer_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if order.status != "shipped":
+    # G9: buyer can only confirm from 'delivered' state (not from 'in_transit').
+    if order.status != "delivered":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot confirm delivery for an order with status '{order.status}'",
         )
 
     now = datetime.now(timezone.utc)
-    order.status = "completed"
-    order.delivered_at = now
+    # G8: buyer confirmation → 'confirmed', payout release → 'paid_out'.
+    order.status = "confirmed"
     order.payout_released_at = now
 
     seller_payouts: dict[str, Decimal] = {}
@@ -939,28 +1000,34 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             cta_url=f"{settings.frontend_url}/orders/{order.id}",
         )
 
-    # Notify each vendor with their payout
+    # Release payout to each vendor
+    all_transfers_ok = True
     for sid, payout in seller_payouts.items():
         vendor = db.get(User, sid)
         payout_minor = int(payout * 100)
         transfer_ok = False
 
         if vendor and vendor.paystack_recipient_code and settings.paystack_secret_key:
+            # G29: stable idempotency key = order + seller; survives retries.
+            idempotency_key = f"payout-{order.id}-{sid}"
             try:
                 paystack_svc.initiate_transfer(
                     amount_minor=payout_minor,
                     recipient_code=vendor.paystack_recipient_code,
                     reason=f"Spree payout for order {order.id}",
+                    idempotency_key=idempotency_key,
                 )
                 transfer_ok = True
             except Exception as exc:
                 logger.error("Paystack transfer failed for vendor %s: %s", sid, exc)
+                all_transfers_ok = False
 
+        payout_ghs = payout.quantize(Decimal("0.01"))
         payout_note = (
-            f"Your payout of {order.currency} {float(payout):.2f} has been sent to your account."
+            f"Your payout of {order.currency} {payout_ghs} has been sent to your account."
             if transfer_ok
             else (
-                f"Your payout of {order.currency} {float(payout):.2f} is being processed. "
+                f"Your payout of {order.currency} {payout_ghs} is being processed. "
                 "Please ensure your payout details are up to date in your profile."
             )
         )
@@ -977,6 +1044,12 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             cta_url=f"{settings.frontend_url}/dashboard/orders",
         )
 
+    # G8: mark paid_out once all transfers have been initiated
+    if all_transfers_ok and seller_payouts:
+        order.status = "paid_out"
+        db.commit()
+        db.refresh(order)
+
     return _order_to_dict(order)
 
 
@@ -988,7 +1061,8 @@ def cancel_order(db: Session, order_id: str, actor_id: str, actor_role: str) -> 
     if actor_role != "admin" and order.user_id != actor_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if order.status in ("shipped", "completed"):
+    # Cannot cancel once shipment is underway or payout released (G8 state machine).
+    if order.status in ("in_transit", "delivered", "confirmed", "paid_out"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot cancel an order with status '{order.status}'",
@@ -1021,7 +1095,8 @@ def refund_order(db: Session, order_id: str) -> dict:
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.status not in ("paid", "shipped", "completed"):
+    # Admin can refund any order that has been paid but payout not yet released.
+    if order.status not in ("paid", "processing", "pre_transit", "in_transit", "delivered"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot refund an order with status '{order.status}'",
@@ -1033,7 +1108,7 @@ def refund_order(db: Session, order_id: str) -> dict:
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-    order.status = "cancelled"
+    order.status = "refunded"
     db.commit()
 
     if order.user_id:

@@ -12,6 +12,7 @@ from app.core.security import hash_password, verify_password
 from app.db.models import User, VerificationToken
 from app.schemas.auth import OAuthUpsertRequest, PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
 from app.services import paystack as paystack_svc
+from app.services.notifications import notify_safe
 from app.services.uploads import delete_upload, save_upload
 
 # RFC 5321/5322 permissive but sane — accepts user+tag@sub.domain.tld
@@ -127,6 +128,10 @@ def _serialize_profile(user: User) -> dict:
     seller_type = user.seller_type if user.seller_type in {"retail", "wholesale"} else "retail"
     seller_status = user.seller_status if user.seller_status in {
         "buyer",
+        "incomplete",
+        "pending_verification",
+        "verified",
+        "rejected",
         "pending",
         "active",
         "suspended",
@@ -225,6 +230,24 @@ def register_user(db: Session, payload: SignupRequest) -> dict:
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # G38: send welcome notification on registration.
+    notify_safe(
+        db,
+        event_type="account",
+        recipient_id=user.id,
+        title=f"Welcome to Spree, {name.split()[0]}!",
+        body=(
+            "Your account has been created. Browse products, follow your favourite stores, "
+            "and start shopping on Spree!"
+        ),
+        notif_type="account",
+        href="/",
+        email_subject="Welcome to Spree!",
+        cta_label="Start shopping",
+        cta_url=settings.frontend_url,
+        recipient_email=user.email,
+    )
 
     return _serialize_user(user)
 

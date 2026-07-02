@@ -16,6 +16,7 @@ from app.services.orders import (
     list_admin_orders,
     list_seller_orders,
     list_user_orders,
+    mark_delivered,
 )
 
 router = APIRouter()
@@ -81,6 +82,23 @@ def orders_add_tracking(
     if not actor_id:
         raise HTTPException(status_code=401, detail="Authentication required")
     return add_tracking(db, order_id, payload, actor_id)
+
+
+@router.put("/orders/{order_id}/mark-delivered", response_model=OrderOut)
+def orders_mark_delivered(
+    order_id: str,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    """Seller marks a shipment as delivered (carrier dropped off).
+
+    G8/G9: Transitions in_transit → delivered.  The buyer must then
+    call confirm-delivery to release the payout.
+    """
+    if not actor_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return mark_delivered(db, order_id, actor_id)
 
 
 @router.put("/orders/{order_id}/confirm-delivery", response_model=OrderOut)

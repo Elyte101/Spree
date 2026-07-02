@@ -104,14 +104,25 @@ def create_transfer_recipient(
     return result.get("data", {}).get("recipient_code", "")
 
 
-def initiate_transfer(amount_minor: int, recipient_code: str, reason: str = "") -> dict:
-    """Send money to a recipient. Returns transfer data dict."""
-    payload = {
+def initiate_transfer(
+    amount_minor: int,
+    recipient_code: str,
+    reason: str = "",
+    idempotency_key: str = "",
+) -> dict:
+    """Send money to a recipient. Returns transfer data dict.
+
+    idempotency_key (G29): pass a stable per-transfer key so Paystack deduplicates
+    retries — prevents double-paying a vendor if the first call times out.
+    """
+    payload: dict = {
         "source": "balance",
         "amount": amount_minor,
         "recipient": recipient_code,
         "reason": reason,
     }
+    if idempotency_key:
+        payload["reference"] = idempotency_key
     result = _request("POST", "/transfer", payload)
     return result.get("data", {})
 

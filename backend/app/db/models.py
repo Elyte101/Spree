@@ -187,6 +187,12 @@ class User(Base):
     onboarding_step: Mapped[int] = mapped_column(Integer, default=0)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notification_prefs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # G26: soft-delete — set deleted_at instead of hard-deleting rows.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    # G37: seller state-change timestamps.
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -353,3 +359,125 @@ class OrderItem(Base):
     commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
 
     order: Mapped[Order] = relationship(back_populates="items")
+
+
+# ── G6: Financial ledger ──────────────────────────────────────────────────────
+
+class LedgerEntry(Base):
+    """Immutable append-only record of every money movement in the platform.
+
+    All amounts are stored in pesewas (integer) to avoid floating-point issues.
+    """
+    __tablename__ = "ledger_entries"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Ledger entry type — see ledger.py for the canonical list.
+    entry_type: Mapped[str] = mapped_column(String(64), index=True)
+    # The order this relates to (nullable for platform-level entries).
+    order_id: Mapped[str | None] = mapped_column(ForeignKey("orders.id"), nullable=True, index=True)
+    # The seller receiving / disbursing funds (nullable for buyer-side entries).
+    seller_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # The buyer / payer (nullable for seller-side entries).
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # Amount in pesewas (GHS × 100).
+    amount_pesewas: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="GHS")
+    # External reference (Paystack txn/transfer ID, etc.)
+    reference: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True, index=True)
+    # Structured metadata (commission_rate, processing_fee_rate, etc.)
+    meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+
+
+# ── G27: Admin audit log ──────────────────────────────────────────────────────
+
+class AuditLog(Base):
+    """Append-only record of every admin action that mutates platform state."""
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # The admin (or system) that performed the action.
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    # Dot-namespaced action name, e.g. "seller.approve", "product.blacklist".
+    action: Mapped[str] = mapped_column(String(120), index=True)
+    # The target resource type and ID.
+    target_type: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Snapshot of what changed (before/after diffs, rejection reason, etc.)
+    payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+
+
+# ── G23: Admin-editable site settings ────────────────────────────────────────
+
+class SiteSetting(Base):
+    """Key/value store for admin-configurable site-wide settings.
+
+    Keys include: main_tagline, commission_rate, processing_fee_rate,
+    auto_release_days, etc.
+    """
+    __tablename__ = "site_settings"
+
+    key: Mapped[str] = mapped_column(String(120), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+# ── G22: Product likes / favourites ──────────────────────────────────────────
+
+class ProductLike(Base):
+    """Records a buyer liking / favouriting a product."""
+    __tablename__ = "product_likes"
+    __table_args__ = (
+        UniqueConstraint("product_id", "user_id", name="uq_product_like"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
+# ── G21: Product comments / reviews ──────────────────────────────────────────
+
+class Comment(Base):
+    """Buyer comment / review on a product.
+
+    Distinct from the star-rating aggregated on Product.rating —
+    Comments hold the free-text review body.
+    """
+    __tablename__ = "comments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    body: Mapped[str] = mapped_column(Text)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
+    is_flagged: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
