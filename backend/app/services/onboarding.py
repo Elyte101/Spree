@@ -89,10 +89,15 @@ def save_step3(db: Session, user_id: str, payload: OnboardingStep3Request) -> di
             detail="That store name is already taken — try adding your city or a unique word",
         )
 
+    # G32: strip HTML from text fields to prevent XSS
+    import re as _re  # noqa: PLC0415
+    def _strip_html(v: str) -> str:
+        return _re.sub(r"<[^>]+>", "", v).strip()
+
     user.store_name = payload.storeName.strip()
     user.store_slug = store_slug
-    user.store_tagline = payload.storeTagline.strip() or None
-    user.store_description = payload.storeDescription.strip()
+    user.store_tagline = _strip_html(payload.storeTagline) or None
+    user.store_description = _strip_html(payload.storeDescription)
     user.seller_type = payload.sellerType
     if payload.registrationNumber:
         contact = user.seller_contact or {}

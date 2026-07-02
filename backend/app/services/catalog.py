@@ -36,6 +36,11 @@ def _slugify(value: str) -> str:
     return slug or "product"
 
 
+def _strip_html(value: str) -> str:
+    """G32: Strip HTML/script tags from free-text fields to prevent XSS."""
+    return re.sub(r"<[^>]+>", "", value).strip()
+
+
 def _normalize_tags(tags: list[str]) -> list[str]:
     normalized: list[str] = []
     for tag in tags:
@@ -625,8 +630,11 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
 
     category = _resolve_category(db, payload.categoryId, payload.categoryName, images[0])
     brand = _resolve_brand(db, payload.brandId, payload.brandName, images[0])
+    # G32: strip HTML from description to prevent XSS
+    clean_description = _strip_html(payload.description)
+
     collection = _resolve_collection(
-        db, payload.collectionId, payload.collectionName, payload.description.strip(), images[0]
+        db, payload.collectionId, payload.collectionName, clean_description, images[0]
     )
 
     product_slug = _slugify(payload.slug or payload.name)
@@ -652,7 +660,7 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
         id=f"prod-{uuid4().hex[:12]}",
         slug=product_slug,
         name=payload.name.strip(),
-        description=payload.description.strip(),
+        description=clean_description,
         price=Decimal(str(payload.price)),
         discount_percentage=Decimal(str(payload.discount)),
         images=images,
@@ -884,7 +892,7 @@ def update_product(
     if payload.name is not None:
         product.name = payload.name.strip()
     if payload.description is not None:
-        product.description = payload.description.strip()
+        product.description = _strip_html(payload.description)  # G32
     if payload.price is not None:
         product.price = Decimal(str(payload.price))
     if payload.discount is not None:
