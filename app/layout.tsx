@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css";
 
 import { StoreAppBar } from "@/components/navigation/storeAppBar";
+import { ChatWidget } from "@/components/chat/ChatWidget";
 import { AuthProvider } from "@/components/providers/authProvider";
 import { CartProvider } from "@/components/providers/cartProvider";
 import { FavoritesProvider } from "@/components/providers/favoritesProvider";
@@ -73,6 +74,7 @@ export default async function RootLayout({
                   <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
                     {children}
                   </main>
+                  <ChatWidget />
                 </CartProvider>
               </FavoritesProvider>
             </QueryProvider>

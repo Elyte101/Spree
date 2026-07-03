@@ -9,6 +9,7 @@ import {
   AccountCircleOutlined,
   Brightness4Rounded,
   Brightness7Rounded,
+  ChatBubbleOutlineRounded,
   CloseRounded,
   DashboardRounded,
   FavoriteBorderOutlined,
@@ -46,11 +47,13 @@ import { alpha } from "@mui/material/styles";
 import { useCart } from "@/components/providers/cartProvider";
 import { useFavorites } from "@/components/providers/favoritesProvider";
 import { useNotificationsQuery } from "@/lib/hooks/useStorefrontQueries";
+import { useChatUnread } from "@/lib/hooks/useChatUnread";
 import { useThemeContext } from "@/theme/themeContext";
 
 export function StoreAppBar() {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
+  const role = session?.user?.role ?? "customer";
   const theme = useTheme();
   const { toggleMode } = useThemeContext();
   const { itemCount: cartCount } = useCart();
@@ -58,6 +61,7 @@ export function StoreAppBar() {
   const notificationsQuery = useNotificationsQuery();
   const notificationCount =
     notificationsQuery.data?.filter((item) => !item.isRead).length ?? 0;
+  const chatUnreadCount = useChatUnread();
   const [profileAnchorEl, setProfileAnchorEl] = React.useState<HTMLElement | null>(null);
   const [settingsAnchorEl, setSettingsAnchorEl] = React.useState<HTMLElement | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -99,6 +103,9 @@ export function StoreAppBar() {
       : []),
     { label: "Favorites", href: "/favorites", active: isFavoritesRoute, badge: favoriteCount, icon: <FavoriteBorderOutlined />, ariaLabel: "favorites" },
     { label: "Notifications", href: "/notifications", active: isNotificationsRoute, badge: notificationCount, icon: <NotificationsOutlined />, ariaLabel: "notifications" },
+    ...(isAuthenticated
+      ? [{ label: "Support Chat", href: role === "admin" ? "/dashboard/chat" : "/chat", active: pathname === "/chat" || pathname === "/dashboard/chat", badge: chatUnreadCount, icon: <ChatBubbleOutlineRounded />, ariaLabel: "support-chat", isChatToggle: false }]
+      : []),
     { label: "Cart", href: "/cart", active: isCartRoute, badge: cartCount, icon: <ShoppingBagOutlined />, ariaLabel: "cart" },
   ];
 
@@ -196,25 +203,29 @@ export function StoreAppBar() {
           {/* Secondary items: hidden on mobile/tablet, shown on lg+ */}
           {navItems
             .filter((item) => item.ariaLabel !== "cart")
-            .map((item) => (
-              <Tooltip key={item.ariaLabel} title={item.label}>
-                <IconButton
-                  aria-label={item.ariaLabel}
-                  color="inherit"
-                  component={Link}
-                  href={item.href}
-                  sx={{ ...getNavButtonSx(item.active), display: { xs: "none", lg: "inline-flex" } }}
-                >
-                  {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
-                    <Badge badgeContent={item.badge} color="primary" max={99}>
-                      {item.icon}
-                    </Badge>
-                  ) : (
-                    item.icon
-                  )}
-                </IconButton>
-              </Tooltip>
-            ))}
+            .map((item) => {
+              const isChatToggle = "isChatToggle" in item && item.isChatToggle;
+              const badgeEl = "badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+                <Badge badgeContent={item.badge} color="primary" max={99}>
+                  {item.icon}
+                </Badge>
+              ) : item.icon;
+              return (
+                <Tooltip key={item.ariaLabel} title={item.label}>
+                  <IconButton
+                    aria-label={item.ariaLabel}
+                    color="inherit"
+                    {...(isChatToggle
+                      ? { onClick: () => window.dispatchEvent(new CustomEvent("spree:open-chat")) }
+                      : { component: Link, href: item.href }
+                    )}
+                    sx={{ ...getNavButtonSx(item.active), display: { xs: "none", lg: "inline-flex" } }}
+                  >
+                    {badgeEl}
+                  </IconButton>
+                </Tooltip>
+              );
+            })}
 
           {/* Cart — always visible */}
           {navItems
@@ -306,27 +317,40 @@ export function StoreAppBar() {
         </Stack>
         <Divider />
         <List disablePadding>
-          {navItems.map((item) => (
-            <ListItemButton
-              key={item.ariaLabel}
-              component={Link}
-              href={item.href}
-              selected={item.active}
-              onClick={() => setMobileMenuOpen(false)}
-              sx={{ py: 1.25, px: 2 }}
-            >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                {"badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
-                  <Badge badgeContent={item.badge} color="primary" max={99}>
-                    {item.icon}
-                  </Badge>
-                ) : (
-                  item.icon
-                )}
-              </ListItemIcon>
-              <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: item.active ? 800 : 500 }} />
-            </ListItemButton>
-          ))}
+          {navItems.map((item) => {
+            const isChatToggle = "isChatToggle" in item && item.isChatToggle;
+            const badgeEl = "badge" in item && typeof item.badge === "number" && item.badge > 0 ? (
+              <Badge badgeContent={item.badge} color="primary" max={99}>
+                {item.icon}
+              </Badge>
+            ) : item.icon;
+            if (isChatToggle) {
+              return (
+                <ListItemButton
+                  key={item.ariaLabel}
+                  onClick={() => { setMobileMenuOpen(false); window.dispatchEvent(new CustomEvent("spree:open-chat")); }}
+                  selected={item.active}
+                  sx={{ py: 1.25, px: 2 }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>{badgeEl}</ListItemIcon>
+                  <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: 500 }} />
+                </ListItemButton>
+              );
+            }
+            return (
+              <ListItemButton
+                key={item.ariaLabel}
+                component={Link}
+                href={item.href}
+                selected={item.active}
+                onClick={() => setMobileMenuOpen(false)}
+                sx={{ py: 1.25, px: 2 }}
+              >
+                <ListItemIcon sx={{ minWidth: 36 }}>{badgeEl}</ListItemIcon>
+                <ListItemText primary={item.label} primaryTypographyProps={{ fontWeight: item.active ? 800 : 500 }} />
+              </ListItemButton>
+            );
+          })}
           <Divider sx={{ my: 0.5 }} />
           <ListItemButton
             onClick={() => { setMobileMenuOpen(false); setSettingsAnchorEl(null); toggleMode(); }}

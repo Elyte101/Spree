@@ -9,3 +9,7 @@ resend>=2.0.0,<3.0.0
 pywebpush>=2.0.0,<3.0.0
 # G13: field-level encryption for sensitive data (Ghana Card, payout details, document URLs)
 cryptography>=43.0.0,<45.0.0
+# Stream Chat — real-time messaging
+stream-chat>=4.0.0
+# Anthropic Claude — AI support auto-replies
+anthropic>=0.25.0

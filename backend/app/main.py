@@ -8,6 +8,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import Response
 
 from app.api.router import api_router
+from app.api.routes.chat import webhook_router
 from app.core.config import settings
 from app.core.logging import configure_logging, request_logging_middleware, security_headers_middleware
 from app.db.init_db import initialize_database
@@ -111,3 +112,6 @@ def serve_upload(
 
 
 app.include_router(api_router, prefix=settings.api_v1_prefix)
+# Webhook route: mounted outside /api/v1 so Stream can POST to /webhooks/stream
+# without needing the internal API key header.
+app.include_router(webhook_router, tags=["webhooks"])
