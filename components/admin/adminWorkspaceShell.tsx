@@ -6,8 +6,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   AddBoxRounded,
+  ChatBubbleOutlineRounded,
   CloseRounded,
   Inventory2Rounded,
+  LeaderboardRounded,
   ManageAccountsRounded,
   MenuRounded,
   ReceiptLongOutlined,
@@ -41,6 +43,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: ReactNode;
+  children?: NavItem[];
 }
 
 const roleLabelMap: Record<UserRole, string> = {
@@ -77,11 +80,22 @@ export function AdminWorkspaceShell({
             label: "Products",
             href: "/dashboard/products",
             icon: <Inventory2Rounded fontSize="small" />,
-          },
-          {
-            label: "Create product",
-            href: "/dashboard/products/new",
-            icon: <AddBoxRounded fontSize="small" />,
+            children: [
+              {
+                label: "Create product",
+                href: "/dashboard/products/new",
+                icon: <AddBoxRounded fontSize="small" />,
+              },
+              ...(userRole === "admin"
+                ? [
+                    {
+                      label: "Top products",
+                      href: "/dashboard/products/top",
+                      icon: <LeaderboardRounded fontSize="small" />,
+                    },
+                  ]
+                : []),
+            ],
           },
           {
             label: "Orders",
@@ -98,9 +112,9 @@ export function AdminWorkspaceShell({
             icon: <ManageAccountsRounded fontSize="small" />,
           },
           {
-            label: "Top products",
-            href: "/dashboard/products/top",
-            icon: <StorefrontRounded fontSize="small" />,
+            label: "Support Chat",
+            href: "/dashboard/chat",
+            icon: <ChatBubbleOutlineRounded fontSize="small" />,
           },
         ]
       : []),
@@ -120,7 +134,59 @@ export function AdminWorkspaceShell({
       icon: <SettingsRounded fontSize="small" />,
     },
   ];
-  const activeNavItem = navItems.find((item) => isActivePath(pathname, item.href));
+  const activeNavItem = (() => {
+    for (const item of navItems) {
+      if (item.children?.length) {
+        const child = item.children.find((c) => isActivePath(pathname, c.href));
+        if (child) return child;
+        if (pathname === item.href) return item;
+      } else if (isActivePath(pathname, item.href)) {
+        return item;
+      }
+    }
+    return undefined;
+  })();
+
+  const renderNavBtn = (item: NavItem, closeOnNavigate: boolean, isChild = false) => {
+    const isParentWithChildren = !isChild && Boolean(item.children?.length);
+    const active = isParentWithChildren
+      ? pathname === item.href
+      : isActivePath(pathname, item.href);
+
+    return (
+      <Button
+        key={item.href}
+        component={Link}
+        href={item.href}
+        fullWidth
+        startIcon={item.icon}
+        onClick={closeOnNavigate ? () => setWorkspaceMenuOpen(false) : undefined}
+        sx={(theme) => ({
+          justifyContent: "flex-start",
+          pl: isChild ? 3.5 : 1.5,
+          pr: 1.5,
+          py: isChild ? 0.8 : 1.1,
+          borderRadius: 2,
+          textTransform: "none",
+          fontWeight: active ? 900 : 700,
+          fontSize: isChild ? "0.8125rem" : undefined,
+          color: active
+            ? theme.palette.primary.main
+            : theme.palette.text.primary,
+          backgroundColor: active
+            ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.12)
+            : "transparent",
+          "&:hover": {
+            backgroundColor: active
+              ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.24 : 0.16)
+              : alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.08 : 0.05),
+          },
+        })}
+      >
+        {item.label}
+      </Button>
+    );
+  };
 
   const renderWorkspaceNavigation = (closeOnNavigate = false) => (
     <Stack spacing={2}>
@@ -134,50 +200,12 @@ export function AdminWorkspaceShell({
       </Box>
 
       <Stack spacing={1}>
-        {navItems.map((item) => {
-          const active = isActivePath(pathname, item.href);
-
-          return (
-            <Button
-              key={item.href}
-              component={Link}
-              href={item.href}
-              fullWidth
-              startIcon={item.icon}
-              onClick={closeOnNavigate ? () => setWorkspaceMenuOpen(false) : undefined}
-              sx={(theme) => ({
-                justifyContent: "flex-start",
-                px: 1.5,
-                py: 1.1,
-                borderRadius: 2,
-                textTransform: "none",
-                fontWeight: active ? 900 : 700,
-                color: active
-                  ? theme.palette.primary.main
-                  : theme.palette.text.primary,
-                backgroundColor: active
-                  ? alpha(
-                      theme.palette.primary.main,
-                      theme.palette.mode === "dark" ? 0.18 : 0.12
-                    )
-                  : "transparent",
-                "&:hover": {
-                  backgroundColor: active
-                    ? alpha(
-                        theme.palette.primary.main,
-                        theme.palette.mode === "dark" ? 0.24 : 0.16
-                      )
-                    : alpha(
-                        theme.palette.text.primary,
-                        theme.palette.mode === "dark" ? 0.08 : 0.05
-                      ),
-                },
-              })}
-            >
-              {item.label}
-            </Button>
-          );
-        })}
+        {navItems.map((item) => (
+          <React.Fragment key={item.href}>
+            {renderNavBtn(item, closeOnNavigate)}
+            {item.children?.map((child) => renderNavBtn(child, closeOnNavigate, true))}
+          </React.Fragment>
+        ))}
       </Stack>
 
       <Divider />

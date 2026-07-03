@@ -976,11 +976,17 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
 
     order.payout_amount = total_payout
 
-    # Increment completed deliveries for each vendor before commit
+    # Increment completed deliveries and purchase counts before commit
     for sid in seller_payouts:
         vendor = db.get(User, sid)
         if vendor:
             vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
+
+    for item in order.items:
+        if item.product_id:
+            product = db.get(Product, item.product_id)
+            if product:
+                product.purchase_count = (product.purchase_count or 0) + item.quantity
 
     db.commit()
     db.refresh(order)
@@ -1112,6 +1118,12 @@ def auto_release_delivered_orders(db: Session) -> dict:
                 vendor = db.get(User, sid)
                 if vendor:
                     vendor.completed_deliveries = (vendor.completed_deliveries or 0) + 1
+
+            for item in order.items:
+                if item.product_id:
+                    product = db.get(Product, item.product_id)
+                    if product:
+                        product.purchase_count = (product.purchase_count or 0) + item.quantity
 
             db.commit()
             db.refresh(order)
