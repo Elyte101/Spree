@@ -41,6 +41,7 @@ DEFAULT_PREFS: dict[str, dict[str, bool]] = {
     "order_cancelled":          {"in_app": True,  "email": True,  "push": False},
     "order_refunded":           {"in_app": True,  "email": True,  "push": False},
     "order_payment_failed":     {"in_app": True,  "email": True,  "push": True},
+    "order_auto_released":      {"in_app": True,  "email": True,  "push": False},
     # ── Order events (vendor) ────────────────────────────────────────────────
     "order_placed_seller":      {"in_app": True,  "email": True,  "push": True},
     "payout_released":          {"in_app": True,  "email": True,  "push": False},

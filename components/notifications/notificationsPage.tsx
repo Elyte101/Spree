@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useQueryClient } from "react-query";
 import {
   CampaignRounded,
   CheckRounded,
@@ -58,6 +59,7 @@ const formatNotificationDate = (value: string) => {
 };
 
 export function NotificationsPage({ notifications: initial }: NotificationsPageProps) {
+  const queryClient = useQueryClient();
   const [items, setItems] = React.useState<NotificationItem[]>(initial);
   const [markingAll, setMarkingAll] = React.useState(false);
   const [marking, setMarking] = React.useState<Set<string>>(new Set());
@@ -70,6 +72,10 @@ export function NotificationsPage({ notifications: initial }: NotificationsPageP
     try {
       await api.markNotificationRead(id);
       setItems((prev) => prev.map((n) => n.id === id ? { ...n, isRead: true } : n));
+      queryClient.setQueryData<NotificationItem[]>(
+        ["notifications"],
+        (prev) => (prev ?? []).map((n) => n.id === id ? { ...n, isRead: true } : n)
+      );
     } finally {
       setMarking((prev) => { const next = new Set(prev); next.delete(id); return next; });
     }
@@ -81,6 +87,10 @@ export function NotificationsPage({ notifications: initial }: NotificationsPageP
     try {
       await api.markAllNotificationsRead();
       setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      queryClient.setQueryData<NotificationItem[]>(
+        ["notifications"],
+        (prev) => (prev ?? []).map((n) => ({ ...n, isRead: true }))
+      );
     } finally {
       setMarkingAll(false);
     }

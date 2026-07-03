@@ -377,8 +377,12 @@ export const getCollections = () =>
 export const getCart = () =>
   getJson<CartSummary>("/cart", undefined, { fallback: createFallbackCart });
 
-export const getNotifications = () =>
-  getJson<NotificationItem[]>("/notifications", undefined, { fallback: () => [] });
+export const getNotifications = (userId?: string) =>
+  getJson<NotificationItem[]>(
+    "/notifications",
+    userId ? { headers: { "X-Actor-User-Id": userId } } : undefined,
+    { internal: true, fallback: () => [] }
+  );
 
 export const getAdminOverview = () =>
   getJson<AdminOverview | null>(

@@ -44,14 +44,17 @@ export function useFavoriteProductsQuery(
   );
 }
 
+const NOTIFICATIONS_POLL_MS = 30_000;
+
 export function useNotificationsQuery(initialData?: NotificationItem[]) {
   return useQuery<NotificationItem[], ApiClientError>(
     ["notifications"],
     api.getNotifications,
     {
       initialData,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
       staleTime: ONE_MINUTE,
+      refetchInterval: NOTIFICATIONS_POLL_MS,
     }
   );
 }
