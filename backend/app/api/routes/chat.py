@@ -80,21 +80,31 @@ def chat_token(
     admin_id = _admin_user_id()
     channel_id = f"support-{actor_id}"
 
-    # Upsert the Stream user so their display name is current.
-    client.upsert_user({"id": actor_id, "role": "user", "name": actor_id})
+    try:
+        # Upsert the Stream user so their display name is current.
+        client.upsert_user({"id": actor_id, "role": "user", "name": actor_id})
 
-    # Ensure the admin Stream user exists.
-    client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
+        # Ensure the admin Stream user exists.
+        client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
 
-    # Create (or get) the support channel — members are strictly user + admin.
-    channel = client.channel(
-        "support",
-        channel_id,
-        data={"members": [actor_id, admin_id], "created_by_id": actor_id},
-    )
-    channel.create(actor_id)
+        # Create (or get) the support channel — members are strictly user + admin.
+        # Note: channel.create(actor_id) already sets created_by internally; passing
+        # created_by_id in data as well causes Stream to reject with code 4.
+        channel = client.channel(
+            "support",
+            channel_id,
+            data={"members": [actor_id, admin_id]},
+        )
+        channel.create(actor_id)
 
-    token = client.create_token(actor_id)
+        token = client.create_token(actor_id)
+    except Exception as exc:
+        logger.warning("Stream Chat API error for user %s: %s", actor_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stream Chat is not configured or currently unavailable.",
+        )
+
     return {
         "token": token,
         "userId": actor_id,

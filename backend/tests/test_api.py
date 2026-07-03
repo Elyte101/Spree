@@ -310,3 +310,87 @@ def test_admin_product_creation_requires_internal_api_key():
         assert created["name"] == payload["name"]
         assert created["stock"] == 18
         assert created["discount"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Chat endpoint tests
+# ---------------------------------------------------------------------------
+
+def test_chat_token_requires_internal_api_key():
+    """GET /chat/token must reject requests without the internal API key."""
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/chat/token",
+            headers={"X-Actor-User-Id": "user-123"},
+        )
+        assert response.status_code == 401
+
+
+def test_chat_token_requires_actor_user_id():
+    """GET /chat/token must return 401 when no actor user id is provided."""
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/chat/token",
+            headers=INTERNAL_HEADERS,
+        )
+        # 401 because actor_id is None
+        assert response.status_code == 401
+
+
+def test_chat_token_returns_503_when_stream_not_configured():
+    """GET /chat/token returns 503 gracefully when Stream env vars are not set."""
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/v1/chat/token",
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-test-123"},
+        )
+        # Either 503 (Stream not configured) or 200 (if STREAM_API_KEY is set in test env)
+        assert response.status_code in (200, 503)
+        if response.status_code == 200:
+            data = response.json()
+            assert "token" in data
+            assert "userId" in data
+            assert "channelId" in data
+            assert data["channelId"] == "support-user-test-123"
+        else:
+            assert "Stream Chat" in response.json().get("detail", "")
+
+
+def test_chat_admin_token_requires_admin_role():
+    """POST /chat/admin-token must reject non-admin users."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/chat/admin-token",
+            headers={**INTERNAL_HEADERS, "X-Actor-Role": "customer"},
+        )
+        assert response.status_code == 403
+
+
+def test_stream_webhook_accepts_non_message_events():
+    """POST /webhooks/stream should return 200 for non-message events."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/webhooks/stream",
+            json={"type": "channel.created"},
+        )
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
+
+
+def test_stream_webhook_skips_admin_messages():
+    """POST /webhooks/stream should no-op when the sender is the admin user."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/webhooks/stream",
+            json={
+                "type": "message.new",
+                "channel_id": "support-user-abc",
+                "channel_type": "support",
+                "message": {
+                    "text": "Hello from admin",
+                    "user": {"id": "spree-admin"},
+                },
+            },
+        )
+        assert response.status_code == 200
+        assert response.json() == {"ok": True}
