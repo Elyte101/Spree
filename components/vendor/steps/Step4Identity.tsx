@@ -84,7 +84,7 @@ function SmileSelfieCapture({
 
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore — no type declarations for this web component bundle
-    import("@smileid/web-components/dist/smart-camera-web.js").then(() => {
+    import("@smileid/web-components/smart-camera-web").then(() => {
       const el = document.createElement("smart-camera-web") as HTMLElement & {
         partnerId: string;
         authToken: string;
