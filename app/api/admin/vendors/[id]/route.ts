@@ -24,7 +24,9 @@ export async function GET(
   }
 
   const { id } = await params;
-  return proxyBackend(`/admin/sellers/${id}`, undefined, { internal: true });
+  return proxyBackend(`/admin/sellers/${id}`, {
+    headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
+  }, { internal: true });
 }
 
 export async function DELETE(
@@ -44,7 +46,7 @@ export async function DELETE(
   const { id } = await params;
   return proxyBackend(
     `/admin/sellers/${id}`,
-    { method: "DELETE", headers: { "X-Actor-Role": "admin" } },
+    { method: "DELETE", headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id } },
     { internal: true }
   );
 }

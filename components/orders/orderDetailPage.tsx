@@ -222,6 +222,7 @@ export function OrderDetailPage({
   const [confirming, setConfirming] = React.useState(false);
   const [cancelling, setCancelling] = React.useState(false);
   const [refunding, setRefunding] = React.useState(false);
+  const [markingDelivered, setMarkingDelivered] = React.useState(false);
   const [tracking, setTracking] = React.useState(false);
   const [trackingNumber, setTrackingNumber] = React.useState("");
   const [carrier, setCarrier] = React.useState("");
@@ -236,6 +237,26 @@ export function OrderDetailPage({
   const canCancel = isBuyer && ["paid", "processing", "pre_transit"].includes(order.status);
   const canRefund = isAdmin && ["paid", "processing", "pre_transit", "in_transit", "delivered"].includes(order.status);
   const canAddTracking = isSeller && order.status === "paid";
+  const canMarkDelivered = isSeller && order.status === "in_transit";
+
+  const handleMarkDelivered = async () => {
+    setError(null);
+    setMarkingDelivered(true);
+    try {
+      const res = await fetch(`/api/orders/${order.id}/mark-delivered`, { method: "PUT" });
+      if (!res.ok) {
+        const data = (await res.json()) as { detail?: string };
+        setError(data.detail ?? "Failed to mark as delivered.");
+      } else {
+        setSuccessMsg("Order marked as delivered. The buyer will be asked to confirm receipt.");
+        router.refresh();
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setMarkingDelivered(false);
+    }
+  };
 
   const handleConfirmDelivery = async () => {
     setError(null);
@@ -504,6 +525,50 @@ export function OrderDetailPage({
                         sx={{ fontWeight: 700, borderRadius: 2.5, whiteSpace: "nowrap", height: 40 }}
                       >
                         Mark shipped
+                      </Button>
+                    </motion.div>
+                  </Stack>
+                </Box>
+              )}
+
+              {canMarkDelivered && (
+                <Box
+                  mt={3}
+                  sx={(theme) => ({
+                    p: 2.5,
+                    borderRadius: 2,
+                    bgcolor: alpha(theme.palette.info.main, 0.06),
+                    border: `1px solid ${alpha(theme.palette.info.main, 0.25)}`,
+                  })}
+                >
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
+                    <Stack gap={0.5}>
+                      <Stack direction="row" alignItems="center" gap={1}>
+                        <CheckCircleOutlined color="info" sx={{ fontSize: 18 }} />
+                        <Typography variant="subtitle2" fontWeight={700} color="info.main">
+                          Confirm delivery
+                        </Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        Once the package has been delivered, mark it so the buyer can confirm receipt.
+                      </Typography>
+                    </Stack>
+                    <motion.div whileTap={{ scale: 0.97 }}>
+                      <Button
+                        variant="contained"
+                        color="info"
+                        startIcon={
+                          markingDelivered ? (
+                            <CircularProgress size={16} color="inherit" />
+                          ) : (
+                            <CheckCircleOutlined />
+                          )
+                        }
+                        onClick={handleMarkDelivered}
+                        disabled={markingDelivered}
+                        sx={{ fontWeight: 700, borderRadius: 2.5, whiteSpace: "nowrap" }}
+                      >
+                        Mark as delivered
                       </Button>
                     </motion.div>
                   </Stack>

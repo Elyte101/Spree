@@ -20,5 +20,7 @@ export async function GET() {
     );
   }
 
-  return proxyBackend("/admin/sellers", undefined, { internal: true });
+  return proxyBackend("/admin/sellers", {
+    headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
+  }, { internal: true });
 }

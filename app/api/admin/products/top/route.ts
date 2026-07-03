@@ -21,5 +21,7 @@ export async function GET(request: Request) {
   }
 
   const { search } = new URL(request.url);
-  return proxyBackend(`/admin/products/top${search}`, undefined, { internal: true });
+  return proxyBackend(`/admin/products/top${search}`, {
+    headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
+  }, { internal: true });
 }

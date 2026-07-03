@@ -23,7 +23,7 @@ export async function PATCH(
     {
       method: "PATCH",
       body: await request.text(),
-      headers: { "Content-Type": "application/json", "X-Actor-Role": "admin" },
+      headers: { "Content-Type": "application/json", "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
     },
     { internal: true }
   );
