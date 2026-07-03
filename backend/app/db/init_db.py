@@ -34,6 +34,10 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("users", "verified_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
     ("users", "rejected_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
     ("users", "suspended_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    # NIA identity verification (replaces Ghana Card image upload)
+    ("users", "nia_verified_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    ("users", "nia_match_confidence", "NUMERIC(5,4)", "REAL"),
+    ("users", "verification_attempt_count", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.

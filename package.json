@@ -24,6 +24,7 @@
     "@mui/material": "^7.3.9",
     "@playwright/test": "^1.60.0",
     "@prisma/client": "^7.5.0",
+    "@smileid/web-components": "^11.6.0",
     "@vercel/analytics": "^2.0.1",
     "@vitest/coverage-v8": "^4.1.7",
     "axios": "^1.13.6",
@@ -35,6 +36,8 @@
     "react-dom": "19.2.4",
     "react-query": "^3.39.3",
     "resend": "^6.12.4",
+    "stream-chat": "^9.49.0",
+    "stream-chat-react": "^14.6.0",
     "vitest": "^4.1.7",
     "zod": "^4.4.3",
     "zustand": "^5.0.12"

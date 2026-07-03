@@ -148,9 +148,8 @@ const createFallbackUserProfile = (
     billingPostalCode: "",
   },
   payoutInfo: {},
-  idFrontUrl: "",
-  idBackUrl: "",
-  selfieUrl: "",
+  niaVerifiedAt: null,
+  niaMatchConfidence: null,
 });
 
 const isConnectionError = (error: unknown) => {

@@ -290,10 +290,29 @@ export const api = {
   submitOnboarding: () =>
     requestJson<UserProfile>("/api/vendor/onboarding/submit", { method: "POST" }),
 
-  getUploadUrl: (slot: "id_front" | "id_back" | "selfie" | "logo") =>
+  getUploadUrl: (slot: "logo") =>
     requestJson<{ uploadUrl: string; path: string; bucket: string }>(
       "/api/vendor/onboarding/upload-url",
       { method: "POST", body: JSON.stringify({ slot }) }
+    ),
+
+  /* ---------- IDENTITY VERIFICATION (NIA + FACE MATCH) ---------- */
+
+  lookupGhanaCard: (idNumber: string) =>
+    requestJson<{ sessionId: string; fullName: string; dob: string; gender: string; mock: boolean }>(
+      "/api/identity/lookup",
+      { method: "POST", body: JSON.stringify({ idNumber }) }
+    ),
+
+  getSmileIdToken: () =>
+    requestJson<{ partnerId: string; timestamp: string; signature: string; environment: string; mock: boolean }>(
+      "/api/identity/smileid-token"
+    ),
+
+  faceVerify: (sessionId: string, images: { image_type_id: number; image: string }[]) =>
+    requestJson<{ verified: boolean; confidence: number; message: string }>(
+      "/api/identity/face-verify",
+      { method: "POST", body: JSON.stringify({ sessionId, images }) }
     ),
 
   /* ---------- VERIFICATION QUEUE (ADMIN) ---------- */
@@ -309,11 +328,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-
-  getSellerDocumentUrls: (id: string) =>
-    requestJson<{ idFrontUrl: string; idBackUrl: string; selfieUrl: string }>(
-      `/api/admin/vendors/${id}/documents`
-    ),
 
   /* ---------- NOTIFICATIONS (EXTENDED) ---------- */
 

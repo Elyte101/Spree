@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
   Alert,
   alpha,
@@ -428,77 +427,31 @@ export function AdminVendorDetailPage({
                 />
               </Stack>
 
-              {vendor.idFrontUrl || vendor.idBackUrl || vendor.selfieUrl ? (
-                <Box
-                  sx={{
-                    display: "grid",
-                    gap: 1.5,
-                    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                  }}
-                >
-                  {[
-                    { label: "ID front", url: vendor.idFrontUrl },
-                    { label: "ID back", url: vendor.idBackUrl },
-                    { label: "Selfie", url: vendor.selfieUrl },
-                  ]
-                    .filter((doc) => doc.url)
-                    .map((doc) => {
-                      const proxyUrl = `/api/uploads/${doc.url.replace(/^\/uploads\//, "")}`;
-                      return (
-                        <Box key={doc.label}>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            fontWeight={600}
-                            sx={{ display: "block", mb: 0.75 }}
-                          >
-                            {doc.label}
-                          </Typography>
-                          <Box
-                            component="a"
-                            href={proxyUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            sx={(theme) => ({
-                              display: "block",
-                              position: "relative",
-                              width: "100%",
-                              aspectRatio: "3/2",
-                              borderRadius: 1.5,
-                              overflow: "hidden",
-                              border: "1px solid",
-                              borderColor: "divider",
-                              bgcolor: "action.hover",
-                              cursor: "pointer",
-                              transition: "border-color 0.15s",
-                              "&:hover": {
-                                borderColor: "primary.main",
-                                boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
-                              },
-                            })}
-                          >
-                            <Image
-                              src={proxyUrl}
-                              alt={doc.label}
-                              fill
-                              sizes="160px"
-                              style={{ objectFit: "cover" }}
-                              unoptimized
-                            />
-                          </Box>
-                        </Box>
-                      );
+              {vendor.niaVerifiedAt ? (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" mb={0.5}>
+                    NIA face match passed on{" "}
+                    {new Date(vendor.niaVerifiedAt).toLocaleString("en-GB", {
+                      day: "2-digit", month: "short", year: "numeric",
+                      hour: "2-digit", minute: "2-digit",
                     })}
+                  </Typography>
+                  {vendor.niaMatchConfidence != null && (
+                    <Typography variant="body2" color="text.secondary">
+                      Match confidence:{" "}
+                      <strong>{Math.round(vendor.niaMatchConfidence * 100)}%</strong>
+                    </Typography>
+                  )}
                 </Box>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  No identity documents uploaded yet.
+                  Identity not yet verified via NIA face match.
                 </Typography>
               )}
 
               <Typography variant="caption" color="text.secondary">
-                Use the &quot;Verify vendor identity&quot; toggle in Admin controls to approve after review.
-                Clicking an image opens it full size in a new tab.
+                Identity is verified automatically when the seller passes the live face match.
+                Use Admin controls below to manually override if needed.
               </Typography>
             </Stack>
           </Paper>

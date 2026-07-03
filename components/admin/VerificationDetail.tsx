@@ -1,19 +1,19 @@
 'use client';
 
 import * as React from "react";
-import Image from "next/image";
 import {
   Alert,
   alpha,
   Box,
   Button,
+  Card,
+  CardContent,
+  Chip,
   CircularProgress,
-  Dialog,
-  DialogContent,
   Divider,
   IconButton,
+  LinearProgress,
   Paper,
-  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -22,7 +22,9 @@ import {
   CheckRounded,
   CloseRounded,
   DoNotDisturbRounded,
-  ZoomInRounded,
+  FaceRounded,
+  VerifiedUserRounded,
+  WarningAmberRounded,
 } from "@mui/icons-material";
 
 import { api, ApiClientError } from "@/lib/api";
@@ -34,107 +36,30 @@ interface VerificationDetailProps {
   onClose: () => void;
 }
 
-interface DocumentUrls {
-  idFrontUrl: string | null;
-  idBackUrl: string | null;
-  selfieUrl: string | null;
-}
-
-function DocumentImage({ url, label }: { url: string | null; label: string }) {
-  const [zoom, setZoom] = React.useState(false);
-
-  if (!url) {
-    return (
-      <Box>
-        <Typography variant="caption" color="text.disabled" fontWeight={600} mb={0.5} display="block">
-          {label}
-        </Typography>
-        <Box
-          sx={{
-            height: 140,
-            borderRadius: 1.5,
-            bgcolor: "action.hover",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Typography variant="caption" color="text.disabled">Not uploaded</Typography>
-        </Box>
-      </Box>
-    );
-  }
-
+function ConfidenceBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const color = score >= 0.85 ? "success" : score >= 0.6 ? "warning" : "error";
   return (
     <Box>
-      <Typography variant="caption" color="text.secondary" fontWeight={600} mb={0.5} display="block">
-        {label}
-      </Typography>
-      <Box
-        position="relative"
-        sx={{
-          height: 140,
-          borderRadius: 1.5,
-          overflow: "hidden",
-          cursor: "zoom-in",
-          "&:hover .zoom-overlay": { opacity: 1 },
-        }}
-        onClick={() => setZoom(true)}
-      >
-        <Image src={url} alt={label} fill style={{ objectFit: "cover" }} sizes="240px" />
-        <Box
-          className="zoom-overlay"
-          sx={{
-            position: "absolute",
-            inset: 0,
-            bgcolor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: 0,
-            transition: "opacity 0.15s",
-          }}
-        >
-          <ZoomInRounded sx={{ color: "white", fontSize: 32 }} />
-        </Box>
-      </Box>
-
-      {/* Full-screen zoom dialog */}
-      <Dialog open={zoom} onClose={() => setZoom(false)} maxWidth="md" fullWidth>
-        <DialogContent sx={{ p: 0, position: "relative", bgcolor: "black" }}>
-          <IconButton
-            onClick={() => setZoom(false)}
-            sx={{ position: "absolute", top: 8, right: 8, color: "white", zIndex: 1 }}
-          >
-            <CloseRounded />
-          </IconButton>
-          <Box sx={{ position: "relative", height: "80vh" }}>
-            <Image src={url} alt={label} fill style={{ objectFit: "contain" }} />
-          </Box>
-        </DialogContent>
-      </Dialog>
+      <Stack direction="row" justifyContent="space-between" mb={0.5}>
+        <Typography variant="caption" color="text.secondary">Face match confidence</Typography>
+        <Typography variant="caption" fontWeight={700} color={`${color}.main`}>{pct}%</Typography>
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={pct}
+        color={color}
+        sx={{ height: 8, borderRadius: 4 }}
+      />
     </Box>
   );
 }
 
 export function VerificationDetail({ vendor, onDecision, onClose }: VerificationDetailProps) {
-  const [docs, setDocs] = React.useState<DocumentUrls | null>(null);
-  const [docsLoading, setDocsLoading] = React.useState(true);
-  const [docsError, setDocsError] = React.useState<string | null>(null);
   const [rejectReason, setRejectReason] = React.useState("");
   const [showRejectForm, setShowRejectForm] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
   const [actionError, setActionError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    setDocs(null);
-    setDocsLoading(true);
-    setDocsError(null);
-    api.getSellerDocumentUrls(vendor.id)
-      .then((d) => setDocs(d))
-      .catch((err) => setDocsError(err instanceof ApiClientError ? err.message : "Failed to load documents"))
-      .finally(() => setDocsLoading(false));
-  }, [vendor.id]);
 
   async function handleApprove() {
     setActionLoading(true);
@@ -169,6 +94,15 @@ export function VerificationDetail({ vendor, onDecision, onClose }: Verification
     vendor.storeLocation?.country,
   ].filter(Boolean).join(", ");
 
+  const niaVerified = vendor.governmentIdVerified === true;
+  const confidence = vendor.niaMatchConfidence ?? null;
+  const verifiedAt = vendor.niaVerifiedAt
+    ? new Date(vendor.niaVerifiedAt).toLocaleString("en-GB", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      })
+    : null;
+
   return (
     <Paper variant="outlined" sx={{ borderRadius: 3, overflow: "hidden" }}>
       {/* Header */}
@@ -191,14 +125,14 @@ export function VerificationDetail({ vendor, onDecision, onClose }: Verification
 
       <Box p={3}>
         <Stack spacing={3}>
-          {/* vendor info */}
+          {/* Vendor info */}
           <Box>
             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-              vendor details
+              Vendor details
             </Typography>
             <Stack spacing={0.75}>
               <InfoRow label="Store name" value={vendor.storeName || "—"} />
-              <InfoRow label="vendor type" value={vendor.sellerType || "—"} />
+              <InfoRow label="Vendor type" value={vendor.sellerType || "—"} />
               <InfoRow label="Location" value={location || "—"} />
               <InfoRow label="Phone" value={vendor.phone || "—"} />
               <InfoRow label="Onboarding step" value={`${vendor.onboardingStep} / 5`} />
@@ -207,25 +141,67 @@ export function VerificationDetail({ vendor, onDecision, onClose }: Verification
 
           <Divider />
 
-          {/* Documents */}
+          {/* NIA Identity verification */}
           <Box>
-            <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
-              Identity documents
-            </Typography>
-            {docsLoading ? (
-              <Stack spacing={1}>
-                {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} variant="rectangular" height={140} sx={{ borderRadius: 1.5 }} />
-                ))}
-              </Stack>
-            ) : docsError ? (
-              <Alert severity="error">{docsError}</Alert>
+            <Stack direction="row" alignItems="center" spacing={1} mb={1.5}>
+              <Typography variant="subtitle2" fontWeight={700}>
+                Identity verification
+              </Typography>
+              {niaVerified ? (
+                <Chip
+                  label="NIA verified"
+                  color="success"
+                  size="small"
+                  icon={<VerifiedUserRounded />}
+                />
+              ) : (
+                <Chip
+                  label="Not verified"
+                  color="warning"
+                  size="small"
+                  icon={<WarningAmberRounded />}
+                />
+              )}
+            </Stack>
+
+            {niaVerified ? (
+              <Card variant="outlined" sx={{ borderRadius: 2, borderColor: "success.light" }}>
+                <CardContent sx={{ pb: "16px !important" }}>
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <FaceRounded sx={{ color: "success.main", fontSize: 20 }} />
+                      <Typography variant="body2" fontWeight={600} color="success.main">
+                        Face match passed automatically
+                      </Typography>
+                    </Stack>
+
+                    {vendor.governmentIdNumber && (
+                      <InfoRow label="Ghana Card no." value={vendor.governmentIdNumber} />
+                    )}
+
+                    {verifiedAt && (
+                      <InfoRow label="Verified at" value={verifiedAt} />
+                    )}
+
+                    {confidence !== null && (
+                      <Box mt={0.5}>
+                        <ConfidenceBar score={confidence} />
+                      </Box>
+                    )}
+                  </Stack>
+                </CardContent>
+              </Card>
             ) : (
-              <Stack spacing={1.5}>
-                <DocumentImage url={docs?.idFrontUrl ?? null} label="ID — front" />
-                <DocumentImage url={docs?.idBackUrl ?? null} label="ID — back" />
-                <DocumentImage url={docs?.selfieUrl ?? null} label="Selfie with ID" />
-              </Stack>
+              <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                This seller has not completed face verification yet.
+                {vendor.governmentIdNumber && (
+                  <Box mt={0.5}>
+                    <Typography variant="caption">
+                      Ghana Card on file: <strong>{vendor.governmentIdNumber}</strong>
+                    </Typography>
+                  </Box>
+                )}
+              </Alert>
             )}
           </Box>
 
@@ -244,7 +220,7 @@ export function VerificationDetail({ vendor, onDecision, onClose }: Verification
                   color="success"
                   fullWidth
                   startIcon={actionLoading ? <CircularProgress size={16} color="inherit" /> : <CheckRounded />}
-                  disabled={actionLoading || docsLoading}
+                  disabled={actionLoading}
                   onClick={handleApprove}
                 >
                   Approve vendor

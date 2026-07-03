@@ -143,14 +143,13 @@ class UserProfileOut(BaseModel):
     governmentIdType: GhanaIdType = "ghana-card"
     governmentIdNumber: str = ""
     governmentIdVerified: bool = False
+    niaVerifiedAt: datetime | None = None
+    niaMatchConfidence: float | None = None
     sellerStartedAt: datetime | None = None
     sellerIdentity: SellerIdentityInfo
     shippingAddress: ShippingAddress
     paymentInfo: PaymentInfo
     payoutInfo: dict = {}
-    idFrontUrl: str = ""
-    idBackUrl: str = ""
-    selfieUrl: str = ""
     onboardingStep: int = 0
     rejectionReason: str | None = None
 
@@ -192,12 +191,9 @@ class OnboardingStep3Request(BaseModel):
 
 
 class OnboardingStep4Request(BaseModel):
-    """Identity verification — document URLs after direct Supabase upload."""
+    """Identity — Ghana Card number only. Verification happens via /identity/* endpoints."""
     governmentIdType: GhanaIdType = "ghana-card"
     governmentIdNumber: str = Field(min_length=4, max_length=64)
-    idFrontUrl: str = Field(min_length=1, max_length=512)
-    idBackUrl: str = Field(min_length=1, max_length=512)
-    selfieUrl: str = Field(min_length=1, max_length=512)
 
 
 class OnboardingStep5Request(BaseModel):
@@ -224,3 +220,33 @@ class NotificationPrefsOut(BaseModel):
 
 class NotificationPrefsUpdateRequest(BaseModel):
     prefs: dict
+
+
+# ── Identity verification (NIA lookup + SmartSelfie face match) ───────────────
+
+class IdentityLookupRequest(BaseModel):
+    idNumber: str = Field(min_length=1, max_length=64)
+
+
+class IdentityLookupResponse(BaseModel):
+    sessionId: str
+    fullName: str
+    dob: str
+    gender: str
+    mock: bool = False
+
+
+class SmileIdImage(BaseModel):
+    image_type_id: int
+    image: str  # base64
+
+
+class FaceVerifyRequest(BaseModel):
+    sessionId: str
+    images: list[SmileIdImage]  # from @smile_id/smart-camera-web component
+
+
+class FaceVerifyResponse(BaseModel):
+    verified: bool
+    confidence: float
+    message: str

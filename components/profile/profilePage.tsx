@@ -9,7 +9,6 @@ import {
   AccountCircleRounded,
   AddBusinessRounded,
   BadgeRounded,
-  CameraAltRounded,
   CheckCircleOutlined,
   CheckCircleRounded,
   CreditCardRounded,
@@ -20,7 +19,6 @@ import {
   PhoneAndroidRounded,
   SaveRounded,
   StorefrontRounded,
-  UploadFileRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -65,14 +63,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
-
-  // ID document upload state
-  const [idFront, setIdFront] = React.useState<File | null>(null);
-  const [idBack, setIdBack] = React.useState<File | null>(null);
-  const [selfie, setSelfie] = React.useState<File | null>(null);
-  const [uploadingDocs, setUploadingDocs] = React.useState(false);
-  const [docsError, setDocsError] = React.useState<string | null>(null);
-  const [docsSuccess, setDocsSuccess] = React.useState<string | null>(null);
 
   // Payout info state — spec: card OR MoMo (MTN/Telecel only). NO bank fields.
   const [payout, setPayout] = React.useState({
@@ -203,32 +193,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
       );
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleUploadDocs = async () => {
-    if (!idFront && !idBack && !selfie) return;
-    setDocsError(null);
-    setDocsSuccess(null);
-    setUploadingDocs(true);
-    try {
-      const fd = new FormData();
-      if (idFront) fd.append("id_front", idFront);
-      if (idBack) fd.append("id_back", idBack);
-      if (selfie) fd.append("selfie", selfie);
-      const res = await fetch("/api/auth/id-documents", { method: "POST", body: fd });
-      if (!res.ok) {
-        const d = (await res.json()) as { detail?: string };
-        throw new Error(d.detail ?? "Upload failed");
-      }
-      setDocsSuccess("Documents uploaded. An admin will review and verify your identity.");
-      setIdFront(null);
-      setIdBack(null);
-      setSelfie(null);
-    } catch (err) {
-      setDocsError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploadingDocs(false);
     }
   };
 
@@ -798,20 +762,19 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               </Stack>
             </Paper>
 
-            {/* ── ID DOCUMENT UPLOAD ── */}
+            {/* ── IDENTITY VERIFICATION STATUS ── */}
             {canUploadDocs && (
               <Paper
                 elevation={0}
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
               >
-                <Stack spacing={2.5}>
+                <Stack spacing={2}>
                   <Stack direction="row" alignItems="center" spacing={1.5}>
                     <BadgeRounded color="primary" />
                     <Box>
                       <Typography variant="h5" fontWeight={900}>Identity verification</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Upload the front and back of your government ID plus a selfie holding it.
-                        An admin will review within 24 hours.
+                        Your identity is verified via NIA Ghana Card lookup and live face match during seller onboarding.
                       </Typography>
                     </Box>
                     {profile.governmentIdVerified && (
@@ -825,70 +788,19 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     )}
                   </Stack>
 
-                  {docsError && <Alert severity="error" onClose={() => setDocsError(null)}>{docsError}</Alert>}
-                  {docsSuccess && <Alert severity="success" onClose={() => setDocsSuccess(null)}>{docsSuccess}</Alert>}
-
-                  {!profile.governmentIdVerified && (
-                    <Box
-                      sx={(theme) => ({
-                        p: 2,
-                        borderRadius: 2,
-                        bgcolor: alpha(theme.palette.warning.main, 0.07),
-                        border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
-                      })}
-                    >
-                      <Typography variant="caption" color="warning.main" fontWeight={600}>
-                        Your identity has not been verified yet. Upload your documents below to begin the review process.
-                      </Typography>
-                    </Box>
+                  {profile.governmentIdVerified ? (
+                    <Alert severity="success" sx={{ borderRadius: 2 }}>
+                      Your identity has been verified.
+                      {profile.niaVerifiedAt && (
+                        <> Completed on {new Date(profile.niaVerifiedAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}.</>
+                      )}
+                    </Alert>
+                  ) : (
+                    <Alert severity="info" sx={{ borderRadius: 2 }}>
+                      Identity verification is completed during the seller onboarding process.
+                      If you need to re-verify, please contact support.
+                    </Alert>
                   )}
-
-                  <Stack spacing={2}>
-                    {(
-                      [
-                        { label: "ID card — front", slot: "id_front", file: idFront, set: setIdFront, icon: <UploadFileRounded fontSize="small" />, existing: profile.idFrontUrl },
-                        { label: "ID card — back", slot: "id_back", file: idBack, set: setIdBack, icon: <UploadFileRounded fontSize="small" />, existing: profile.idBackUrl },
-                        { label: "Selfie holding ID", slot: "selfie", file: selfie, set: setSelfie, icon: <CameraAltRounded fontSize="small" />, existing: profile.selfieUrl },
-                      ] as const
-                    ).map(({ label, file, set, icon, existing }) => (
-                      <Stack key={label} direction={{ xs: "column", sm: "row" }} alignItems={{ sm: "center" }} spacing={1.5}>
-                        <Box flex={1}>
-                          <Typography variant="body2" fontWeight={600} gutterBottom>{label}</Typography>
-                          {existing && !file && (
-                            <Typography variant="caption" color="success.main">
-                              ✓ Previously uploaded
-                            </Typography>
-                          )}
-                        </Box>
-                        <Button
-                          component="label"
-                          variant={file ? "contained" : "outlined"}
-                          color={file ? "success" : "primary"}
-                          startIcon={icon}
-                          size="small"
-                          sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
-                        >
-                          {file ? file.name.slice(0, 24) : `Choose file`}
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            hidden
-                            onChange={(e) => set(e.target.files?.[0] ?? null)}
-                          />
-                        </Button>
-                      </Stack>
-                    ))}
-                  </Stack>
-
-                  <Button
-                    variant="contained"
-                    onClick={handleUploadDocs}
-                    disabled={uploadingDocs || (!idFront && !idBack && !selfie)}
-                    startIcon={uploadingDocs ? <CircularProgress size={16} color="inherit" /> : <UploadFileRounded />}
-                    sx={{ alignSelf: "flex-start", borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
-                  >
-                    {uploadingDocs ? "Uploading…" : "Submit documents"}
-                  </Button>
                 </Stack>
               </Paper>
             )}

@@ -147,9 +147,6 @@ export interface OnboardingStep3Payload {
 export interface OnboardingStep4Payload {
   governmentIdType: "ghana-card" | "voters-id" | "drivers-license" | "passport" | "ecowas-card" | "ssnit";
   governmentIdNumber: string;
-  idFrontUrl: string;
-  idBackUrl: string;
-  selfieUrl: string;
 }
 
 // Spec: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.

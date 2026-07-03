@@ -123,19 +123,11 @@ def save_step4(db: Session, user_id: str, payload: OnboardingStep4Request) -> di
         raise HTTPException(status_code=400, detail="Complete step 3 first")
 
     id_number = payload.governmentIdNumber.strip().upper()
-    if payload.governmentIdType == "ghana-card" and not GHANA_CARD_PATTERN.fullmatch(id_number):
-        raise HTTPException(
-            status_code=422,
-            detail="Please enter a valid Ghana Card number (e.g. GHA-123456789-0)",
-        )
 
     user.government_id_type = payload.governmentIdType
     # G13: encrypt sensitive fields at rest.
+    # government_id_verified stays False until /identity/face-verify passes.
     user.government_id_number = encrypt(id_number)
-    user.id_front_url = encrypt(payload.idFrontUrl)
-    user.id_back_url = encrypt(payload.idBackUrl)
-    user.selfie_url = encrypt(payload.selfieUrl)
-    user.government_id_verified = False
     if user.onboarding_step < 4:
         user.onboarding_step = 4
     db.commit()
@@ -206,8 +198,12 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
             detail=f"Onboarding incomplete — you are on step {user.onboarding_step} of 5",
         )
 
-    if not all([user.id_front_url, user.id_back_url, user.selfie_url]):
-        raise HTTPException(status_code=400, detail="Identity documents are required")
+    if not user.government_id_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="Identity verification is required before submitting. "
+                   "Please complete the Ghana Card NIA lookup and face match.",
+        )
 
     if not user.store_name:
         raise HTTPException(status_code=400, detail="Store details are required")

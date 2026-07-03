@@ -413,14 +413,14 @@ export interface UserProfile extends AuthUser {
   governmentIdType: GovernmentIdType;
   governmentIdNumber: string;
   governmentIdVerified: boolean;
+  niaVerifiedAt?: string | null;
+  niaMatchConfidence?: number | null;
+  verificationAttemptCount?: number;
   sellerStartedAt?: string | null;
   sellerIdentity: SellerIdentityInfo;
   shippingAddress: ShippingAddress;
   paymentInfo: PaymentInfo;
   payoutInfo: Partial<PayoutInfo>;
-  idFrontUrl: string;
-  idBackUrl: string;
-  selfieUrl: string;
 }
 
 export interface SellerSummary {
@@ -470,9 +470,8 @@ export interface SellerDetail extends SellerSummary {
 
 export interface AdminSellerDetail extends SellerSummary {
   governmentIdNumber: string;
-  idFrontUrl: string;
-  idBackUrl: string;
-  selfieUrl: string;
+  niaVerifiedAt?: string | null;
+  niaMatchConfidence?: number | null;
   onboardingStep: number;
   rejectionReason?: string | null;
   shippingAddress: ShippingAddress;
@@ -484,6 +483,9 @@ export interface VerificationQueueItem extends SellerSummary {
   onboardingStep: number;
   rejectionReason?: string | null;
   adminNote: string;
+  governmentIdNumber?: string;
+  niaVerifiedAt?: string | null;
+  niaMatchConfidence?: number | null;
 }
 
 export interface TopProductsResponse {

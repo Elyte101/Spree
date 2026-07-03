@@ -173,6 +173,11 @@ def _serialize_admin_seller_summary(vendor: User, metrics: dict) -> dict:
             **raw_location,
         },
         "adminNote": vendor.admin_note or "",
+        "governmentIdNumber": vendor.government_id_number or "",
+        "niaVerifiedAt": vendor.nia_verified_at,
+        "niaMatchConfidence": float(vendor.nia_match_confidence) if vendor.nia_match_confidence is not None else None,
+        "onboardingStep": vendor.onboarding_step or 0,
+        "rejectionReason": vendor.rejection_reason,
     }
 
 
@@ -337,9 +342,8 @@ def get_admin_seller_detail(db: Session, seller_id: str) -> dict:
     return {
         **summary,
         "governmentIdNumber": vendor.government_id_number or "",
-        "idFrontUrl": vendor.id_front_url or "",
-        "idBackUrl": vendor.id_back_url or "",
-        "selfieUrl": vendor.selfie_url or "",
+        "niaVerifiedAt": vendor.nia_verified_at,
+        "niaMatchConfidence": float(vendor.nia_match_confidence) if vendor.nia_match_confidence is not None else None,
         "onboardingStep": vendor.onboarding_step or 0,
         "rejectionReason": vendor.rejection_reason,
         "shippingAddress": {

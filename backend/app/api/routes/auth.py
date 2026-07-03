@@ -1,6 +1,4 @@
-from typing import Optional
-
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
 from app.schemas.auth import (
@@ -29,7 +27,6 @@ from app.services.auth import (
     register_user,
     update_payout_info,
     update_user_profile,
-    upload_id_documents,
     upsert_oauth_user,
     verify_email_token,
 )
@@ -81,21 +78,15 @@ def profile_update(
     return update_user_profile(db, user_id, payload)
 
 
-@router.post("/profile/{user_id}/id-documents", response_model=UserProfileOut)
-def profile_id_documents(
-    user_id: str,
-    db: DBSession,
-    _: InternalAPIKey,
-    actor_id: ActorUserId,
-    id_front: Optional[UploadFile] = File(default=None),
-    id_back: Optional[UploadFile] = File(default=None),
-    selfie: Optional[UploadFile] = File(default=None),
-):
-    if actor_id != user_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    if not any([id_front, id_back, selfie]):
-        raise HTTPException(status_code=400, detail="At least one file must be provided")
-    return upload_id_documents(db, user_id, id_front, id_back, selfie)
+@router.post("/profile/{user_id}/id-documents")
+def profile_id_documents(user_id: str):
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Document upload has been replaced by NIA Ghana Card verification. "
+            "Use POST /api/v1/identity/lookup and POST /api/v1/identity/face-verify instead."
+        ),
+    )
 
 
 @router.put("/profile/{user_id}/payout-info", response_model=UserProfileOut)

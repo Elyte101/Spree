@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, cart, catalog, chat, cron, marketplace, notifications, orders, payments, push
+from app.api.routes import auth, cart, catalog, chat, cron, identity, marketplace, notifications, orders, payments, push
 
 api_router = APIRouter()
 api_router.include_router(catalog.router, tags=["catalog"])
@@ -16,3 +16,4 @@ api_router.include_router(notifications.router, tags=["notifications"])
 api_router.include_router(payments.router, tags=["payments"])
 api_router.include_router(orders.router, tags=["orders"])
 api_router.include_router(push.router, tags=["push"])
+api_router.include_router(identity.router, tags=["identity"])

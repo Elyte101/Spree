@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     # Override the uploads storage directory (defaults to /tmp/uploads on Vercel)
     uploads_dir: str = ""
 
+    # Stream Chat
+    stream_api_key: str = ""
+    stream_api_secret: str = ""
+    stream_admin_user_id: str = "spree-admin"
+    stream_webhook_secret: str = ""
+
+    # Anthropic / Claude AI (for support chat auto-replies)
+    anthropic_api_key: str = ""
+
     # Resend email API
     resend_api_key: str = ""
     email_from: str = "Spree <no-reply@spree.com>"
@@ -64,6 +73,17 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_public_key: str = ""
     vapid_subject: str = "mailto:admin@spree.com"
+
+    # Smile ID — identity verification (Ghana Card lookup + SmartSelfie liveness)
+    # Base URL: https://api.smileidentity.com/v1  (sandbox uses the same host)
+    smileid_partner_id: str = ""
+    smileid_api_key: str = ""
+    smileid_environment: Literal["sandbox", "production"] = "sandbox"
+    # Thresholds: 0.0–1.0 (Smile ID returns 0–100, we normalise on receipt)
+    smileid_liveness_threshold: float = 0.85
+    smileid_match_threshold: float = 0.85
+    # Max face-verify attempts before the step is locked (seller must contact support)
+    smileid_max_attempts: int = 3
 
     @field_validator("backend_internal_api_key", mode="after")
     @classmethod

@@ -181,9 +181,10 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     oauth_provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    id_front_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    id_back_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    selfie_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # NIA / Smile ID verification results (replaces id_front_url / id_back_url / selfie_url)
+    nia_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    nia_match_confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    verification_attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     onboarding_step: Mapped[int] = mapped_column(Integer, default=0)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notification_prefs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -415,6 +416,25 @@ class AuditLog(Base):
         server_default=func.now(),
         index=True,
     )
+
+
+# ── Identity verification audit log ──────────────────────────────────────────
+
+class VerificationAuditLog(Base):
+    """Append-only record of every identity verification attempt."""
+    __tablename__ = "verification_audit_logs"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    outcome: Mapped[str] = mapped_column(String(16))   # "pass" | "fail" | "error"
+    confidence_score: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    liveness_passed: Mapped[bool] = mapped_column(Boolean, default=False)
+    mock: Mapped[bool] = mapped_column(Boolean, default=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 # ── G23: Admin-editable site settings ────────────────────────────────────────

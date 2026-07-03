@@ -3,7 +3,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,6 @@ from app.schemas.auth import OAuthUpsertRequest, PayoutInfoRequest, ProfileUpdat
 from app.services import paystack as paystack_svc
 from app.services.encryption import decrypt, encrypt
 from app.services.notifications import notify_safe
-from app.services.uploads import delete_upload, save_upload
 
 # RFC 5321/5322 permissive but sane — accepts user+tag@sub.domain.tld
 EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
@@ -205,9 +204,8 @@ def _serialize_profile(user: User) -> dict:
             **payment_info,
         },
         "payoutInfo": _decrypt_payout_info(user.payout_info),
-        "idFrontUrl": decrypt(user.id_front_url) or "",
-        "idBackUrl": decrypt(user.id_back_url) or "",
-        "selfieUrl": decrypt(user.selfie_url) or "",
+        "niaVerifiedAt": user.nia_verified_at,
+        "niaMatchConfidence": float(user.nia_match_confidence) if user.nia_match_confidence is not None else None,
         "onboardingStep": user.onboarding_step or 0,
         "rejectionReason": user.rejection_reason,
     }
@@ -487,41 +485,6 @@ def update_user_profile(db: Session, user_id: str, payload: ProfileUpdateRequest
     db.commit()
     db.refresh(user)
 
-    return _serialize_profile(user)
-
-
-def upload_id_documents(
-    db: Session,
-    user_id: str,
-    id_front: UploadFile | None,
-    id_back: UploadFile | None,
-    selfie: UploadFile | None,
-) -> dict:
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if id_front is not None:
-        if user.id_front_url:
-            delete_upload(user.id_front_url)
-        user.id_front_url = save_upload(id_front, user_id, "id_front")
-
-    if id_back is not None:
-        if user.id_back_url:
-            delete_upload(user.id_back_url)
-        user.id_back_url = save_upload(id_back, user_id, "id_back")
-
-    if selfie is not None:
-        if user.selfie_url:
-            delete_upload(user.selfie_url)
-        user.selfie_url = save_upload(selfie, user_id, "selfie")
-
-    # Reset verification whenever documents are re-uploaded
-    user.government_id_verified = False
-
-    db.add(user)
-    db.commit()
-    db.refresh(user)
     return _serialize_profile(user)
 
 
