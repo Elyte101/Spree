@@ -50,13 +50,13 @@ async def paystack_webhook(
 ):
     body = await request.body()
 
-    if settings.paystack_secret_key:
+    if not settings.payments_mock:
         if not paystack_svc.verify_webhook_signature(body, x_paystack_signature):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
     else:
         logger.warning(
-            "paystack_webhook_unverified: PAYSTACK_SECRET_KEY is not set — "
-            "skipping signature check. Set the key before going to production."
+            "paystack_webhook_unverified: PAYMENTS_MOCK=true — "
+            "skipping webhook signature check (dev mode only)."
         )
 
     try:

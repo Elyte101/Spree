@@ -324,7 +324,7 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
     db.commit()
     db.refresh(order)
 
-    if not settings.paystack_secret_key:
+    if settings.payments_mock:
         # Dev mode: skip Paystack, return a fake URL pointing straight to verify
         return {
             "orderId": order_id,
@@ -436,8 +436,8 @@ def verify_payment(db: Session, reference: str) -> dict:
             detail=f"Order cannot be verified in status '{order.status}'",
         )
 
-    # Dev mock mode: no real Paystack key, accept any reference
-    if not settings.paystack_secret_key:
+    # Dev mock mode: accept any reference without Paystack verification
+    if settings.payments_mock:
         _mark_order_paid(db, order)
         db.refresh(order)
         return _order_to_dict(order)
@@ -495,7 +495,7 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
     db.commit()
     db.refresh(order)
 
-    if not settings.paystack_secret_key:
+    if settings.payments_mock:
         return {
             "orderId": order_id,
             "reference": reference,
@@ -546,7 +546,7 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
     if order.status != "pending":
         raise HTTPException(status_code=409, detail=f"Order is not pending (status: {order.status})")
 
-    if not settings.paystack_secret_key:
+    if settings.payments_mock:
         _mark_order_paid(db, order)
         return {"status": "success", "displayText": "[Dev mode] Payment confirmed"}
 
@@ -562,7 +562,7 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
 
 def check_momo_charge(reference: str) -> dict:
     """Poll Paystack for the current status of a pending MoMo charge."""
-    if not settings.paystack_secret_key:
+    if settings.payments_mock:
         return {"status": "success", "displayText": "[Dev mode] Payment confirmed"}
 
     try:

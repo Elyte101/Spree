@@ -48,6 +48,23 @@ class Settings(BaseSettings):
     paystack_secret_key: str = ""
     paystack_public_key: str = ""
 
+    # Set PAYMENTS_MOCK=true only in local dev or CI to bypass real Paystack calls.
+    # Defaults to false — NEVER set true in production.
+    payments_mock: bool = False
+
+    @field_validator("payments_mock", mode="after")
+    @classmethod
+    def reject_mock_in_production(cls, value: bool) -> bool:
+        if value and os.getenv("VERCEL") == "1":
+            import warnings
+            warnings.warn(
+                "PAYMENTS_MOCK=true is set but VERCEL=1 is detected — "
+                "this disables real Paystack calls in a deployed environment. "
+                "Unset PAYMENTS_MOCK before going live.",
+                stacklevel=2,
+            )
+        return value
+
     # Override the uploads storage directory (defaults to /tmp/uploads on Vercel)
     uploads_dir: str = ""
 

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -15,11 +16,22 @@ from app.db.init_db import initialize_database
 from app.db.session import engine
 
 configure_logging()
+_startup_log = logging.getLogger("app.startup")
+
+
+def _check_payment_config() -> None:
+    if not settings.payments_mock and not settings.paystack_secret_key:
+        _startup_log.critical(
+            "PAYMENT CONFIG ERROR: PAYMENTS_MOCK=false but PAYSTACK_SECRET_KEY is not set. "
+            "All payment endpoints will fail at runtime. "
+            "Set PAYSTACK_SECRET_KEY in your environment, or set PAYMENTS_MOCK=true for local dev."
+        )
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     initialize_database()
+    _check_payment_config()
     yield
 
 
