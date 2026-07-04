@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,55 @@ from app.main import app
 INTERNAL_KEY = os.environ.get("BACKEND_INTERNAL_API_KEY", "spree-internal-dev-key")
 INTERNAL_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY}
 ADMIN_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY, "X-Actor-Role": "admin"}
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for payment regression tests
+# ---------------------------------------------------------------------------
+
+def _create_paid_order_in_db() -> dict:
+    """Directly insert a paid Order row into the DB — bypasses Paystack entirely.
+    Returns {orderId, reference}.  Safe for tests that target post-payment logic
+    (refunds, auto-release) and don't care about the payment initialisation path."""
+    from decimal import Decimal
+    from app.db.session import SessionLocal
+    from app.db.models import Order, OrderItem
+
+    order_id = f"order-test-{uuid4().hex[:12]}"
+    reference = f"spree-test-ref-{uuid4().hex[:8]}"
+
+    with SessionLocal() as db:
+        order = Order(
+            id=order_id,
+            status="paid",
+            full_name="Test Buyer",
+            email=f"buyer-{uuid4().hex[:6]}@test.com",
+            address_line1="1 Test Street",
+            city="Accra",
+            state="Greater Accra",
+            postal_code="00233",
+            country="Ghana",
+            shipping_method="standard",
+            payment_method="card",
+            subtotal=Decimal("200.00"),
+            shipping_cost=Decimal("12.00"),
+            tax=Decimal("3.00"),
+            total=Decimal("215.00"),
+            currency="GHS",
+            paystack_reference=reference,
+        )
+        db.add(order)
+        db.add(OrderItem(
+            id=f"{order_id}-item-1",
+            order_id=order_id,
+            name="Test Product",
+            image="/img/t.jpg",
+            price=Decimal("200.00"),
+            quantity=1,
+        ))
+        db.commit()
+
+    return {"orderId": order_id, "reference": reference}
 
 
 def _create_product_payload() -> dict:
@@ -394,3 +444,88 @@ def test_stream_webhook_skips_admin_messages():
         )
         assert response.status_code == 200
         assert response.json() == {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Payment regression tests
+# ---------------------------------------------------------------------------
+
+def test_refund_idempotency_second_call_returns_409():
+    """Bug #1 regression: refunding an already-refunded order must return 409,
+    not call Paystack again (which would double-refund the buyer)."""
+    import unittest.mock as mock
+    from app.services import paystack as paystack_svc
+
+    order = _create_paid_order_in_db()
+    order_id = order["orderId"]
+
+    # Mock Paystack so the test doesn't hit the real API (test key returns 403).
+    with mock.patch.object(paystack_svc, "refund_transaction", return_value={}):
+        with TestClient(app) as client:
+            # First refund: Paystack mock succeeds → status = "refunded"
+            r1 = client.post(f"/api/v1/orders/{order_id}/refund", headers=ADMIN_HEADERS)
+            assert r1.status_code == 200, r1.text
+            assert r1.json()["status"] == "refunded"
+
+            # Second refund: order is already "refunded" — must be rejected with 409
+            # (not 200, which would mean Paystack was called a second time)
+            r2 = client.post(f"/api/v1/orders/{order_id}/refund", headers=ADMIN_HEADERS)
+            assert r2.status_code == 409, (
+                "Second refund call must return 409, not 200 — "
+                "a 200 here would mean a double-refund could be issued"
+            )
+
+
+def test_auto_release_does_not_double_process_delivered_orders():
+    """Bug #2 regression: calling auto_release twice on the same delivered order
+    must release it exactly once (second call sees non-delivered status and skips)."""
+    from app.db.session import SessionLocal
+    from app.db.models import Order
+
+    order = _create_paid_order_in_db()
+    order_id = order["orderId"]
+
+    # Force the order into 'delivered' with an old timestamp so it qualifies.
+    with SessionLocal() as db:
+        db_order = db.get(Order, order_id)
+        db_order.status = "delivered"
+        db_order.delivered_at = datetime.now(timezone.utc) - timedelta(days=10)
+        db.commit()
+
+    with TestClient(app) as client:
+        # First call: should find and release the order
+        r1 = client.post("/api/v1/cron/auto-release", headers=ADMIN_HEADERS)
+        assert r1.status_code == 200, r1.text
+        assert r1.json()["released"] >= 1
+
+        # Second call: order is now "confirmed" or "paid_out", not "delivered" — skip
+        r2 = client.post("/api/v1/cron/auto-release", headers=ADMIN_HEADERS)
+        assert r2.status_code == 200
+        # released count must not include our order again
+        assert r2.json().get("released", 0) == 0
+
+
+def test_transfer_recipient_type_ghs_uses_ghipss():
+    """Bug #3 regression: create_transfer_recipient must produce 'ghipss' (not
+    'nuban') for GHS currency — 'nuban' is the Nigerian bank type."""
+    import unittest.mock as mock
+    from app.services import paystack as paystack_svc
+
+    captured: dict = {}
+
+    def fake_request(method, path, body=None):
+        captured["body"] = body or {}
+        return {"data": {"recipient_code": "RCP_test123"}}
+
+    with mock.patch.object(paystack_svc, "_request", side_effect=fake_request):
+        paystack_svc.create_transfer_recipient(
+            name="Kofi Seller",
+            account_number="1234567890",
+            bank_code="GH123",
+            currency="GHS",
+        )
+
+    assert captured["body"].get("type") == "ghipss", (
+        f"Expected 'ghipss' for GHS currency, got '{captured['body'].get('type')}' — "
+        "this would create a Nigerian (NUBAN) recipient and fail all GHS bank payouts"
+    )

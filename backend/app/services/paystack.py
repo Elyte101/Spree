@@ -2,7 +2,7 @@
 Paystack API wrapper using stdlib urllib only — no extra deps.
 
 All amounts are in the smallest currency unit:
-  $ → pesewas (1 $ = 100 pesewas)
+  GHS → pesewas (1 GHS = 100 pesewas)
   USD → cents    (1 USD = 100 cents)
 """
 
@@ -94,7 +94,7 @@ def create_transfer_recipient(
         }
     else:
         payload = {
-            "type": "ghipss" if currency == "$" else "nuban",
+            "type": "ghipss" if currency == "GHS" else "nuban",
             "name": name,
             "account_number": account_number,
             "bank_code": bank_code,

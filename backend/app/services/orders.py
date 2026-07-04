@@ -383,7 +383,7 @@ def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
             title="Order confirmed!",
             body=(
                 f"Your order has been received and payment confirmed. "
-                f"Total: {order.currency} {float(order.total):.2f}. "
+                f"Total: {order.currency} {order.total:.2f}. "
                 "We'll notify you once it ships."
             ),
             notif_type="order",
@@ -640,7 +640,7 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
             return
         vendor = db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
         if vendor:
-            amount = amount_minor / 100
+            amount = Decimal(str(amount_minor)) / 100
             currency = (vendor.payout_info or {}).get("currency", "GHS")
             logger.warning(
                 "Webhook: payout transfer failed for vendor %s (recipient=%s, amount=%.2f)",
@@ -744,7 +744,7 @@ def create_order(db: Session, payload: OrderCreateIn) -> dict:
             title="Order confirmed!",
             body=(
                 f"Your order has been received. "
-                f"Total: {order.currency} {float(order.total):.2f}. "
+                f"Total: {order.currency} {order.total:.2f}. "
                 "We'll notify you once it ships."
             ),
             notif_type="order",
@@ -1078,9 +1078,10 @@ def auto_release_delivered_orders(db: Session) -> dict:
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=release_days)
 
-    # Find all orders that have been 'delivered' longer than the release window.
-    stale_orders = db.scalars(
-        select(Order).where(
+    # Collect IDs only — locking happens per-order inside the loop so
+    # concurrent cron invocations don't race to release the same order.
+    stale_ids = db.scalars(
+        select(Order.id).where(
             Order.status == "delivered",
             Order.delivered_at != None,  # noqa: E711
             Order.delivered_at < cutoff,
@@ -1090,8 +1091,18 @@ def auto_release_delivered_orders(db: Session) -> dict:
     released = 0
     errors: list[str] = []
 
-    for order in stale_orders:
+    for order_id in stale_ids:
         try:
+            # Re-fetch with FOR UPDATE SKIP LOCKED so only one concurrent
+            # worker processes each order — the other silently moves on.
+            order = db.scalar(
+                select(Order)
+                .where(Order.id == order_id, Order.status == "delivered")
+                .with_for_update(skip_locked=True)
+            )
+            if order is None:
+                # Another process already locked/processed this order.
+                continue
             now = datetime.now(timezone.utc)
             order.status = "confirmed"
             order.payout_released_at = now
@@ -1203,7 +1214,7 @@ def auto_release_delivered_orders(db: Session) -> dict:
             except Exception:
                 pass
 
-    return {"checked": len(stale_orders), "released": released, "errors": errors}
+    return {"checked": len(stale_ids), "released": released, "errors": errors}
 
 
 def cancel_order(db: Session, order_id: str, actor_id: str, actor_role: str) -> dict:
@@ -1255,14 +1266,24 @@ def refund_order(db: Session, order_id: str) -> dict:
             detail=f"Cannot refund an order with status '{order.status}'",
         )
 
+    # Commit "refunded" status BEFORE calling Paystack so that a retry
+    # (e.g. after a 502 timeout that actually succeeded) cannot issue a
+    # second refund.  If Paystack subsequently fails, the order shows
+    # "refunded" in our DB and the admin must complete it via the
+    # Paystack dashboard — the lesser of two evils vs. a double refund.
+    order.status = "refunded"
+    db.commit()
+
     if order.paystack_reference and settings.paystack_secret_key:
         try:
             paystack_svc.refund_transaction(order.paystack_reference)
         except RuntimeError as exc:
+            logger.error(
+                "Paystack refund failed for order %s after status was committed; "
+                "admin must complete manually via Paystack dashboard: %s",
+                order_id, exc,
+            )
             raise HTTPException(status_code=502, detail=str(exc)) from exc
-
-    order.status = "refunded"
-    db.commit()
 
     if order.user_id:
         notify_safe(
@@ -1272,7 +1293,7 @@ def refund_order(db: Session, order_id: str) -> dict:
             title="Your order has been refunded",
             body=(
                 f"Your order has been cancelled and a refund of "
-                f"{order.currency} {float(order.total):.2f} has been issued. "
+                f"{order.currency} {order.total:.2f} has been issued. "
                 "It should appear in your account within 5–10 business days."
             ),
             notif_type="order",

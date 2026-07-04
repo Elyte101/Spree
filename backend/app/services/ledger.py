@@ -353,7 +353,7 @@ def _entry_to_dict(entry: LedgerEntry) -> dict:
         "sellerId": entry.seller_id,
         "userId": entry.user_id,
         "amountPesewas": entry.amount_pesewas,
-        "amountGhs": entry.amount_pesewas / 100,
+        "amountGhs": Decimal(entry.amount_pesewas) / 100,
         "currency": entry.currency,
         "reference": entry.reference,
         "meta": entry.meta or {},
