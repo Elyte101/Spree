@@ -47,20 +47,27 @@ export function ChatWidget() {
   const [client, setClient] = React.useState<StreamChat | null>(null);
   const [channel, setChannel] = React.useState<StreamChannel | null>(null);
   const [unreadCount, setUnreadCount] = React.useState(0);
+  // Incrementing this triggers a fresh connection attempt (used by retry).
+  const [retryCount, setRetryCount] = React.useState(0);
 
   const isAuthenticated = sessionStatus === "authenticated";
-  const cancelledRef = React.useRef(false);
 
-  // Connect when the drawer opens (and not yet connected/connecting).
+  // Connect when the drawer opens, or when the user explicitly retries.
+  //
+  // IMPORTANT: connectStatus is intentionally NOT in the dependency array.
+  // Including it would cause the effect cleanup to fire when setConnectStatus
+  // is called, which sets cancelled=true and aborts every in-flight connection.
   React.useEffect(() => {
-    if (!open || !isAuthenticated || connectStatus !== "idle") return;
+    if (!open || !isAuthenticated) return;
+    if (connectStatus === "connected") return; // already established — don't reconnect
 
-    cancelledRef.current = false;
+    let cancelled = false;
     setConnectStatus("connecting");
+    setErrorMsg(null);
 
     async function connect() {
       const result = await fetchChatToken(15_000);
-      if (cancelledRef.current) return;
+      if (cancelled) return;
 
       if (!result.ok) {
         setConnectStatus(result.reason === "timeout" ? "timeout" : "error");
@@ -75,11 +82,11 @@ export function ChatWidget() {
         if (!_client.userID) {
           await _client.connectUser({ id: result.userId }, result.token);
         }
-        if (cancelledRef.current) return;
+        if (cancelled) return;
 
         const ch = _client.channel("support", result.channelId);
         await ch.watch();
-        if (cancelledRef.current) return;
+        if (cancelled) return;
 
         setClient(_client);
         setChannel(ch);
@@ -93,7 +100,7 @@ export function ChatWidget() {
         _client.on("notification.message_new", updateUnread);
         _client.on("message.read", updateUnread);
       } catch {
-        if (!cancelledRef.current) {
+        if (!cancelled) {
           setConnectStatus("error");
           setErrorMsg("Unable to connect to support chat. Please try again.");
         }
@@ -103,9 +110,10 @@ export function ChatWidget() {
     void connect();
 
     return () => {
-      cancelledRef.current = true;
+      cancelled = true;
     };
-  }, [open, isAuthenticated, connectStatus]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isAuthenticated, retryCount]); // connectStatus excluded — see comment above
 
   // Clear unread when drawer opens
   React.useEffect(() => {
@@ -123,8 +131,7 @@ export function ChatWidget() {
   }, []);
 
   const handleRetry = React.useCallback(() => {
-    setConnectStatus("idle");
-    setErrorMsg(null);
+    setRetryCount((c) => c + 1);
   }, []);
 
   if (sessionStatus !== "authenticated") return null;
@@ -232,7 +239,7 @@ export function ChatWidget() {
 
         {/* Chat body */}
         <Box sx={{ flex: 1, overflow: "hidden", ...streamCssVars }}>
-          {connectStatus === "connecting" ? (
+          {connectStatus === "idle" || connectStatus === "connecting" ? (
             <Stack
               alignItems="center"
               justifyContent="center"
