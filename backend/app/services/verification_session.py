@@ -1,18 +1,20 @@
-"""In-memory verification session cache.
+"""DB-backed identity verification session store.
 
-Stores per-session state between the NIA lookup step and the face-verify step.
-Sessions are keyed by a random UUID and expire after TTL_SECONDS (default 30 min).
+Replaces the in-memory dict so sessions survive Vercel serverless invocation
+boundaries (C4).  Sessions live in the `identity_sessions` table, expire after
+TTL_SECONDS, and are deleted immediately after face-verify completes.
 
-Security properties:
+Security properties (unchanged from the in-memory version):
   • NIA photo (photo_b64) is held server-side only — never sent to the browser.
   • Sessions are deleted immediately after face-verify completes (pass or fail).
-  • Expired sessions are pruned lazily on access and by a background sweep.
+  • Expired sessions are filtered out on every read.
 
 Usage
 -----
     from app.services.verification_session import verification_sessions
 
     session_id = verification_sessions.create(
+        db,
         user_id="u123",
         id_number="GHA-000000000-1",
         full_name="KWAME MENSAH",
@@ -20,51 +22,43 @@ Usage
         gender="Male",
         photo_b64="<base64 NIA mugshot>",
     )
-    session = verification_sessions.get(session_id)
-    verification_sessions.delete(session_id)
+    session = verification_sessions.get(db, session_id)
+    verification_sessions.delete(db, session_id)
 """
 from __future__ import annotations
 
-import threading
-import time
-import uuid
-from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from uuid import uuid4
+
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+
+from app.db.models import IdentitySession
 
 TTL_SECONDS = 30 * 60  # 30 minutes
-_SWEEP_INTERVAL = 5 * 60  # prune expired sessions every 5 minutes
 
 
-@dataclass
 class VerificationSession:
-    session_id: str
-    user_id: str
-    id_number: str      # encrypted Ghana Card number (Fernet)
-    full_name: str
-    dob: str            # ISO date YYYY-MM-DD
-    gender: str
-    photo_b64: str      # base64 NIA mugshot — server-side only, never exposed
-    created_at: float = field(default_factory=time.monotonic)
-    attempt_count: int = 0
+    """Thin wrapper so identity.py attribute access (session.photo_b64 etc.) is unchanged."""
 
-    @property
-    def is_expired(self) -> bool:
-        return (time.monotonic() - self.created_at) > TTL_SECONDS
+    def __init__(self, row: IdentitySession) -> None:
+        self.session_id = row.session_id
+        self.user_id = row.user_id
+        self.id_number = row.id_number
+        self.full_name = row.full_name
+        self.dob = row.dob
+        self.gender = row.gender
+        self.photo_b64 = row.photo_b64
+        self.attempt_count = row.attempt_count
 
 
 class VerificationSessionStore:
-    """Thread-safe in-memory session store with TTL expiry."""
-
-    def __init__(self) -> None:
-        self._sessions: dict[str, VerificationSession] = {}
-        self._lock = threading.Lock()
-        self._last_sweep = time.monotonic()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+    """DB-backed session store — same public API as the old in-memory store
+    but every method now takes `db: Session` as its first argument."""
 
     def create(
         self,
+        db: Session,
         *,
         user_id: str,
         id_number: str,
@@ -74,8 +68,9 @@ class VerificationSessionStore:
         photo_b64: str,
     ) -> str:
         """Create a new session and return its UUID."""
-        session_id = str(uuid.uuid4())
-        session = VerificationSession(
+        session_id = str(uuid4())
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=TTL_SECONDS)
+        row = IdentitySession(
             session_id=session_id,
             user_id=user_id,
             id_number=id_number,
@@ -83,72 +78,61 @@ class VerificationSessionStore:
             dob=dob,
             gender=gender,
             photo_b64=photo_b64,
+            attempt_count=0,
+            expires_at=expires_at,
         )
-        with self._lock:
-            self._sessions[session_id] = session
-            self._maybe_sweep()
+        db.add(row)
+        db.commit()
         return session_id
 
-    def get(self, session_id: str) -> VerificationSession | None:
+    def get(self, db: Session, session_id: str) -> VerificationSession | None:
         """Return the session if it exists and has not expired."""
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                return None
-            if session.is_expired:
-                del self._sessions[session_id]
-                return None
-            return session
+        now = datetime.now(timezone.utc)
+        row = db.scalar(
+            select(IdentitySession).where(
+                IdentitySession.session_id == session_id,
+                IdentitySession.expires_at > now,
+            )
+        )
+        return VerificationSession(row) if row else None
 
-    def get_by_user(self, user_id: str) -> VerificationSession | None:
+    def get_by_user(self, db: Session, user_id: str) -> VerificationSession | None:
         """Return the most-recent non-expired session for a user, if any."""
-        with self._lock:
-            candidates = [
-                s for s in self._sessions.values()
-                if s.user_id == user_id and not s.is_expired
-            ]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda s: s.created_at)
+        now = datetime.now(timezone.utc)
+        row = db.scalar(
+            select(IdentitySession)
+            .where(
+                IdentitySession.user_id == user_id,
+                IdentitySession.expires_at > now,
+            )
+            .order_by(IdentitySession.created_at.desc())
+        )
+        return VerificationSession(row) if row else None
 
-    def delete(self, session_id: str) -> None:
+    def delete(self, db: Session, session_id: str) -> None:
         """Remove a session (called after face-verify completes)."""
-        with self._lock:
-            self._sessions.pop(session_id, None)
+        db.execute(
+            delete(IdentitySession).where(IdentitySession.session_id == session_id)
+        )
+        db.commit()
 
-    def increment_attempt(self, session_id: str) -> int:
+    def increment_attempt(self, db: Session, session_id: str) -> int:
         """Increment attempt count and return the new value."""
-        with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                return 0
-            session.attempt_count += 1
-            return session.attempt_count
+        row = db.scalar(
+            select(IdentitySession).where(IdentitySession.session_id == session_id)
+        )
+        if row is None:
+            return 0
+        row.attempt_count += 1
+        db.commit()
+        return row.attempt_count
 
-    def invalidate_user_sessions(self, user_id: str) -> None:
-        """Remove all sessions for a user (e.g. on new lookup)."""
-        with self._lock:
-            stale = [sid for sid, s in self._sessions.items() if s.user_id == user_id]
-            for sid in stale:
-                del self._sessions[sid]
-
-    def __len__(self) -> int:
-        with self._lock:
-            return len(self._sessions)
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _maybe_sweep(self) -> None:
-        """Prune expired sessions (called while holding the lock)."""
-        now = time.monotonic()
-        if now - self._last_sweep < _SWEEP_INTERVAL:
-            return
-        expired = [sid for sid, s in self._sessions.items() if s.is_expired]
-        for sid in expired:
-            del self._sessions[sid]
-        self._last_sweep = now
+    def invalidate_user_sessions(self, db: Session, user_id: str) -> None:
+        """Remove all sessions for a user (e.g. on new NIA lookup)."""
+        db.execute(
+            delete(IdentitySession).where(IdentitySession.user_id == user_id)
+        )
+        db.commit()
 
 
 verification_sessions = VerificationSessionStore()

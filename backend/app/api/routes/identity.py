@@ -79,7 +79,7 @@ async def lookup_ghana_card(
     user_id = _require_actor(actor_id)
 
     # Rate limit: 5 NIA lookups per user per hour.
-    _check_rate_limit(f"nia_lookup:{user_id}", max_calls=5, window_seconds=3600)
+    _check_rate_limit(db, f"nia_lookup:{user_id}", max_calls=5, window_seconds=3600)
 
     user = db.get(User, user_id)
     if user is None:
@@ -128,16 +128,16 @@ async def lookup_ghana_card(
             raise HTTPException(status_code=503, detail=result.error_message)
         raise HTTPException(status_code=422, detail=result.error_message)
 
-    # Save encrypted Ghana Card number and its hash to user record.
-    if not user.government_id_number:
-        user.government_id_number = encrypt(body.idNumber)
-        user.government_id_hash = id_hash
-        db.commit()
+    # M5: always overwrite so a re-verification always reflects the card just looked up.
+    user.government_id_number = encrypt(body.idNumber)
+    user.government_id_hash = id_hash
+    db.commit()
 
     # Invalidate any existing sessions for this user before creating a new one.
-    verification_sessions.invalidate_user_sessions(user_id)
+    verification_sessions.invalidate_user_sessions(db, user_id)
 
     session_id = verification_sessions.create(
+        db,
         user_id=user_id,
         id_number=body.idNumber,
         full_name=result.full_name,
@@ -235,7 +235,7 @@ async def face_verify(
             ),
         )
 
-    session = verification_sessions.get(body.sessionId)
+    session = verification_sessions.get(db, body.sessionId)
     if session is None:
         raise HTTPException(
             status_code=404,
@@ -258,7 +258,7 @@ async def face_verify(
         .first()
     )
     if duplicate is not None:
-        verification_sessions.delete(body.sessionId)
+        verification_sessions.delete(db, body.sessionId)
         raise HTTPException(
             status_code=409,
             detail=(
@@ -267,11 +267,9 @@ async def face_verify(
             ),
         )
 
-    # Ensure hash is persisted (covers the edge case of a lookup before this
-    # column existed, or a lookup that didn't commit the hash).
-    if not user.government_id_hash:
-        user.government_id_hash = id_hash
-        db.commit()
+    # M5: always persist the verified card's hash (lookup may have set a different card).
+    user.government_id_hash = id_hash
+    db.commit()
 
     # Extract the selfie from the images list (image_type_id == 0).
     selfie_b64 = next(
@@ -285,7 +283,7 @@ async def face_verify(
         )
 
     # Increment attempt count before calling the provider.
-    attempt_number = verification_sessions.increment_attempt(body.sessionId)
+    attempt_number = verification_sessions.increment_attempt(db, body.sessionId)
     user.verification_attempt_count = (user.verification_attempt_count or 0) + 1
     db.commit()
 
@@ -318,7 +316,7 @@ async def face_verify(
     if outcome == "error":
         db.commit()
         # Delete session on provider error — seller can restart from lookup.
-        verification_sessions.delete(body.sessionId)
+        verification_sessions.delete(db, body.sessionId)
         raise HTTPException(status_code=503, detail=result.error_message)
 
     if result.success:
@@ -326,6 +324,10 @@ async def face_verify(
         user.government_id_verified = True
         user.nia_verified_at = now
         user.nia_match_confidence = result.confidence_score
+        # M5: always write the verified card's encrypted number and hash so the
+        # stored record always reflects whichever card passed face-match.
+        user.government_id_number = encrypt(session.id_number)
+        user.government_id_hash = id_hash
 
         # Auto-approve: transition pending_verification → active.
         if user.seller_status in ("pending_verification", "incomplete"):
@@ -338,7 +340,7 @@ async def face_verify(
             db.commit()
 
         # NIA photo and session are no longer needed — purge immediately.
-        verification_sessions.delete(body.sessionId)
+        verification_sessions.delete(db, body.sessionId)
 
         return FaceVerifyResponse(
             verified=True,
@@ -351,7 +353,7 @@ async def face_verify(
 
     remaining = settings.smileid_max_attempts - user.verification_attempt_count
     if remaining <= 0:
-        verification_sessions.delete(body.sessionId)
+        verification_sessions.delete(db, body.sessionId)
         raise HTTPException(
             status_code=403,
             detail=(

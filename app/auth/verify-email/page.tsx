@@ -16,7 +16,7 @@ import { CheckCircleOutlined, ErrorOutlineRounded } from "@mui/icons-material";
 
 type State = "verifying" | "success" | "error";
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [state, setState] = React.useState<State>("verifying");
@@ -74,6 +74,32 @@ export default function VerifyEmailPage() {
       : "Verification failed";
 
   return (
+    <Stack spacing={2.5} alignItems="center">
+      {icon}
+      <Typography variant="h5" sx={{ fontWeight: 800 }}>
+        {heading}
+      </Typography>
+      {message && (
+        <Typography variant="body2" color="text.secondary">
+          {message}
+        </Typography>
+      )}
+      {state !== "verifying" && (
+        <Button
+          component={Link}
+          href={state === "success" ? "/profile" : "/auth/sign-in"}
+          variant="contained"
+          sx={{ borderRadius: 999, fontWeight: 700, textTransform: "none" }}
+        >
+          {state === "success" ? "Go to your profile" : "Back to sign in"}
+        </Button>
+      )}
+    </Stack>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
     <Box
       sx={(theme) => ({
         minHeight: "100vh",
@@ -99,27 +125,9 @@ export default function VerifyEmailPage() {
           textAlign: "center",
         }}
       >
-        <Stack spacing={2.5} alignItems="center">
-          {icon}
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>
-            {heading}
-          </Typography>
-          {message && (
-            <Typography variant="body2" color="text.secondary">
-              {message}
-            </Typography>
-          )}
-          {state !== "verifying" && (
-            <Button
-              component={Link}
-              href={state === "success" ? "/profile" : "/auth/sign-in"}
-              variant="contained"
-              sx={{ borderRadius: 999, fontWeight: 700, textTransform: "none" }}
-            >
-              {state === "success" ? "Go to your profile" : "Back to sign in"}
-            </Button>
-          )}
-        </Stack>
+        <React.Suspense fallback={<CircularProgress size={48} />}>
+          <VerifyEmailContent />
+        </React.Suspense>
       </Paper>
     </Box>
   );

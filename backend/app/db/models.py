@@ -326,6 +326,7 @@ class Order(Base):
     payout_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paystack_reference: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     paystack_tx_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    paystack_access_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     estimated_delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     estimated_delivery_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -503,4 +504,46 @@ class Comment(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+# ── C4: DB-backed verification sessions & rate-limit events ──────────────────
+
+class IdentitySession(Base):
+    """Server-side identity verification session — survives Vercel cold starts.
+
+    Replaces the in-memory VerificationSessionStore.  NIA photo (photo_b64)
+    is stored here server-side; it is never included in any HTTP response.
+    """
+    __tablename__ = "identity_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    id_number: Mapped[str] = mapped_column(Text)       # encrypted Ghana Card number
+    full_name: Mapped[str] = mapped_column(String(255))
+    dob: Mapped[str] = mapped_column(String(32))
+    gender: Mapped[str] = mapped_column(String(32))
+    photo_b64: Mapped[str] = mapped_column(Text)       # NIA mugshot — never sent to browser
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+    )
+
+
+class RateLimitEvent(Base):
+    """Append-only log of rate-limited actions — replaces the in-memory bucket dict.
+
+    Each row is one "call". Queries count rows within the sliding window.
+    Old rows are pruned lazily after each check.
+    """
+    __tablename__ = "rate_limit_events"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key: Mapped[str] = mapped_column(String(255), index=True)  # e.g. "nia_lookup:user-xyz"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        index=True,
     )

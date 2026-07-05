@@ -37,7 +37,7 @@ type ConnectStatus = "idle" | "connecting" | "connected" | "error" | "timeout";
 let _client: StreamChat | null = null;
 
 export function ChatWidget() {
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, data: session } = useSession();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
@@ -50,7 +50,28 @@ export function ChatWidget() {
   // Incrementing this triggers a fresh connection attempt (used by retry).
   const [retryCount, setRetryCount] = React.useState(0);
 
+  const currentUserId = session?.user?.id ?? null;
   const isAuthenticated = sessionStatus === "authenticated";
+
+  // M1: disconnect and reset the Stream singleton on logout or user switch so
+  // the next session always starts with a clean connection for the new user.
+  const prevUserIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const prevId = prevUserIdRef.current;
+    prevUserIdRef.current = currentUserId;
+
+    if (prevId && prevId !== currentUserId && _client) {
+      void _client.disconnectUser().then(() => {
+        _client = null;
+      });
+      setClient(null);
+      setChannel(null);
+      setConnectStatus("idle");
+      setErrorMsg(null);
+      setUnreadCount(0);
+      setOpen(false);
+    }
+  }, [currentUserId]);
 
   // Connect when the drawer opens, or when the user explicitly retries.
   //

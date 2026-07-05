@@ -40,6 +40,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("users", "verification_attempt_count", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
     # One-card-per-account uniqueness: HMAC-SHA256 of the normalised Ghana Card number
     ("users", "government_id_hash", "VARCHAR(64)", "TEXT"),
+    # H3: store Paystack access_code so idempotent replay can return a real authorization URL
+    ("orders", "paystack_access_code", "VARCHAR(128)", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.

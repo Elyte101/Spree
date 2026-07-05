@@ -37,16 +37,12 @@ export interface PriceRange {
   max: number;
 }
 
-// Spec order state machine:
-// pending → paid → processing → pre_transit → in_transit → delivered → confirmed → paid_out
-// Backend uses "pending" for the initial payment-pending state.
+// Order state machine: pending → paid → in_transit → delivered → confirmed → paid_out
 // cancelled and refunded are terminal error states.
 export type OrderStatus =
   | "pending"
   | "pending_payment"
   | "paid"
-  | "processing"
-  | "pre_transit"
   | "in_transit"
   | "delivered"
   | "confirmed"
@@ -129,8 +125,8 @@ export interface Product {
   slug: string;
   name: string;
   description: string;
-  price: number;
-  sellerPrice?: number | null;
+  price: string | number;
+  sellerPrice?: string | number | null;
   discount: number;
   images: string[];
   image: string;
@@ -155,7 +151,7 @@ export interface Product {
   purchaseCount: number;
   variants: ProductVariant[];
   createdAt: string;
-  originalPrice?: number | null;
+  originalPrice?: string | number | null;
   badge?: string;
   inStock: boolean;
   isBlacklisted?: boolean;

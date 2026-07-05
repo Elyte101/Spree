@@ -164,7 +164,7 @@ export function ProductListingPage({
   const rawBoundsMax = initialCatalog.filters.priceRange.max;
   const [boundsMin, boundsMax] = (() => {
     if (rawBoundsMin < rawBoundsMax) return [rawBoundsMin, rawBoundsMax];
-    const prices = initialCatalog.items.map((p) => p.price).filter((p) => p > 0);
+    const prices = initialCatalog.items.map((p) => parseFloat(String(p.price))).filter((p) => p > 0);
     if (!prices.length) return [0, 0];
     return [Math.floor(Math.min(...prices)), Math.ceil(Math.max(...prices))];
   })();

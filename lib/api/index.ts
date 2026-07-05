@@ -174,14 +174,6 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  /* ---------- CART ---------- */
-
-  getCart: () =>
-    requestJson<CartSummary>("/api/cart", {}, {
-      safe: true,
-      fallback: { items: [], total: 0 } as unknown as CartSummary,
-    }),
-
   /* ---------- NON-CRITICAL (SAFE) ---------- */
 
   getNotifications: () =>

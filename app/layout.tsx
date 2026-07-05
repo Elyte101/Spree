@@ -12,7 +12,6 @@ import { FavoritesProvider } from "@/components/providers/favoritesProvider";
 import { QueryProvider } from "@/components/providers/queryProvider";
 import ThemeRegistry from "@/components/providers/themeRegistry";
 
-import { getCart } from "@/lib/serverApi";
 
 const rubik = Rubik({
   subsets: ["latin"],
@@ -39,12 +38,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const initialCart = await getCart();
 
   return (
     <html
@@ -68,7 +66,7 @@ export default async function RootLayout({
           <ThemeRegistry>
             <QueryProvider>
               <FavoritesProvider>
-                <CartProvider initialCart={initialCart}>
+                <CartProvider>
                   <StoreAppBar />
                   <Analytics />
                   <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>

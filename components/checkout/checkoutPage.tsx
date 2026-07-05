@@ -161,7 +161,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         const products = data?.items ?? [];
         if (!products.length) return;
         const priceMap: Record<string, number> = {};
-        for (const p of products) priceMap[p.id] = p.price;
+        for (const p of products) priceMap[p.id] = parseFloat(String(p.price));
         refreshPrices(priceMap);
       })
       .catch(() => {});

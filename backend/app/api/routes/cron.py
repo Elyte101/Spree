@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.core.config import settings
 from app.db.models import User
 from app.services import notifications as notif_svc
-from app.services.orders import auto_release_delivered_orders
+from app.services.orders import auto_release_delivered_orders, retry_stuck_payouts
 
 router = APIRouter(prefix="/cron", dependencies=[Depends(require_internal_api_key)])
 
@@ -49,6 +49,16 @@ def onboarding_reminder(db: Session = Depends(get_db)) -> dict:
         reminded += 1
 
     return {"reminded": reminded}
+
+
+@router.post("/retry-payouts")
+def retry_payouts(db: Session = Depends(get_db)) -> dict:
+    """C3: Retry Paystack transfers for orders stuck in 'confirmed' with failed/missing payouts.
+
+    Idempotent — Paystack deduplicates by the same idempotency key, so no double-pays.
+    Run daily alongside auto-release, or manually from the admin dashboard.
+    """
+    return retry_stuck_payouts(db)
 
 
 @router.post("/auto-release")

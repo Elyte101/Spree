@@ -42,8 +42,10 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const liked = isFavorite(product.id);
   const recentlyAdded = lastAddedAt > 0;
   const isCompact = size === "compact";
-  const discount = product.originalPrice
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+  const priceNum = parseFloat(String(product.price));
+  const origPriceNum = product.originalPrice ? parseFloat(String(product.originalPrice)) : 0;
+  const discount = origPriceNum
+    ? Math.round(((origPriceNum - priceNum) / origPriceNum) * 100)
     : 0;
 
   const allImages = product.images?.length ? product.images : [product.image];

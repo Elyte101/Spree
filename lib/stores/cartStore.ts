@@ -148,7 +148,7 @@ export const useCartStore = create<CartStoreState>()(
                   productId: product.id,
                   name: product.name,
                   image: product.image,
-                  price: product.price,
+                  price: parseFloat(String(product.price)),
                   quantity,
                   color,
                   size,

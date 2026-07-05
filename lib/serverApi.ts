@@ -4,7 +4,6 @@ import {
   AdminOverview,
   AdminSellerDetail,
   Brand,
-  CartSummary,
   CatalogResponse,
   Category,
   Collection,
@@ -21,11 +20,8 @@ import { buildQueryString } from "@/lib/api/queryString";
 import { ProductQueryParams } from "@/lib/api/types";
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 
-const DEFAULT_STANDARD_SHIPPING = 12;
-
 export const BACKEND_UNAVAILABLE_MESSAGE =
   "Some store details are unavailable right now, but you can still keep browsing.";
-export const BACKEND_UNAVAILABLE_CART_ID = "cart-backend-unavailable";
 
 const reportedUnavailablePaths = new Set<string>();
 
@@ -66,18 +62,6 @@ const createFallbackCatalog = (params?: ProductQueryParams): CatalogResponse => 
       max: 0,
     },
   },
-});
-
-const createFallbackCart = (): CartSummary => ({
-  id: BACKEND_UNAVAILABLE_CART_ID,
-  items: [],
-  itemCount: 0,
-  subtotal: 0,
-  shipping: 0,
-  standardShipping: DEFAULT_STANDARD_SHIPPING,
-  tax: 0,
-  total: 0,
-  currency: "GH₵",
 });
 
 const createFallbackSearchResponse = (query: string): SearchResponse => ({
@@ -226,9 +210,6 @@ export const isBackendUnavailableError = (
   error: unknown
 ): error is BackendUnavailableError => error instanceof BackendUnavailableError;
 
-export const isBackendUnavailableCart = (cart: CartSummary) =>
-  cart.id === BACKEND_UNAVAILABLE_CART_ID;
-
 async function fetchBackend(
   path: string,
   init?: RequestInit,
@@ -372,9 +353,6 @@ export const getBrands = () =>
 
 export const getCollections = () =>
   getJson<Collection[]>("/collections", undefined, { fallback: () => [] });
-
-export const getCart = () =>
-  getJson<CartSummary>("/cart", undefined, { fallback: createFallbackCart });
 
 export const getNotifications = (userId?: string) =>
   getJson<NotificationItem[]>(

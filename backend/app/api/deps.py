@@ -1,10 +1,11 @@
 import logging
 import secrets
-import time
-from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, Request, status
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,35 +16,54 @@ DBSession = Annotated[Session, Depends(get_db)]
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# G31: Simple in-memory rate limiter (per user, resets on process restart)
+# C4: DB-backed rate limiter — survives Vercel serverless invocation boundaries
 # ---------------------------------------------------------------------------
 
-# Stores {user_id: [timestamp1, timestamp2, ...]} of recent action timestamps.
-_rate_limit_buckets: dict[str, list[float]] = defaultdict(list)
 
+def _check_rate_limit(db: Session, key: str, max_calls: int, window_seconds: int) -> None:
+    """Raise 429 if the key exceeds max_calls within window_seconds.
 
-def _check_rate_limit(user_id: str, max_calls: int, window_seconds: int) -> None:
-    """Raise 429 if the user exceeds max_calls within window_seconds."""
-    now = time.monotonic()
-    cutoff = now - window_seconds
-    bucket = _rate_limit_buckets[user_id]
-    # Prune old entries
-    _rate_limit_buckets[user_id] = [t for t in bucket if t > cutoff]
-    if len(_rate_limit_buckets[user_id]) >= max_calls:
+    Uses the rate_limit_events DB table so limits are shared across all
+    Vercel serverless invocations (not per-process).
+    """
+    from app.db.models import RateLimitEvent  # noqa: PLC0415 — avoid circular import at module load
+
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(seconds=window_seconds)
+
+    count = db.scalar(
+        select(func.count(RateLimitEvent.id)).where(
+            RateLimitEvent.key == key,
+            RateLimitEvent.created_at > cutoff,
+        )
+    ) or 0
+
+    if count >= max_calls:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many requests — please wait before trying again",
+            detail="Too many requests — please wait before trying again",
             headers={"Retry-After": str(window_seconds)},
         )
-    _rate_limit_buckets[user_id].append(now)
+
+    # Record this call
+    db.add(RateLimitEvent(id=f"rl-{uuid4().hex[:18]}", key=key))
+    db.commit()
+
+    # Prune old entries (lazy cleanup — best-effort, non-blocking)
+    try:
+        db.execute(delete(RateLimitEvent).where(RateLimitEvent.created_at < cutoff))
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
 
 
 def _comment_rate_limit(
+    db: DBSession,
     x_actor_user_id: Annotated[str | None, Header(alias="X-Actor-User-Id")] = None,
 ) -> None:
     """G31: Rate-limit comment creation — max 5 comments per user per 60 seconds."""
     if x_actor_user_id:
-        _check_rate_limit(f"comment:{x_actor_user_id}", max_calls=5, window_seconds=60)
+        _check_rate_limit(db, f"comment:{x_actor_user_id}", max_calls=5, window_seconds=60)
 
 
 CommentRateLimit = Annotated[None, Depends(_comment_rate_limit)]

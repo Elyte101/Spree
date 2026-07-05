@@ -72,7 +72,7 @@ type StepState = typeof STEP_STATES[number];
 function statusToStep(status: string): StepState {
   if (["confirmed", "paid_out"].includes(status)) return "confirmed";
   if (status === "delivered") return "delivered";
-  if (["in_transit", "shipped", "pre_transit", "processing"].includes(status)) return "in_transit";
+  if (["in_transit", "shipped"].includes(status)) return "in_transit";
   if (status === "paid") return "paid";
   return "ordered";
 }

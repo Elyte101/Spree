@@ -53,16 +53,6 @@ const statusMeta: Record<
     color: "warning",
     icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
   },
-  processing: {
-    label: "Processing",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
-  },
-  pre_transit: {
-    label: "Pre-transit",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
-  },
   in_transit: {
     label: "In transit",
     color: "info",

@@ -61,16 +61,6 @@ const statusMeta: Record<
     color: "warning",
     icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
   },
-  processing: {
-    label: "Processing",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
-  },
-  pre_transit: {
-    label: "Pre-transit",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
-  },
   in_transit: {
     label: "In transit",
     color: "info",
@@ -114,8 +104,6 @@ const stepOrder: Record<OrderStatus, number> = {
   pending: -1,
   pending_payment: -1,
   paid: 0,
-  processing: 0,
-  pre_transit: 0,
   in_transit: 1,
   delivered: 2,
   confirmed: 3,
@@ -234,8 +222,8 @@ export function OrderDetailPage({
   const isSeller = order.items.some((item) => item.sellerId === sessionUserId);
   // G8/G9: buyer confirms from 'delivered' state (not 'shipped').
   const canConfirm = isBuyer && order.status === "delivered";
-  const canCancel = isBuyer && ["paid", "processing", "pre_transit"].includes(order.status);
-  const canRefund = isAdmin && ["paid", "processing", "pre_transit", "in_transit", "delivered"].includes(order.status);
+  const canCancel = isBuyer && order.status === "paid";
+  const canRefund = isAdmin && ["paid", "in_transit", "delivered"].includes(order.status);
   const canAddTracking = isSeller && order.status === "paid";
   const canMarkDelivered = isSeller && order.status === "in_transit";
 

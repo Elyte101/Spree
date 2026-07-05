@@ -162,7 +162,7 @@ function IdEntryScreen({
     <Stack spacing={2.5}>
       <Alert severity="info" icon={<BadgeRounded />} sx={{ borderRadius: 2 }}>
         Enter your Ghana Card number exactly as shown on your card.
-        We'll verify it with the National Identification Authority.
+        We&apos;ll verify it with the National Identification Authority.
       </Alert>
 
       <Box>
@@ -263,7 +263,7 @@ function NiaConfirmScreen({
 
       <Typography variant="body2" color="text.secondary">
         If these details are correct and match the person on the card, tap{" "}
-        <strong>Yes, that's me</strong> to continue to the face match step.
+        <strong>Yes, that&apos;s me</strong> to continue to the face match step.
       </Typography>
 
       <Stack direction="row" spacing={1.5}>
@@ -281,7 +281,7 @@ function NiaConfirmScreen({
           onClick={onConfirm}
           sx={{ flex: 2 }}
         >
-          Yes, that's me
+          Yes, that&apos;s me
         </Button>
       </Stack>
     </Stack>
@@ -347,7 +347,7 @@ function FaceCaptureScreen({
       <Alert severity="info" sx={{ borderRadius: 2 }}>
         <Typography variant="body2" fontWeight={600}>Live selfie required</Typography>
         <Typography variant="body2">
-          Look directly at the camera in good lighting. We'll match your face to
+          Look directly at the camera in good lighting. We&apos;ll match your face to
           your Ghana Card record to complete verification.
         </Typography>
       </Alert>
@@ -387,7 +387,7 @@ function LockedScreen() {
       <LockRounded sx={{ fontSize: 52, color: "error.main" }} />
       <Typography variant="h6" fontWeight={700}>Verification locked</Typography>
       <Typography variant="body2" color="text.secondary">
-        You've reached the maximum number of verification attempts.
+        You&apos;ve reached the maximum number of verification attempts.
         Please contact Spree support to continue your application.
       </Typography>
       <Button variant="outlined" href="mailto:support@spree.com">

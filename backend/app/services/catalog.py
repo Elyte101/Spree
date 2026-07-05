@@ -50,11 +50,11 @@ def _normalize_tags(tags: list[str]) -> list[str]:
     return normalized
 
 
-def _quantize_money(value: Decimal) -> float:
-    return float(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+def _money_str(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def _build_original_price(price: Decimal, discount: Decimal) -> float | None:
+def _build_original_price(price: Decimal, discount: Decimal) -> str | None:
     if discount <= 0 or discount >= 100:
         return None
 
@@ -62,7 +62,7 @@ def _build_original_price(price: Decimal, discount: Decimal) -> float | None:
     if divisor <= 0:
         return None
 
-    return _quantize_money(price / divisor)
+    return _money_str(price / divisor)
 
 
 def _extract_unique_values(variants: list[dict], key: str) -> list[str]:
@@ -125,8 +125,8 @@ def _product_to_dict(product: Product) -> dict:
         "slug": product.slug,
         "name": product.name,
         "description": product.description,
-        "price": float(listed_price),
-        "sellerPrice": float(seller_price),
+        "price": _money_str(listed_price),
+        "sellerPrice": _money_str(seller_price),
         "discount": float(discount),
         "images": images,
         "image": images[0],
@@ -841,7 +841,7 @@ def get_admin_overview(db: Session) -> dict:
                 "id": product.id,
                 "slug": product.slug,
                 "name": product.name,
-                "price": float(product.price),
+                "price": _money_str(Decimal(str(product.price))),
                 "stock": product.stock,
                 "createdAt": product.created_at,
             }

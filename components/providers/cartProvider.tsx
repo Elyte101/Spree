@@ -3,20 +3,10 @@
 import * as React from "react";
 
 import { useCartStore } from "@/lib/stores/cartStore";
-import { CartSummary } from "@/types/types";
 
-export function CartProvider({
-  children,
-  initialCart,
-}: {
-  children: React.ReactNode;
-  initialCart: CartSummary;
-}) {
-  const initialize = useCartStore((state) => state.initialize);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  React.useEffect(() => { initialize(initialCart); }, []);
-
+// H4: server-side cart endpoint removed (it returned the first DB cart with no user scope).
+// The cart now lives entirely in localStorage via Zustand persist — no server fetch needed.
+export function CartProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 

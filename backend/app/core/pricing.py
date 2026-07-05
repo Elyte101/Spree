@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple
 
@@ -25,6 +26,26 @@ _DEFAULT_PROCESSING_FEE_RATE = Decimal("0.015")
 
 # G11: runtime-configurable processing fee rate (updated by load_settings_from_db).
 PROCESSING_FEE_RATE = _DEFAULT_PROCESSING_FEE_RATE
+
+# H5: per-request DB refresh with short TTL so serverless invocations always
+# use current admin-set rates (process globals are meaningless across invocations).
+_settings_cache_time: float = 0.0
+_SETTINGS_TTL: float = 60.0  # seconds between DB re-reads on warm processes
+
+
+def refresh_if_stale(db) -> None:
+    """Re-read pricing settings from DB if the in-process cache has expired.
+
+    In serverless environments the cache is always cold, so every invocation
+    reads from DB once.  In long-running processes it refreshes at most every
+    _SETTINGS_TTL seconds, avoiding a DB query on every request.
+    """
+    global _settings_cache_time  # noqa: PLW0603
+    now = time.monotonic()
+    if now - _settings_cache_time < _SETTINGS_TTL:
+        return
+    load_settings_from_db(db)
+    _settings_cache_time = now
 
 
 def calc_processing_fee(subtotal: Decimal) -> Decimal:

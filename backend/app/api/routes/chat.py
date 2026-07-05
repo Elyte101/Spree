@@ -27,10 +27,11 @@ import logging
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
 
-from app.api.deps import ActorRole, ActorUserId, InternalAPIKey
+from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
 from app.core.config import settings
+from app.db.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,7 @@ def _admin_user_id() -> str:
 
 @router.get("/chat/token")
 def chat_token(
+    db: DBSession,
     _: InternalAPIKey,
     actor_id: ActorUserId,
     actor_role: ActorRole,
@@ -80,9 +82,13 @@ def chat_token(
     admin_id = _admin_user_id()
     channel_id = f"support-{actor_id}"
 
+    # M2: look up the user's real name so Stream shows "Kwame Mensah" not "user-abc123".
+    user = db.get(User, actor_id)
+    display_name = (user.name or actor_id) if user else actor_id
+
     try:
         # Upsert the Stream user so their display name is current.
-        client.upsert_user({"id": actor_id, "role": "user", "name": actor_id})
+        client.upsert_user({"id": actor_id, "role": "user", "name": display_name})
 
         # Ensure the admin Stream user exists.
         client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
@@ -141,15 +147,120 @@ def chat_admin_token(_: InternalAPIKey, actor_role: ActorRole):
 # POST /webhooks/stream  (mounted on webhook_router — no internal key required)
 # ---------------------------------------------------------------------------
 
+# M3: Track recently processed message IDs in-process to deduplicate retried webhooks.
+# Best-effort only — cleared on cold starts — but prevents double-posts on warm retries.
+_processed_message_ids: set[str] = set()
+
+
+def _post_ai_reply(
+    message_id: str,
+    message_text: str,
+    sender_id: str,
+    channel_id: str,
+    channel_type: str,
+) -> None:
+    """Send a Claude AI reply to the channel. Runs as a background task."""
+    import json as _json  # noqa: F401 (unused here but kept for symmetry)
+
+    admin_id = _admin_user_id()
+    anthropic_key = getattr(settings, "anthropic_api_key", "") or ""
+    if not anthropic_key:
+        logger.info("_post_ai_reply: ANTHROPIC_API_KEY not set, skipping AI reply")
+        return
+
+    try:
+        client = _stream_client()
+        channel = client.channel(channel_type, channel_id)
+
+        # Check for recent admin reply (within 60 s).
+        state = channel.query({"messages": {"limit": 10}})
+        messages: list = state.get("messages", [])
+
+        now_ts = time.time()
+        for msg in reversed(messages[:-1]):
+            msg_sender_id = (msg.get("user") or {}).get("id", "")
+            if msg_sender_id == admin_id:
+                created_at_str = msg.get("created_at", "")
+                if created_at_str:
+                    try:
+                        dt = datetime.datetime.fromisoformat(created_at_str.rstrip("Z"))
+                        age_seconds = now_ts - dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+                        if age_seconds < 60:
+                            logger.info("_post_ai_reply: admin replied recently, skipping AI")
+                            return
+                    except Exception:
+                        pass
+                break
+
+        # Build conversation history (last 8 messages).
+        history_msgs: list[dict] = []
+        for msg in messages[-8:]:
+            msg_sender_id = (msg.get("user") or {}).get("id", "")
+            role = "assistant" if msg_sender_id in (admin_id, "spree-support") else "user"
+            text = msg.get("text", "")
+            if text:
+                history_msgs.append({"role": role, "content": text})
+
+        if not history_msgs or history_msgs[-1].get("content") != message_text:
+            history_msgs.append({"role": "user", "content": message_text})
+
+        if history_msgs and history_msgs[0]["role"] == "assistant":
+            history_msgs = history_msgs[1:]
+        if not history_msgs:
+            history_msgs = [{"role": "user", "content": message_text}]
+
+        user_id_from_channel = (
+            channel_id.replace("support-", "", 1) if channel_id.startswith("support-") else sender_id
+        )
+        system_prompt = (
+            "You are Spree Support, the helpful assistant for Spree — a Ghanaian online marketplace. "
+            "You help buyers and sellers with orders, payments, delivery, and account issues. "
+            "Be friendly, concise, and professional. Write in plain English (not Markdown). "
+            "If you don't know something specific (like a particular order status), ask the user "
+            "for their Order ID and tell them a human agent will follow up. "
+            f"Current user ID: {user_id_from_channel}."
+        )
+
+        import anthropic
+        ai_client = anthropic.Anthropic(api_key=anthropic_key)
+        response = ai_client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            system=system_prompt,
+            messages=history_msgs,
+        )
+        reply_text = response.content[0].text if response.content else ""
+
+        if reply_text:
+            client.upsert_user({"id": "spree-support", "name": "Spree Support", "role": "user"})
+            bot_channel = client.channel(channel_type, channel_id)
+            bot_channel.send_message({"text": reply_text}, "spree-support")
+            logger.info("_post_ai_reply: AI reply posted to channel=%s", channel_id)
+
+    except Exception as exc:
+        logger.error("_post_ai_reply: failed for channel=%s: %s", channel_id, exc)
+
+
 @webhook_router.post("/webhooks/stream")
-async def stream_webhook(request: Request):
+async def stream_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Stream Chat webhook.  Called for every new message.
     Verified with HMAC-SHA256 (Stream signs with STREAM_WEBHOOK_SECRET).
-    If the message is from a user (not the admin) and no admin replied
-    recently, Claude posts an AI response as the 'spree-support' bot.
+    Returns 200 immediately; Claude AI reply is posted in a background task.
     """
     webhook_secret = getattr(settings, "stream_webhook_secret", "") or ""
+
+    # C6: in deployed environments, reject all requests when the secret is not
+    # configured — fail closed rather than accept unsigned events.
+    if not webhook_secret and settings.is_deployed:
+        logger.error(
+            "stream_webhook: STREAM_WEBHOOK_SECRET is not set in production — "
+            "rejecting request to prevent unsigned event processing"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Chat webhook not configured",
+        )
 
     body = await request.body()
 
@@ -172,6 +283,7 @@ async def stream_webhook(request: Request):
         return {"ok": True}
 
     message = payload.get("message", {})
+    message_id: str = message.get("id", "")
     sender_id: str = (message.get("user") or {}).get("id", "")
     message_text: str = message.get("text", "")
 
@@ -180,121 +292,56 @@ async def stream_webhook(request: Request):
     channel_type: str = payload.get("channel_type", "support")
 
     logger.info(
-        "stream_webhook: message_new channel=%s sender=%s",
+        "stream_webhook: message_new channel=%s sender=%s message_id=%s",
         channel_id,
         sender_id,
+        message_id,
     )
 
-    # Skip if the admin sent this message.
-    if sender_id == admin_id:
+    # Skip if the admin or AI bot sent this message.
+    if sender_id in (admin_id, "spree-support"):
         return {"ok": True}
 
-    # Skip if the AI bot itself sent it (avoid loops).
-    if sender_id == "spree-support":
+    # M3: deduplicate retried webhooks by message_id (best-effort, in-process).
+    if message_id and message_id in _processed_message_ids:
+        logger.info("stream_webhook: duplicate message_id=%s, skipping", message_id)
         return {"ok": True}
+    if message_id:
+        _processed_message_ids.add(message_id)
+        # Bound the set size to avoid unbounded growth on long-lived processes.
+        if len(_processed_message_ids) > 1000:
+            _processed_message_ids.clear()
 
-    # --- Check for recent admin reply ------------------------------------
-    client = _stream_client()
-    messages: list = []
-    is_first_message = False
-
+    # --- Dev notification on first message (quick channel query) ----------
     try:
-        channel = client.channel(channel_type, channel_id)
-        state = channel.query({"messages": {"limit": 10}})
-        messages = state.get("messages", [])
-
-        now_ts = time.time()
-        for msg in reversed(messages[:-1]):  # exclude the just-sent message
-            msg_sender_id = (msg.get("user") or {}).get("id", "")
-            if msg_sender_id == admin_id:
-                created_at_str = msg.get("created_at", "")
-                if created_at_str:
-                    try:
-                        dt = datetime.datetime.fromisoformat(created_at_str.rstrip("Z"))
-                        age_seconds = now_ts - dt.replace(tzinfo=datetime.timezone.utc).timestamp()
-                        if age_seconds < 60:
-                            logger.info("stream_webhook: admin replied recently, skipping AI")
-                            return {"ok": True}
-                    except Exception:
-                        pass
-                break
-
-        # First message check for dev notification
-        is_first_message = len(messages) <= 1
+        client = _stream_client()
+        ch = client.channel(channel_type, channel_id)
+        state = ch.query({"messages": {"limit": 2}})
+        if len(state.get("messages", [])) <= 1:
+            try:
+                from app.services import dev_notifier
+                dev_notifier.alert(
+                    "new_support_chat",
+                    f"New support channel opened by user {sender_id}",
+                    {
+                        "user_id": sender_id,
+                        "channel_id": channel_id,
+                        "first_message": message_text[:200],
+                    },
+                )
+            except Exception as exc:
+                logger.warning("stream_webhook: dev_notifier failed: %s", exc)
     except Exception as exc:
-        logger.warning("stream_webhook: failed to query channel history: %s", exc)
+        logger.warning("stream_webhook: first-message check failed: %s", exc)
 
-    # --- Dev notification on first user message --------------------------
-    if is_first_message:
-        try:
-            from app.services import dev_notifier
-            dev_notifier.alert(
-                "new_support_chat",
-                f"New support channel opened by user {sender_id}",
-                {
-                    "user_id": sender_id,
-                    "channel_id": channel_id,
-                    "first_message": message_text[:200],
-                },
-            )
-        except Exception as exc:
-            logger.warning("stream_webhook: dev_notifier failed: %s", exc)
-
-    # --- Claude AI reply -------------------------------------------------
-    anthropic_key = getattr(settings, "anthropic_api_key", "") or ""
-    if not anthropic_key:
-        logger.info("stream_webhook: ANTHROPIC_API_KEY not set, skipping AI reply")
-        return {"ok": True}
-
-    try:
-        # Build conversation history for context (last 8 messages).
-        history_msgs: list[dict] = []
-        for msg in messages[-8:]:
-            msg_sender_id = (msg.get("user") or {}).get("id", "")
-            role = "assistant" if msg_sender_id in (admin_id, "spree-support") else "user"
-            text = msg.get("text", "")
-            if text:
-                history_msgs.append({"role": role, "content": text})
-
-        # If the current message isn't already at the end of history, add it.
-        if not history_msgs or history_msgs[-1].get("content") != message_text:
-            history_msgs.append({"role": "user", "content": message_text})
-
-        # Ensure history starts with a user message (Claude requirement).
-        if history_msgs and history_msgs[0]["role"] == "assistant":
-            history_msgs = history_msgs[1:]
-        if not history_msgs:
-            history_msgs = [{"role": "user", "content": message_text}]
-
-        user_id_from_channel = channel_id.replace("support-", "", 1) if channel_id.startswith("support-") else sender_id
-
-        system_prompt = (
-            "You are Spree Support, the helpful assistant for Spree — a Ghanaian online marketplace. "
-            "You help buyers and sellers with orders, payments, delivery, and account issues. "
-            "Be friendly, concise, and professional. Write in plain English (not Markdown). "
-            "If you don't know something specific (like a particular order status), ask the user "
-            "for their Order ID and tell them a human agent will follow up. "
-            f"Current user ID: {user_id_from_channel}."
-        )
-
-        import anthropic
-        ai_client = anthropic.Anthropic(api_key=anthropic_key)
-        response = ai_client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=512,
-            system=system_prompt,
-            messages=history_msgs,
-        )
-        reply_text = response.content[0].text if response.content else ""
-
-        if reply_text:
-            # Post reply as the spree-support bot user.
-            client.upsert_user({"id": "spree-support", "name": "Spree Support", "role": "user"})
-            bot_channel = client.channel(channel_type, channel_id)
-            bot_channel.send_message({"text": reply_text}, "spree-support")
-            logger.info("stream_webhook: AI reply posted to channel=%s", channel_id)
-
-    except Exception as exc:
-        logger.error("stream_webhook: Claude API call failed: %s", exc)
+    # M3: schedule AI reply as background task — return 200 immediately.
+    background_tasks.add_task(
+        _post_ai_reply,
+        message_id,
+        message_text,
+        sender_id,
+        channel_id,
+        channel_type,
+    )
 
     return {"ok": True}

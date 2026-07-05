@@ -529,3 +529,83 @@ def test_transfer_recipient_type_ghs_uses_ghipss():
         f"Expected 'ghipss' for GHS currency, got '{captured['body'].get('type')}' — "
         "this would create a Nigerian (NUBAN) recipient and fail all GHS bank payouts"
     )
+
+
+def test_admin_create_order_recomputes_totals_and_writes_ledger():
+    """H8 regression: admin create_order must ignore client prices, check stock,
+    decrement stock, and write ledger entries — not trust the client payload."""
+    from app.db.session import SessionLocal
+    from app.db.models import LedgerEntry, Product
+
+    with TestClient(app) as client:
+        # Create a product as admin — seller_id will be the admin user.
+        product_payload = _create_product_payload()
+        product_payload["stock"] = 10
+        product_payload["price"] = 200  # seller lists at 200 GHS
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=product_payload,
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+        )
+        assert prod_resp.status_code == 201, prod_resp.text
+        product_id = prod_resp.json()["id"]
+
+        # Client sends a manipulated price (1 GHS instead of the real ~216 GHS buyer price).
+        order_payload = {
+            "userId": None,
+            "fullName": "H8 Buyer",
+            "email": "h8buyer@test.com",
+            "phone": "0240000000",
+            "addressLine1": "1 Audit Street",
+            "city": "Accra",
+            "state": "Greater Accra",
+            "postalCode": "00233",
+            "country": "Ghana",
+            "shippingMethod": "standard",
+            "paymentMethod": "card",
+            "subtotal": 1.00,      # manipulated — real is ~200+commission
+            "shippingCost": 0.00,
+            "tax": 0.00,
+            "total": 1.00,         # manipulated
+            "currency": "GHS",
+            "items": [
+                {
+                    "productId": product_id,
+                    "name": product_payload["name"],
+                    "image": "/img/test.jpg",
+                    "price": 1.00,  # manipulated unit price
+                    "quantity": 2,
+                    "color": "Sand",
+                    "size": "M",
+                }
+            ],
+        }
+
+        resp = client.post(
+            "/api/v1/orders",
+            json=order_payload,
+            headers=ADMIN_HEADERS,
+        )
+        assert resp.status_code == 201, resp.text
+        order = resp.json()
+
+        # Server must have ignored the client prices and recomputed from DB.
+        assert order["subtotal"] > 100, "subtotal must be server-computed, not client 1.00"
+        assert order["total"] > 100, "total must be server-computed, not client 1.00"
+        assert order["status"] == "paid"
+
+        with SessionLocal() as db:
+            product = db.get(Product, product_id)
+            # Stock must have been decremented.
+            assert product.stock == 8, f"Expected stock=8 after qty=2, got {product.stock}"
+
+            # Ledger must have at least a PAYMENT_RECEIVED entry.
+            entries = (
+                db.query(LedgerEntry)
+                .filter(LedgerEntry.order_id == order["id"])
+                .all()
+            )
+            entry_types = {e.entry_type for e in entries}
+            assert "PAYMENT_RECEIVED" in entry_types, (
+                f"Expected PAYMENT_RECEIVED ledger entry, got: {entry_types}"
+            )

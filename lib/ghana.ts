@@ -353,7 +353,7 @@ export const MOMO_NETWORKS = [
  * Uses en-GH locale so the cedi symbol and separators are correct.
  */
 export function formatPrice(
-  amount: number,
+  amount: number | string,
   currency: string = DEFAULT_CURRENCY
 ): string {
   // Intl.NumberFormat requires ISO 4217 codes; "GH₵" is a display symbol — map it to the code
@@ -363,5 +363,5 @@ export function formatPrice(
     currency: isoCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(typeof amount === "string" ? parseFloat(amount) : amount);
 }
