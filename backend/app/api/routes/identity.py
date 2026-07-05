@@ -44,7 +44,7 @@ from app.schemas.auth import (
     IdentityLookupRequest,
     IdentityLookupResponse,
 )
-from app.services.encryption import encrypt
+from app.services.encryption import encrypt, hash_id_number
 from app.services.face_match_adapter import face_match_adapter
 from app.services.nia_adapter import nia_adapter
 from app.services.verification_session import verification_sessions
@@ -94,6 +94,29 @@ async def lookup_ghana_card(
             ),
         )
 
+    # Check uniqueness before calling NIA — fast-fail if the card is already
+    # verified on another active account.
+    id_hash = hash_id_number(body.idNumber)
+    duplicate = (
+        db.query(User)
+        .filter(
+            User.government_id_hash == id_hash,
+            User.government_id_verified.is_(True),
+            User.deleted_at.is_(None),
+            User.id != user_id,
+        )
+        .first()
+    )
+    if duplicate is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This Ghana Card is already registered to a verified Spree account. "
+                "Each card may only be used once. If you believe this is an error, "
+                "please contact support."
+            ),
+        )
+
     result = await nia_adapter.verify(body.idNumber)
 
     if not result.success:
@@ -105,9 +128,10 @@ async def lookup_ghana_card(
             raise HTTPException(status_code=503, detail=result.error_message)
         raise HTTPException(status_code=422, detail=result.error_message)
 
-    # Save encrypted Ghana Card number to user record (if not already set).
+    # Save encrypted Ghana Card number and its hash to user record.
     if not user.government_id_number:
         user.government_id_number = encrypt(body.idNumber)
+        user.government_id_hash = id_hash
         db.commit()
 
     # Invalidate any existing sessions for this user before creating a new one.
@@ -220,6 +244,34 @@ async def face_verify(
 
     if session.user_id != user_id:
         raise HTTPException(status_code=403, detail="Session does not belong to this user")
+
+    # Race-condition guard: re-check uniqueness with the card from the session.
+    id_hash = hash_id_number(session.id_number)
+    duplicate = (
+        db.query(User)
+        .filter(
+            User.government_id_hash == id_hash,
+            User.government_id_verified.is_(True),
+            User.deleted_at.is_(None),
+            User.id != user_id,
+        )
+        .first()
+    )
+    if duplicate is not None:
+        verification_sessions.delete(body.sessionId)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This Ghana Card has just been verified by another account. "
+                "Each card may only be used once."
+            ),
+        )
+
+    # Ensure hash is persisted (covers the edge case of a lookup before this
+    # column existed, or a lookup that didn't commit the hash).
+    if not user.government_id_hash:
+        user.government_id_hash = id_hash
+        db.commit()
 
     # Extract the selfie from the images list (image_type_id == 0).
     selfie_b64 = next(

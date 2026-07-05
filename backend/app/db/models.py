@@ -170,6 +170,9 @@ class User(Base):
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     government_id_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     government_id_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # HMAC-SHA256 of the normalised Ghana Card number — used to enforce one-card-per-account.
+    # Never contains plaintext. Null until the user completes the NIA lookup step.
+    government_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     government_id_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     seller_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     shipping_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)

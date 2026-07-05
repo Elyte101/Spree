@@ -25,6 +25,8 @@ NEVER LOG the plaintext value of sensitive fields.
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import logging
 import os
 
@@ -120,3 +122,30 @@ def decrypt(stored: str | None) -> str | None:
 def is_encrypted(value: str | None) -> bool:
     """Return True if the stored value is an encrypted blob."""
     return bool(value and value.startswith(_ENC_PREFIX))
+
+
+def hash_id_number(id_number: str) -> str:
+    """Return a deterministic HMAC-SHA256 hex digest of a Ghana Card number.
+
+    Used to enforce one-card-per-account uniqueness without storing the
+    plaintext ID or relying on the non-deterministic Fernet ciphertext.
+
+    The key material is derived from FIELD_ENCRYPTION_KEY so no additional
+    secret is needed.  If no key is configured, falls back to a plain
+    SHA-256 hash (still one-way, but without HMAC protection — logs a warning).
+
+    Always normalises to uppercase before hashing so casing differences
+    don't produce different hashes for the same card.
+    """
+    normalised = id_number.strip().upper().encode()
+    if _KEY:
+        try:
+            raw_key = base64.urlsafe_b64decode(_KEY + "==")
+            return hmac.new(raw_key, normalised, hashlib.sha256).hexdigest()
+        except Exception:
+            pass
+    logger.warning(
+        "[encryption] hash_id_number() falling back to plain SHA-256 — "
+        "set FIELD_ENCRYPTION_KEY for HMAC protection."
+    )
+    return hashlib.sha256(normalised).hexdigest()

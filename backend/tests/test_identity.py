@@ -206,7 +206,7 @@ def test_face_verify_low_confidence_returns_unverified():
 
         lookup_resp = client.post(
             "/api/v1/identity/lookup",
-            json={"idNumber": "GHA-000000001-1"},
+            json={"idNumber": "GHA-000000002-2"},
             headers=_actor_headers(user_id),
         )
         assert lookup_resp.status_code == 200
@@ -233,7 +233,7 @@ def test_face_verify_liveness_fail_returns_unverified():
 
         lookup_resp = client.post(
             "/api/v1/identity/lookup",
-            json={"idNumber": "GHA-000000001-1"},
+            json={"idNumber": "GHA-000000003-3"},
             headers=_actor_headers(user_id),
         )
         assert lookup_resp.status_code == 200
@@ -261,7 +261,7 @@ def test_face_verify_max_attempts_returns_403():
             for _ in range(3):
                 lookup_resp = client.post(
                     "/api/v1/identity/lookup",
-                    json={"idNumber": "GHA-000000001-1"},
+                    json={"idNumber": "GHA-000000004-4"},
                     headers=_actor_headers(user_id),
                 )
                 if lookup_resp.status_code == 403:
@@ -279,7 +279,7 @@ def test_face_verify_max_attempts_returns_403():
             # After max attempts, any new lookup should return 403.
             resp = client.post(
                 "/api/v1/identity/lookup",
-                json={"idNumber": "GHA-000000001-1"},
+                json={"idNumber": "GHA-000000004-4"},
                 headers=_actor_headers(user_id),
             )
     assert resp.status_code == 403
@@ -307,7 +307,7 @@ def test_face_verify_missing_selfie_returns_422():
 
         lookup_resp = client.post(
             "/api/v1/identity/lookup",
-            json={"idNumber": "GHA-000000001-1"},
+            json={"idNumber": "GHA-000000005-5"},
             headers=_actor_headers(user_id),
         )
         assert lookup_resp.status_code == 200
@@ -322,6 +322,42 @@ def test_face_verify_missing_selfie_returns_422():
             headers=_actor_headers(user_id),
         )
     assert resp.status_code == 422
+
+
+def test_lookup_card_already_verified_on_another_account_returns_409():
+    """A Ghana Card verified by user A cannot be looked up by user B."""
+    with TestClient(app) as client:
+        user_a = _register_user(client)
+        user_b = _register_user(client)
+
+        # User A: full happy-path verification.
+        lookup_resp = client.post(
+            "/api/v1/identity/lookup",
+            json={"idNumber": "GHA-000000006-6"},
+            headers=_actor_headers(user_a),
+        )
+        assert lookup_resp.status_code == 200, lookup_resp.text
+        session_id = lookup_resp.json()["sessionId"]
+
+        verify_resp = client.post(
+            "/api/v1/identity/face-verify",
+            json={
+                "sessionId": session_id,
+                "images": [{"image_type_id": 0, "image": _fake_selfie()}],
+            },
+            headers=_actor_headers(user_a),
+        )
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["verified"] is True
+
+        # User B: same card should now be rejected.
+        conflict_resp = client.post(
+            "/api/v1/identity/lookup",
+            json={"idNumber": "GHA-000000006-6"},
+            headers=_actor_headers(user_b),
+        )
+    assert conflict_resp.status_code == 409
+    assert "already registered" in conflict_resp.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------

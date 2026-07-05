@@ -38,6 +38,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("users", "nia_verified_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
     ("users", "nia_match_confidence", "NUMERIC(5,4)", "REAL"),
     ("users", "verification_attempt_count", "INTEGER NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    # One-card-per-account uniqueness: HMAC-SHA256 of the normalised Ghana Card number
+    ("users", "government_id_hash", "VARCHAR(64)", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.
