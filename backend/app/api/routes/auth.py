@@ -78,16 +78,6 @@ def profile_update(
     return update_user_profile(db, user_id, payload)
 
 
-@router.post("/profile/{user_id}/id-documents")
-def profile_id_documents(user_id: str):
-    raise HTTPException(
-        status_code=410,
-        detail=(
-            "Document upload has been replaced by NIA Ghana Card verification. "
-            "Use POST /api/v1/identity/lookup and POST /api/v1/identity/face-verify instead."
-        ),
-    )
-
 
 @router.put("/profile/{user_id}/payout-info", response_model=UserProfileOut)
 def profile_payout_info(

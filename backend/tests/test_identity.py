@@ -325,13 +325,13 @@ def test_face_verify_missing_selfie_returns_422():
 
 
 # ---------------------------------------------------------------------------
-# Old id-documents endpoint
+# Old id-documents endpoint — removed
 # ---------------------------------------------------------------------------
 
-def test_old_id_documents_endpoint_returns_410():
+def test_old_id_documents_endpoint_is_gone():
+    """Verify the old file-upload endpoint no longer exists."""
     with TestClient(app) as client:
         resp = client.post(
             "/api/v1/auth/profile/some-user-id/id-documents",
         )
-    assert resp.status_code == 410
-    assert "identity/lookup" in resp.json()["detail"]
+    assert resp.status_code == 404

@@ -8,21 +8,16 @@ import {
   ArrowBackRounded,
   ArrowForwardRounded,
   BadgeRounded,
-  CameraAltRounded,
   CheckCircleRounded,
   CheckRounded,
   CloseRounded,
-  CloudUploadRounded,
   ContactPhoneRounded,
-  DeleteOutlineRounded,
   LocalShippingRounded,
   PaymentRounded,
   PhoneAndroidRounded,
-  PhotoCameraRounded,
   PlaceRounded,
   SendRounded,
   StoreRounded,
-  WarningAmberRounded,
 } from "@mui/icons-material";
 import {
   Alert,
@@ -59,6 +54,7 @@ import {
 } from "@/lib/ghana";
 import { GovernmentIdType, SellerType, UserProfile } from "@/types/types";
 import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
+import { Step4Identity } from "@/components/vendor/steps/Step4Identity";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -100,11 +96,6 @@ interface WizardData {
 }
 
 type StepErrors = Record<string, string>;
-
-interface ImgCheckResult {
-  blocking: string[];
-  warnings: string[];
-}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -176,93 +167,9 @@ function toErrorMessage(detail: unknown): string {
   return "An unexpected error occurred. Please try again.";
 }
 
-// ── Image validation ───────────────────────────────────────────────────────────
-
-function loadImg(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function validateIdImage(file: File, slot: "front" | "back" | "selfie"): Promise<ImgCheckResult> {
-  const blocking: string[] = [];
-  const warnings: string[] = [];
-
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    blocking.push("Upload a JPEG, PNG, or WebP image.");
-    return { blocking, warnings };
-  }
-  if (file.size < 30 * 1024) blocking.push("Image is too small (min 30 KB). Use a higher-quality photo.");
-  if (file.size > 10 * 1024 * 1024) blocking.push("Image exceeds 10 MB. Please compress it.");
-  if (blocking.length) return { blocking, warnings };
-
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await loadImg(url);
-    const w = img.naturalWidth, h = img.naturalHeight;
-
-    if (Math.max(w, h) < 1000) {
-      blocking.push(`Resolution too low (${w}×${h} px). Long edge must be ≥1000 px.`);
-    }
-    if (slot !== "selfie") {
-      const ratio = Math.max(w, h) / Math.min(w, h);
-      if (ratio < 1.2 || ratio > 2.2) warnings.push("Photograph the full ID card in landscape for best results.");
-    }
-
-    const scale = Math.min(1, 400 / Math.max(w, h, 1));
-    const cw = Math.max(1, Math.round(w * scale));
-    const ch = Math.max(1, Math.round(h * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = cw; canvas.height = ch;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return { blocking, warnings };
-    ctx.drawImage(img, 0, 0, cw, ch);
-    const { data: px } = ctx.getImageData(0, 0, cw, ch);
-
-    let totalLum = 0;
-    const count = cw * ch;
-    for (let i = 0; i < px.length; i += 4) {
-      totalLum += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
-    }
-    const meanLum = totalLum / count;
-    if (meanLum < 45) blocking.push("Image is too dark. Retake in better lighting.");
-    else if (meanLum > 240) warnings.push("Image may be overexposed — check that text is readable.");
-
-    let lapSum = 0, lapSqSum = 0;
-    const lapCount = (cw - 2) * (ch - 2);
-    for (let y = 1; y < ch - 1; y++) {
-      for (let x = 1; x < cw - 1; x++) {
-        const g = (idx: number) => 0.299 * px[idx] + 0.587 * px[idx + 1] + 0.114 * px[idx + 2];
-        const c = g((y * cw + x) * 4);
-        const t = g(((y - 1) * cw + x) * 4);
-        const b = g(((y + 1) * cw + x) * 4);
-        const l = g((y * cw + (x - 1)) * 4);
-        const r = g((y * cw + (x + 1)) * 4);
-        const lap = Math.abs(-4 * c + t + b + l + r);
-        lapSum += lap; lapSqSum += lap * lap;
-      }
-    }
-    const lapMean = lapSum / lapCount;
-    const lapVar = lapSqSum / lapCount - lapMean * lapMean;
-    if (lapVar < 40) blocking.push("Image is blurry. Hold the camera still and keep the ID in focus.");
-    else if (lapVar < 100) warnings.push("Image may be slightly blurry — sharper photos speed up review.");
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-  return { blocking, warnings };
-}
-
 // ── Step validation ────────────────────────────────────────────────────────────
 
-function validateStep(
-  step: number,
-  data: WizardData,
-  idFiles: { front: File | null; back: File | null; selfie: File | null },
-  imgErrors: { front: ImgCheckResult; back: ImgCheckResult; selfie: ImgCheckResult },
-): StepErrors {
+function validateStep(step: number, data: WizardData): StepErrors {
   const e: StepErrors = {};
   if (step === 0) {
     if (!data.name.trim()) e.name = "Display name is required.";
@@ -290,23 +197,8 @@ function validateStep(
       if (momoErr) e.momoNumber = momoErr;
     }
   }
-  if (step === 6) {
-    if (!data.governmentIdType) e.governmentIdType = "Select your ID type.";
-    const idTrimmed = data.governmentIdNumber.trim();
-    if (!idTrimmed || idTrimmed === "GHA-") {
-      e.governmentIdNumber = "ID number is required.";
-    } else {
-      const spec = GHANA_ID_SPECS[data.governmentIdType];
-      const fmtErr = spec?.validate(idTrimmed);
-      if (fmtErr) e.governmentIdNumber = fmtErr;
-    }
-    if (!idFiles.front) e.idFront = "Upload the front of your ID.";
-    else if (imgErrors.front.blocking.length) e.idFront = imgErrors.front.blocking[0];
-    if (!idFiles.back) e.idBack = "Upload the back of your ID.";
-    else if (imgErrors.back.blocking.length) e.idBack = imgErrors.back.blocking[0];
-    if (!idFiles.selfie) e.selfie = "Upload a selfie holding your ID.";
-    else if (imgErrors.selfie.blocking.length) e.selfie = imgErrors.selfie.blocking[0];
-  }
+  // Step 6 (Identity) validation is handled entirely by Step4Identity — it only
+  // calls onSubmit after NIA lookup + face-verify succeed, so no manual check here.
   return e;
 }
 
@@ -403,213 +295,6 @@ function RegionSelect({ country, value, onChange, error, required }: {
   );
 }
 
-// ── Camera capture component ───────────────────────────────────────────────────
-
-function CameraCapture({ onCapture, onClose }: { onCapture: (f: File) => void; onClose: () => void }) {
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-  const streamRef = React.useRef<MediaStream | null>(null);
-  const [state, setState] = React.useState<"starting" | "ready" | "error">("starting");
-  const [errMsg, setErrMsg] = React.useState("");
-
-  React.useEffect(() => {
-    let cancelled = false;
-    navigator.mediaDevices
-      .getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } })
-      .then((stream) => {
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        if (videoRef.current) { videoRef.current.srcObject = stream; void videoRef.current.play(); }
-        setState("ready");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        let msg = "Unable to access camera. Please use file upload instead.";
-        if (err instanceof DOMException) {
-          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")
-            msg = "Camera access denied. Allow camera access in your browser settings and try again.";
-          else if (err.name === "NotFoundError")
-            msg = "No camera found on this device. Please use file upload instead.";
-        }
-        setErrMsg(msg);
-        setState("error");
-      });
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, []);
-
-  function capture() {
-    const video = videoRef.current;
-    if (!video) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      onCapture(new File([blob], `photo_${Date.now()}.jpg`, { type: "image/jpeg" }));
-    }, "image/jpeg", 0.92);
-  }
-
-  return (
-    <Box sx={{ position: "relative", borderRadius: 2, overflow: "hidden", bgcolor: "#000", aspectRatio: "4/3" }}>
-      {state === "starting" && (
-        <Stack alignItems="center" justifyContent="center" sx={{ position: "absolute", inset: 0 }} spacing={1.5}>
-          <CircularProgress sx={{ color: "white" }} size={32} />
-          <Typography variant="caption" sx={{ color: "rgba(255,255,255,0.8)" }}>Starting camera…</Typography>
-        </Stack>
-      )}
-      {state === "error" && (
-        <Stack alignItems="center" justifyContent="center" sx={{ position: "absolute", inset: 0, p: 3 }} spacing={2}>
-          <Typography variant="body2" textAlign="center" sx={{ color: "rgba(255,255,255,0.85)" }}>{errMsg}</Typography>
-          <Button size="small" variant="outlined" onClick={onClose}
-            sx={{ color: "white", borderColor: "rgba(255,255,255,0.4)", "&:hover": { borderColor: "white" } }}>
-            Use file upload
-          </Button>
-        </Stack>
-      )}
-      <video ref={videoRef} playsInline muted
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: state === "ready" ? "block" : "none" }} />
-      {state === "ready" && (
-        <Box sx={{ position: "absolute", bottom: 0, left: 0, right: 0, p: 2, background: "linear-gradient(transparent, rgba(0,0,0,0.7))" }}>
-          <Stack direction="row" spacing={2} justifyContent="center" alignItems="center">
-            <Button size="small" onClick={onClose} sx={{ color: "rgba(255,255,255,0.75)", minWidth: 72 }}>Cancel</Button>
-            <IconButton onClick={capture}
-              sx={{ width: 56, height: 56, bgcolor: "white", color: "grey.900", border: "3px solid rgba(255,255,255,0.5)", "&:hover": { bgcolor: "grey.100" } }}>
-              <PhotoCameraRounded sx={{ fontSize: 24 }} />
-            </IconButton>
-          </Stack>
-        </Box>
-      )}
-      <IconButton size="small" onClick={onClose}
-        sx={{ position: "absolute", top: 8, right: 8, color: "white", bgcolor: "rgba(0,0,0,0.45)", "&:hover": { bgcolor: "rgba(0,0,0,0.65)" } }}>
-        <CloseRounded fontSize="small" />
-      </IconButton>
-    </Box>
-  );
-}
-
-// ── Upload dropzone with drag-drop + file-pick + camera ────────────────────────
-
-interface DropzoneProps {
-  label: string;
-  icon: React.ReactNode;
-  file: File | null;
-  thumbnail: string | null;
-  checking: boolean;
-  error?: string;
-  warning?: string;
-  onFile: (f: File) => void;
-  onClear: () => void;
-}
-
-function IdDropzone({ label, icon, file, thumbnail, checking, error, warning, onFile, onClear }: DropzoneProps) {
-  const [dragging, setDragging] = React.useState(false);
-  const [showCamera, setShowCamera] = React.useState(false);
-  const [hasCamera, setHasCamera] = React.useState(false);
-  const inputRef = React.useRef<HTMLInputElement>(null);
-
-  React.useEffect(() => {
-    setHasCamera(
-      typeof navigator !== "undefined" &&
-      typeof navigator.mediaDevices?.getUserMedia === "function",
-    );
-  }, []);
-
-  if (showCamera) {
-    return (
-      <Box>
-        <Typography variant="body2" fontWeight={700} color="text.secondary" mb={1}>{label}</Typography>
-        <CameraCapture
-          onCapture={(f) => { setShowCamera(false); onFile(f); }}
-          onClose={() => setShowCamera(false)}
-        />
-      </Box>
-    );
-  }
-
-  return (
-    <Box>
-      <Box
-        role="button"
-        tabIndex={0}
-        aria-label={`Upload ${label}`}
-        onClick={() => inputRef.current?.click()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click(); } }}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false); }}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
-        sx={(theme) => ({
-          position: "relative",
-          minHeight: 120,
-          borderRadius: 2,
-          border: "2px dashed",
-          borderColor: error ? "error.main" : dragging ? "primary.main" : theme.palette.divider,
-          bgcolor: dragging ? alpha(theme.palette.primary.main, 0.06) : "background.paper",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          transition: "border-color 0.2s ease, background-color 0.2s ease",
-          "&:focus-visible": { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
-        })}
-      >
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
-        {thumbnail ? (
-          <>
-            <Box component="img" src={thumbnail} alt={label}
-              sx={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-            <Box sx={{ position: "absolute", inset: 0, bgcolor: "rgba(0,0,0,0.38)", display: "flex", alignItems: "flex-end", p: 1 }}>
-              <Typography variant="caption" color="white" fontWeight={700} noWrap sx={{ maxWidth: "100%" }}>{file?.name}</Typography>
-            </Box>
-          </>
-        ) : (
-          <Stack alignItems="center" spacing={0.75} sx={{ py: 2, px: 2, pointerEvents: "none" }}>
-            {checking ? <CircularProgress size={26} /> : <Box sx={{ fontSize: 34, color: "text.secondary", display: "flex" }}>{icon}</Box>}
-            <Typography variant="body2" fontWeight={700} textAlign="center">{label}</Typography>
-            <Typography variant="caption" color="text.secondary" textAlign="center">
-              Drag & drop · choose file · take photo<br />JPEG · PNG · WebP
-            </Typography>
-          </Stack>
-        )}
-      </Box>
-
-      <Stack direction="row" spacing={1} mt={0.75} justifyContent="space-between" alignItems="center">
-        <Stack direction="row" spacing={1} onClick={(e) => e.stopPropagation()}>
-          <Button size="small" variant="outlined" startIcon={<CloudUploadRounded fontSize="small" />}
-            onClick={() => inputRef.current?.click()}
-            sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.75rem", borderRadius: 2 }}>
-            {thumbnail ? "Replace" : "Choose file"}
-          </Button>
-          {hasCamera && (
-            <Button size="small" variant="outlined" color="secondary" startIcon={<CameraAltRounded fontSize="small" />}
-              onClick={() => setShowCamera(true)}
-              sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.75rem", borderRadius: 2 }}>
-              Take photo
-            </Button>
-          )}
-        </Stack>
-        {file && (
-          <Button size="small" color="error" startIcon={<DeleteOutlineRounded fontSize="small" />}
-            onClick={onClear} sx={{ textTransform: "none", fontWeight: 700, fontSize: "0.72rem" }}>
-            Remove
-          </Button>
-        )}
-      </Stack>
-
-      {checking && <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>Checking image…</Typography>}
-      {!checking && error && <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>{error}</Typography>}
-      {!checking && !error && warning && <Typography variant="caption" color="warning.main" sx={{ display: "block", mt: 0.5 }}>{warning}</Typography>}
-    </Box>
-  );
-}
-
 // ── Wizard page component ─────────────────────────────────────────────────────
 
 export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
@@ -629,30 +314,8 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = React.useState(false);
 
-  const [idFront, setIdFront] = React.useState<File | null>(null);
-  const [idBack, setIdBack] = React.useState<File | null>(null);
-  const [idSelfie, setIdSelfie] = React.useState<File | null>(null);
-  const [thumbFront, setThumbFront] = React.useState<string | null>(null);
-  const [thumbBack, setThumbBack] = React.useState<string | null>(null);
-  const [thumbSelfie, setThumbSelfie] = React.useState<string | null>(null);
-  const [checkingFront, setCheckingFront] = React.useState(false);
-  const [checkingBack, setCheckingBack] = React.useState(false);
-  const [checkingSelfie, setCheckingSelfie] = React.useState(false);
-  const [errFront, setErrFront] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
-  const [errBack, setErrBack] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
-  const [errSelfie, setErrSelfie] = React.useState<ImgCheckResult>({ blocking: [], warnings: [] });
-
   // Auto-save draft (include current step so it survives page reload)
   React.useEffect(() => { saveDraft(data, step); }, [data, step]);
-
-  // Cleanup object URLs
-  React.useEffect(() => {
-    return () => {
-      if (thumbFront) URL.revokeObjectURL(thumbFront);
-      if (thumbBack) URL.revokeObjectURL(thumbBack);
-      if (thumbSelfie) URL.revokeObjectURL(thumbSelfie);
-    };
-  }, [thumbFront, thumbBack, thumbSelfie]);
 
   // MoMo name-enquiry
   const momoResolve = useMomoResolve(data.momoNumber, data.momoProvider);
@@ -675,49 +338,26 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
   const clearError = (key: string) =>
     setErrors((prev) => { const n = { ...prev }; delete n[key]; return n; });
 
-  // ── File handling ──────────────────────────────────────────────────────────
-
-  const handleIdFile = React.useCallback(async (slot: "front" | "back" | "selfie", file: File) => {
-    const setFile = slot === "front" ? setIdFront : slot === "back" ? setIdBack : setIdSelfie;
-    const setThumb = slot === "front" ? setThumbFront : slot === "back" ? setThumbBack : setThumbSelfie;
-    const setChecking = slot === "front" ? setCheckingFront : slot === "back" ? setCheckingBack : setCheckingSelfie;
-    const setImgErr = slot === "front" ? setErrFront : slot === "back" ? setErrBack : setErrSelfie;
-    const errKey = slot === "front" ? "idFront" : slot === "back" ? "idBack" : "selfie";
-    const prevThumb = slot === "front" ? thumbFront : slot === "back" ? thumbBack : thumbSelfie;
-
-    if (prevThumb) URL.revokeObjectURL(prevThumb);
-    setFile(file);
-    setThumb(URL.createObjectURL(file));
-    setImgErr({ blocking: [], warnings: [] });
-    setChecking(true);
-    clearError(errKey);
-
-    const result = await validateIdImage(file, slot);
-    setImgErr(result);
-    setChecking(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thumbFront, thumbBack, thumbSelfie]);
-
-  const clearIdFile = (slot: "front" | "back" | "selfie") => {
-    const setFile = slot === "front" ? setIdFront : slot === "back" ? setIdBack : setIdSelfie;
-    const setThumb = slot === "front" ? setThumbFront : slot === "back" ? setThumbBack : setThumbSelfie;
-    const setImgErr = slot === "front" ? setErrFront : slot === "back" ? setErrBack : setErrSelfie;
-    const prevThumb = slot === "front" ? thumbFront : slot === "back" ? thumbBack : thumbSelfie;
-    if (prevThumb) URL.revokeObjectURL(prevThumb);
-    setFile(null); setThumb(null); setImgErr({ blocking: [], warnings: [] });
-  };
-
   // ── Navigation ─────────────────────────────────────────────────────────────
 
-  const idFiles = { front: idFront, back: idBack, selfie: idSelfie };
-  const imgErrors = { front: errFront, back: errBack, selfie: errSelfie };
-
   const handleNext = () => {
-    const errs = validateStep(step, data, idFiles, imgErrors);
+    const errs = validateStep(step, data);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setErrors({});
     setCompletedSteps((s) => new Set([...s, step]));
     setStep((s) => s + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Called by Step4Identity when NIA lookup + face-verify both succeed.
+  const handleIdentityComplete = async (idData: { governmentIdType?: GovernmentIdType; governmentIdNumber?: string }) => {
+    setData((d) => ({
+      ...d,
+      governmentIdType: idData.governmentIdType ?? d.governmentIdType,
+      governmentIdNumber: idData.governmentIdNumber ?? d.governmentIdNumber,
+    }));
+    setCompletedSteps((s) => new Set([...s, 6]));
+    setStep(7);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -746,18 +386,6 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
     setServerError(null);
 
     try {
-      if (idFront || idBack || idSelfie) {
-        const fd = new FormData();
-        if (idFront) fd.append("id_front", idFront);
-        if (idBack) fd.append("id_back", idBack);
-        if (idSelfie) fd.append("selfie", idSelfie);
-        const docsRes = await fetch("/api/auth/id-documents", { method: "POST", body: fd });
-        if (!docsRes.ok) {
-          const d = (await docsRes.json()) as { detail?: unknown };
-          throw new Error(d.detail !== undefined ? toErrorMessage(d.detail) : "Document upload failed. Please try again.");
-        }
-      }
-
       const payload = {
         name: data.name.trim(),
         email: data.email.trim(),
@@ -1061,114 +689,14 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
       )}
     </Stack>,
 
-    /* 6 */
-    <Stack key="s6" spacing={2.5}>
-      {(() => {
-        const idSpec = GHANA_ID_SPECS[data.governmentIdType];
-        const idTrimmed = data.governmentIdNumber.trim();
-        const idValid = !!idTrimmed && idTrimmed !== "GHA-" && !errors.governmentIdNumber;
-        return (
-          <>
-            <Typography variant="body2" color="text.secondary">
-              We verify every vendor before product publishing is enabled. Documents are reviewed privately by our team.
-            </Typography>
-            <FormControl fullWidth required error={!!errors.governmentIdType}>
-              <InputLabel>Government ID type</InputLabel>
-              <Select label="Government ID type" value={data.governmentIdType}
-                onChange={(e) => {
-                  const newType = e.target.value as GovernmentIdType;
-                  setData((d) => ({ ...d, governmentIdType: newType, governmentIdNumber: initialIdValue(newType, "") }));
-                  clearError("governmentIdType");
-                  clearError("governmentIdNumber");
-                }}
-                MenuProps={{ sx: MENU_SX }}>
-                {GHANA_ID_TYPES.map((id) => <MenuItem key={id.value} value={id.value}>{id.label}</MenuItem>)}
-              </Select>
-              {errors.governmentIdType && <FormHelperText>{errors.governmentIdType}</FormHelperText>}
-            </FormControl>
-
-            <Box>
-              {idSpec && (
-                <Box sx={(theme) => ({
-                  mb: 1, px: 1.5, py: 0.75, borderRadius: 1.5,
-                  bgcolor: idValid ? alpha(theme.palette.success.main, 0.08) : alpha(theme.palette.info.main, 0.07),
-                  border: "1px solid",
-                  borderColor: idValid ? alpha(theme.palette.success.main, 0.3) : alpha(theme.palette.info.main, 0.2),
-                })}>
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.25 }}>
-                    Expected format
-                  </Typography>
-                  <Typography variant="caption" sx={{
-                    fontFamily: "monospace", fontWeight: 700, letterSpacing: "0.06em",
-                    color: idValid ? "success.main" : "text.primary", fontSize: "0.8rem",
-                  }}>
-                    {idSpec.placeholder}
-                  </Typography>
-                </Box>
-              )}
-              <TextField
-                label="ID number"
-                value={data.governmentIdNumber}
-                required
-                fullWidth
-                onChange={(e) => {
-                  const formatted = applyIdFormat(e.target.value, data.governmentIdType);
-                  setData((d) => ({ ...d, governmentIdNumber: formatted }));
-                  const trimmed = formatted.trim();
-                  if (trimmed && trimmed !== "GHA-") {
-                    const err = idSpec?.validate(trimmed) ?? "";
-                    setErrors((prev) => ({ ...prev, governmentIdNumber: err }));
-                  } else {
-                    clearError("governmentIdNumber");
-                  }
-                }}
-                error={!!errors.governmentIdNumber}
-                helperText={
-                  errors.governmentIdNumber
-                    ? errors.governmentIdNumber
-                    : idValid
-                      ? "✓ Format looks correct"
-                      : idSpec?.formatHint
-                }
-                slotProps={{
-                  formHelperText: { sx: idValid ? { color: "success.main", fontWeight: 600 } : {} },
-                  htmlInput: {
-                    style: { textTransform: "uppercase", fontFamily: "monospace", letterSpacing: "0.06em" },
-                    spellCheck: false,
-                    autoCorrect: "off",
-                    autoCapitalize: "characters",
-                    "aria-invalid": !!errors.governmentIdNumber,
-                  },
-                }}
-              />
-            </Box>
-          </>
-        );
-      })()}
-      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "repeat(3, 1fr)" } }}>
-        <IdDropzone label="ID front" icon={<BadgeRounded fontSize="inherit" />}
-          file={idFront} thumbnail={thumbFront} checking={checkingFront}
-          error={errors.idFront ?? (errFront.blocking[0] ?? undefined)}
-          warning={errFront.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("front", f)} onClear={() => clearIdFile("front")} />
-        <IdDropzone label="ID back" icon={<BadgeRounded fontSize="inherit" />}
-          file={idBack} thumbnail={thumbBack} checking={checkingBack}
-          error={errors.idBack ?? (errBack.blocking[0] ?? undefined)}
-          warning={errBack.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("back", f)} onClear={() => clearIdFile("back")} />
-        <IdDropzone label="Selfie with ID" icon={<CloudUploadRounded fontSize="inherit" />}
-          file={idSelfie} thumbnail={thumbSelfie} checking={checkingSelfie}
-          error={errors.selfie ?? (errSelfie.blocking[0] ?? undefined)}
-          warning={errSelfie.warnings[0] ?? undefined}
-          onFile={(f) => handleIdFile("selfie", f)} onClear={() => clearIdFile("selfie")} />
-      </Box>
-      {(errFront.warnings.length > 0 || errBack.warnings.length > 0 || errSelfie.warnings.length > 0) &&
-       !errFront.blocking.length && !errBack.blocking.length && !errSelfie.blocking.length && (
-        <Alert severity="warning" icon={<WarningAmberRounded />} sx={{ borderRadius: 2 }}>
-          Some photos have quality warnings. Sharper, well-lit images speed up the review process.
-        </Alert>
-      )}
-    </Stack>,
+    /* 6 — Identity: NIA lookup + SmartSelfie face match */
+    <Box key="s6">
+      <Step4Identity
+        profile={profile as Parameters<typeof Step4Identity>[0]["profile"]}
+        onSubmit={handleIdentityComplete as Parameters<typeof Step4Identity>[0]["onSubmit"]}
+        submitting={false}
+      />
+    </Box>,
 
     /* 7 — Review */
     <Stack key="s7" spacing={2}>
@@ -1201,7 +729,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
                 ["Expiry", data.expiryMonth && data.expiryYear ? `${data.expiryMonth}/${data.expiryYear}` : ""],
               ],
         },
-        { title: "Identity", idx: 6, rows: [["ID type", GHANA_ID_TYPES.find((t) => t.value === data.governmentIdType)?.label ?? ""], ["ID number", data.governmentIdNumber ? "••••••••" : ""], ["Documents", [idFront && "Front", idBack && "Back", idSelfie && "Selfie"].filter(Boolean).join(", ") || "None uploaded"]] },
+        { title: "Identity", idx: 6, rows: [["ID type", GHANA_ID_TYPES.find((t) => t.value === data.governmentIdType)?.label ?? ""], ["ID number", data.governmentIdNumber ? "••••••••" : ""], ["Verified", profile.governmentIdVerified ? "✓ NIA verified" : "Pending"]] },
       ].map(({ title, idx, rows }) => (
         <Box key={title} sx={{ borderRadius: 2, border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center"
@@ -1389,7 +917,7 @@ export function VendorApplicationWizard({ profile }: { profile: UserProfile }) {
               >
                 {submitting ? "Submitting…" : "Submit Application"}
               </Button>
-            ) : (
+            ) : step === 6 ? null : (
               <Button
                 variant="contained"
                 disableElevation
