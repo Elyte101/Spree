@@ -345,8 +345,12 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { detail?: string }).detail ?? "Payment initiation failed");
+        const data = await res.json().catch(() => ({})) as { detail?: { message?: string } | string };
+        const rawDetail = data.detail;
+        const errMsg = rawDetail && typeof rawDetail === "object"
+          ? (rawDetail.message ?? "Payment could not be started. Please try again or use Card/Bank Transfer.")
+          : (typeof rawDetail === "string" ? rawDetail : "Payment initiation failed");
+        throw new Error(errMsg);
       }
       const { orderId, reference, status, displayText } = await res.json() as {
         orderId: string;
@@ -1051,6 +1055,19 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                 {submitError && (
                   <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ borderRadius: 2 }}>
                     {submitError}
+                    {paymentMethod === "momo" && (
+                      <Box mt={1}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="inherit"
+                          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                          onClick={() => { setPaymentMethod("card"); setSubmitError(null); setStage("idle"); }}
+                        >
+                          Switch to Card / Bank Transfer
+                        </Button>
+                      </Box>
+                    )}
                   </Alert>
                 )}
 
@@ -1060,10 +1077,13 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                     <Button
                       fullWidth
                       variant="contained"
+                      color="primary"
                       size="large"
                       endIcon={
                         submitting ? (
                           <CircularProgress size={18} color="inherit" />
+                        ) : paymentMethod === "momo" ? (
+                          <PhoneAndroidRounded />
                         ) : (
                           <CreditCardRounded />
                         )
@@ -1076,13 +1096,16 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                         textTransform: "none",
                         fontWeight: 900,
                         fontSize: "1rem",
-                        boxShadow: "none",
-                        "&:hover": { boxShadow: "none" },
                       }}
                     >
                       {buttonLabel}
                     </Button>
                   </motion.div>
+                )}
+                {!momoDetailsValid && paymentMethod === "momo" && stage === "idle" && (
+                  <Typography variant="caption" color="text.secondary" textAlign="center" display="block">
+                    Enter your MoMo phone number and provider above to enable payment.
+                  </Typography>
                 )}
 
                 <Button

@@ -20,6 +20,15 @@ logger = logging.getLogger(__name__)
 _BASE = "https://api.paystack.co"
 
 
+class PaystackAPIError(RuntimeError):
+    """Non-2xx response from Paystack. Carries the original HTTP status code."""
+
+    def __init__(self, http_status: int, message: str, provider_message: str = "") -> None:
+        super().__init__(message)
+        self.http_status = http_status
+        self.provider_message = provider_message
+
+
 def _headers() -> dict[str, str]:
     return {
         "Authorization": f"Bearer {settings.paystack_secret_key}",
@@ -37,11 +46,11 @@ def _request(method: str, path: str, body: dict | None = None) -> dict:
     except HTTPError as exc:
         raw = exc.read()
         try:
-            detail = json.loads(raw).get("message", str(exc))
+            provider_message = json.loads(raw).get("message", str(exc))
         except Exception:
-            detail = str(exc)
-        logger.error("Paystack %s %s → %s: %s", method, path, exc.code, detail)
-        raise RuntimeError(f"Paystack error: {detail}") from exc
+            provider_message = str(exc)
+        logger.error("Paystack %s %s → %s: %s", method, path, exc.code, provider_message)
+        raise PaystackAPIError(exc.code, f"Paystack error: {provider_message}", provider_message) from exc
     except URLError as exc:
         logger.error("Paystack network error: %s", exc)
         raise RuntimeError("Could not reach Paystack. Check your internet connection.") from exc

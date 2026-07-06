@@ -14,6 +14,7 @@ from app.schemas.order import ChargeMomoIn, OrderCreateIn, OrderTrackingIn
 from app.services import dev_notifier
 from app.services import ledger as ledger_svc
 from app.services import paystack as paystack_svc
+from app.services.paystack import PaystackAPIError
 from app.services.notifications import create_notification, notify_safe
 
 logger = logging.getLogger(__name__)
@@ -687,6 +688,19 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
             currency=payload.currency,
             mobile_money={"phone": phone, "provider": payload.momoProvider},
         )
+    except PaystackAPIError as exc:
+        db.delete(order)
+        db.commit()
+        logger.error("Paystack charge failed (status=%s): %s", exc.http_status, exc.provider_message)
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": "paystack_charge_failed",
+                "message": "Payment could not be started. Please try again or use Card/Bank Transfer.",
+                "providerStatus": exc.http_status,
+                "providerMessage": exc.provider_message,
+            },
+        ) from exc
     except RuntimeError as exc:
         db.delete(order)
         db.commit()
@@ -718,6 +732,17 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
 
     try:
         charge_data = paystack_svc.submit_otp(otp=otp, reference=reference)
+    except PaystackAPIError as exc:
+        logger.error("Paystack OTP submit failed (status=%s): %s", exc.http_status, exc.provider_message)
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": "paystack_otp_failed",
+                "message": "OTP verification failed. Please try again.",
+                "providerStatus": exc.http_status,
+                "providerMessage": exc.provider_message,
+            },
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -733,6 +758,16 @@ def check_momo_charge(reference: str) -> dict:
 
     try:
         charge_data = paystack_svc.check_charge(reference=reference)
+    except PaystackAPIError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": "paystack_check_failed",
+                "message": "Could not check payment status. Please wait and try again.",
+                "providerStatus": exc.http_status,
+                "providerMessage": exc.provider_message,
+            },
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

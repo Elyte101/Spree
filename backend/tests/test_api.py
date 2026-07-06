@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 # Load the backend .env file so that INTERNAL_KEY matches the running Settings
@@ -609,3 +610,101 @@ def test_admin_create_order_recomputes_totals_and_writes_ledger():
             assert "PAYMENT_RECEIVED" in entry_types, (
                 f"Expected PAYMENT_RECEIVED ledger entry, got: {entry_types}"
             )
+
+
+def _momo_payload(product_id: str, price: float) -> dict:
+    return {
+        "fullName": "Kofi Buyer",
+        "email": "kofi@test.com",
+        "phone": None,
+        "addressLine1": "5 Ring Road",
+        "addressLine2": None,
+        "city": "Accra",
+        "state": "Greater Accra",
+        "postalCode": "00233",
+        "country": "Ghana",
+        "shippingMethod": "standard",
+        "paymentMethod": "momo",
+        "subtotal": price,
+        "shippingCost": 12.0,
+        "tax": 2.18,
+        "total": price + 12.0 + 2.18,
+        "currency": "GHS",
+        "items": [
+            {
+                "productId": product_id,
+                "name": "Test Item",
+                "image": "/img/test.jpg",
+                "price": price,
+                "quantity": 1,
+                "color": None,
+                "size": None,
+            }
+        ],
+        "momoPhone": "0551234567",
+        "momoProvider": "mtn",
+        "idempotencyKey": None,
+    }
+
+
+def test_charge_momo_paystack_403_maps_to_403_not_502():
+    """Paystack 403 (bad key) must return HTTP 403 with structured error, not 502."""
+    from app.services.paystack import PaystackAPIError
+
+    with TestClient(app) as client:
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+        )
+        assert prod_resp.status_code == 201, prod_resp.text
+        product_id = prod_resp.json()["id"]
+        price = float(prod_resp.json()["price"])
+
+        with patch("app.services.orders.paystack_svc.charge",
+                   side_effect=PaystackAPIError(403, "Paystack error: Invalid key", "Invalid key")):
+            resp = client.post(
+                "/api/v1/orders/charge-momo",
+                json=_momo_payload(product_id, price),
+                headers=INTERNAL_HEADERS,
+            )
+
+    assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
+    body = resp.json()
+    detail = body["detail"]
+    assert detail["code"] == "paystack_charge_failed"
+    assert detail["providerStatus"] == 403
+    assert "message" in detail
+    assert "providerMessage" in detail
+
+
+def test_charge_momo_valid_payload_creates_pending_order():
+    """Valid MoMo payload with PAYMENTS_MOCK returns send_otp status without hitting Paystack."""
+    from app.core.config import settings as svc_settings
+
+    with TestClient(app) as client:
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+        )
+        assert prod_resp.status_code == 201, prod_resp.text
+        product_id = prod_resp.json()["id"]
+        price = float(prod_resp.json()["price"])
+
+        original_mock = svc_settings.payments_mock
+        svc_settings.payments_mock = True
+        try:
+            resp = client.post(
+                "/api/v1/orders/charge-momo",
+                json=_momo_payload(product_id, price),
+                headers=INTERNAL_HEADERS,
+            )
+        finally:
+            svc_settings.payments_mock = original_mock
+
+    assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
+    body = resp.json()
+    assert "orderId" in body
+    assert "reference" in body
+    assert body["status"] == "send_otp"
