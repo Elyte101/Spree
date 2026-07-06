@@ -44,12 +44,18 @@ def _request(method: str, path: str, body: dict | None = None) -> dict:
         with urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())
     except HTTPError as exc:
-        raw = exc.read()
+        raw_text = exc.read().decode("utf-8", errors="replace")
         try:
-            provider_message = json.loads(raw).get("message", str(exc))
+            parsed = json.loads(raw_text)
+            ps_status = parsed.get("status", "")
+            provider_message = parsed.get("message") or raw_text
         except Exception:
-            provider_message = str(exc)
-        logger.error("Paystack %s %s → %s: %s", method, path, exc.code, provider_message)
+            ps_status = ""
+            provider_message = raw_text or f"HTTP {exc.code}"
+        logger.error(
+            "Paystack %s %s → HTTP %s | status=%r message=%r",
+            method, path, exc.code, ps_status, provider_message,
+        )
         raise PaystackAPIError(exc.code, f"Paystack error: {provider_message}", provider_message) from exc
     except URLError as exc:
         logger.error("Paystack network error: %s", exc)
