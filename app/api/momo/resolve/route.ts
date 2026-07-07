@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { validateMoMoNumber } from "@/lib/ghana";
-import { createMomoProvider } from "@/lib/momo/providers";
+import { proxyBackend } from "@/lib/serverApi";
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -32,18 +32,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: momoErr }, { status: 400 });
   }
 
-  try {
-    const provider = createMomoProvider();
-    const result = await provider.resolve(number, network);
-    return NextResponse.json({
-      resolved: true,
-      name: result.name,
-      provider: provider.providerName,
-    });
-  } catch (err) {
-    // Return 200 so the client treats this as a soft failure, not a network error.
-    const reason = err instanceof Error ? err.message : "Name enquiry unavailable";
-    console.error("[momo/resolve]", err);
-    return NextResponse.json({ resolved: false, reason });
-  }
+  // Proxy to the backend, which holds PAYSTACK_SECRET_KEY.
+  // The backend returns {"resolved": true, "name": "..."} on success,
+  // or a non-200 status with {"detail": "..."} on failure.
+  return proxyBackend(
+    "/momo/resolve",
+    {
+      method: "POST",
+      body: JSON.stringify({ number, network }),
+      headers: { "Content-Type": "application/json" },
+    },
+    { internal: true },
+  );
 }

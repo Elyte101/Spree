@@ -1,7 +1,8 @@
 import json
 import logging
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Header, HTTPException, Query, Request, status
+from pydantic import BaseModel
 
 from app.api.deps import DBSession, InternalAPIKey
 from app.schemas.order import ChargeMomoIn, ChargeMomoOut, OrderCreateIn, PaymentInitOut, PaymentVerifyOut, SubmitOtpIn
@@ -69,6 +70,43 @@ async def paystack_webhook(
     logger.info("Paystack webhook received: %s", event)
     handle_paystack_webhook(db, event, data)
     return {"received": True}
+
+
+class MomoResolveIn(BaseModel):
+    number: str
+    network: str
+
+
+@router.post("/momo/resolve")
+def momo_resolve(payload: MomoResolveIn, _: InternalAPIKey):
+    """Resolve a Ghana MoMo account name via Paystack.
+
+    Returns {"resolved": true, "name": "..."} on success.
+    Returns HTTP 424 when Paystack cannot find the account (wrong number/network).
+    Returns HTTP 503 when Paystack is not configured.
+    """
+    if not settings.paystack_secret_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Account name resolution is not available right now.",
+        )
+    try:
+        name = paystack_svc.resolve_momo_account(payload.number, payload.network)
+        return {"resolved": True, "name": name}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except paystack_svc.PaystackAPIError as exc:
+        logger.warning("momo_resolve: Paystack error %s: %s", exc.http_status, exc)
+        raise HTTPException(
+            status_code=status.HTTP_424_FAILED_DEPENDENCY,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.error("momo_resolve: unexpected error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach account verification service.",
+        ) from exc
 
 
 @router.post("/orders/charge-momo", response_model=ChargeMomoOut, status_code=status.HTTP_201_CREATED)

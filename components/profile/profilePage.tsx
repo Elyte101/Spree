@@ -319,9 +319,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
           </Stack>
         </Paper>
 
-        {error ? <Alert severity="error">{error}</Alert> : null}
-        {success ? <Alert severity="success">{success}</Alert> : null}
-
         <Box
           sx={{
             display: "grid",
@@ -672,6 +669,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 Sign out
               </Button>
             </Stack>
+            {error && (
+              <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>
+            )}
+            {success && (
+              <Alert severity="success" onClose={() => setSuccess(null)}>{success}</Alert>
+            )}
           </Stack>
 
           <Stack spacing={2.5}>
@@ -822,9 +825,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     </Box>
                   </Stack>
 
-                  {payoutError && <Alert severity="error" onClose={() => setPayoutError(null)}>{payoutError}</Alert>}
-                  {payoutSuccess && <Alert severity="success" onClose={() => setPayoutSuccess(null)}>{payoutSuccess}</Alert>}
-
                   {/* Method toggle — spec: card OR MoMo only. NO bank account. */}
                   <Stack direction="row" spacing={1}>
                     {(["mobile_money", "card"] as const).map((m) => (
@@ -935,6 +935,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                   >
                     {savingPayout ? "Saving…" : "Save payout account"}
                   </Button>
+                  {payoutError && (
+                    <Alert severity="error" onClose={() => setPayoutError(null)}>{payoutError}</Alert>
+                  )}
+                  {payoutSuccess && (
+                    <Alert severity="success" onClose={() => setPayoutSuccess(null)}>{payoutSuccess}</Alert>
+                  )}
                 </Stack>
               </Paper>
             )}

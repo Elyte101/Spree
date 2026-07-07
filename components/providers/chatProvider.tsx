@@ -53,12 +53,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     const prevId = prevUserIdRef.current;
     prevUserIdRef.current = currentUserId;
     if (prevId && prevId !== currentUserId && _sharedClient) {
-      void _sharedClient.disconnectUser().then(() => { _sharedClient = null; });
+      // Null synchronously so the connect effect never sees a mid-disconnect client.
+      const clientToDisconnect = _sharedClient;
+      _sharedClient = null;
+      // Update state first so React unmounts Stream components (Chat/Channel/MessageComposer).
+      // Their cleanup effects (messageComposer.clear()) must run while the client is still
+      // connected, otherwise Stream throws "can't use channel after client.disconnect()".
+      // Deferring disconnectUser() to the next macrotask (after React's passive effect
+      // cleanups have fired) prevents that error from leaking to the console.
       setClient(null);
       setChannel(null);
       setConnectStatus("idle");
       setErrorMsg(null);
       setUnreadCount(0);
+      setTimeout(() => void clientToDisconnect.disconnectUser(), 0);
     }
   }, [currentUserId]);
 
@@ -110,6 +118,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
         if (cancelled) return;
 
+        if (cancelled) return;
         const ch = _sharedClient.channel("support", tokenResult.channelId);
         await ch.watch();
         if (cancelled) return;

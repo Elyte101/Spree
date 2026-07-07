@@ -158,6 +158,35 @@ def initiate_transfer(
     return result.get("data", {})
 
 
+_MOMO_BANK_CODE: dict[str, str] = {
+    "mtn mobile money": "MTN",
+    "telecel cash": "VOD",
+    "airteltigo money": "ATL",
+}
+
+
+def resolve_momo_account(phone: str, network: str) -> str:
+    """Return the account name for a Ghana MoMo number via Paystack /bank/resolve.
+
+    Raises PaystackAPIError on HTTP errors, RuntimeError on network failure, and
+    ValueError for unsupported networks.  Callers should catch and surface gracefully.
+    """
+    bank_code = _MOMO_BANK_CODE.get(network.strip().lower())
+    if not bank_code:
+        raise ValueError(f"Unsupported MoMo network: {network!r}")
+
+    # Normalise +233XXXXXXXXX → 0XXXXXXXXX
+    acct = phone.strip()
+    if acct.startswith("+233"):
+        acct = "0" + acct[4:]
+
+    result = _request("GET", f"/bank/resolve?account_number={acct}&bank_code={bank_code}")
+    name: str = (result.get("data") or {}).get("account_name", "")
+    if not name:
+        raise PaystackAPIError(200, "Account name not returned by Paystack", "")
+    return name
+
+
 def refund_transaction(reference: str, amount_minor: int | None = None) -> dict:
     """Issue a full or partial refund. Returns refund data dict."""
     payload: dict = {"transaction": reference}
