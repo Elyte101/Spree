@@ -82,9 +82,10 @@ def run() -> None:
         sys.exit(1)
 
     if exists:
-        # Re-apply config to pick up any changes.
+        # Re-apply config to pick up any changes (name key excluded — it's the path param).
+        update_data = {k: v for k, v in CHANNEL_TYPE_CONFIG.items() if k != "name"}
         try:
-            client.update_channel_type(CHANNEL_TYPE, CHANNEL_TYPE_CONFIG)
+            client.update_channel_type(CHANNEL_TYPE, **update_data)
             logger.info("Channel type '%s' config updated.", CHANNEL_TYPE)
         except StreamAPIException as exc:
             logger.warning(
