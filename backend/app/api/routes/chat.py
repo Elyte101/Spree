@@ -51,7 +51,7 @@ webhook_router = APIRouter()
 # ---------------------------------------------------------------------------
 
 def _stream_client():
-    """Return a StreamChat server-side client, or raise 503 if not configured."""
+    """Return a StreamChat server-side client, or raise 503 if keys are missing."""
     api_key = getattr(settings, "stream_api_key", "") or ""
     api_secret = getattr(settings, "stream_api_secret", "") or ""
     if not api_key or not api_secret:
@@ -61,6 +61,12 @@ def _stream_client():
         )
     from stream_chat import StreamChat  # type: ignore[import-untyped]
     return StreamChat(api_key=api_key, api_secret=api_secret)
+
+
+def _stream_api_exception():
+    """Import StreamAPIException without polluting the module namespace on every call."""
+    from stream_chat.base.exceptions import StreamAPIException  # type: ignore[import-untyped]
+    return StreamAPIException
 
 
 def _admin_user_id() -> str:
@@ -78,11 +84,28 @@ def chat_token(
     actor_id: ActorUserId,
     actor_role: ActorRole,
 ):
-    """Issue a Stream Chat user token for the authenticated user."""
+    """Issue a Stream Chat user token for the authenticated user.
+
+    Token creation is a local JWT operation and never fails due to Stream API issues.
+    User upsert and channel get-or-create are best-effort: errors are logged with the
+    specific Stream error code, but the token is returned regardless so the frontend
+    can still attempt to connect.
+    """
     if not actor_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
-    client = _stream_client()
+    api_key = getattr(settings, "stream_api_key", "") or ""
+    api_secret = getattr(settings, "stream_api_secret", "") or ""
+    if not api_key or not api_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stream Chat is not configured (STREAM_API_KEY / STREAM_API_SECRET missing).",
+        )
+
+    from stream_chat import StreamChat  # type: ignore[import-untyped]
+    StreamAPIException = _stream_api_exception()
+
+    client = StreamChat(api_key=api_key, api_secret=api_secret)
     admin_id = _admin_user_id()
     channel_id = f"support-{actor_id}"
 
@@ -90,36 +113,42 @@ def chat_token(
     user = db.get(User, actor_id)
     display_name = (user.name or actor_id) if user else actor_id
 
+    # create_token is a local HMAC-signed JWT — never makes a network call.
+    token = client.create_token(actor_id)
+
+    # Upsert both Stream users so display names stay current.
+    # Best-effort: a failure here doesn't prevent the client from connecting.
     try:
-        # Upsert the Stream user so their display name is current.
         client.upsert_user({"id": actor_id, "role": "user", "name": display_name})
-
-        # Ensure the admin Stream user exists.
         client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
-
-        # Create (or get) the support channel — members are strictly user + admin.
-        # Note: channel.create(actor_id) already sets created_by internally; passing
-        # created_by_id in data as well causes Stream to reject with code 4.
-        channel = client.channel(
-            "support",
-            channel_id,
-            data={"members": [actor_id, admin_id]},
+    except StreamAPIException as exc:
+        logger.warning(
+            "chat_token: upsert_user failed for %s: Stream code=%s %r",
+            actor_id, exc.error_code, exc.error_message,
         )
-        channel.create(actor_id)
-
-        token = client.create_token(actor_id)
     except Exception as exc:
-        logger.warning("Stream Chat API error for user %s: %s", actor_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Stream Chat is not configured or currently unavailable.",
+        logger.warning("chat_token: upsert_user unexpected error for %s: %s", actor_id, exc)
+
+    # Get-or-create the support channel with both members so the admin can see it.
+    # Best-effort: token is returned even if this fails (e.g. channel type not set up yet).
+    # If this keeps failing, run: python backend/scripts/setup_stream.py
+    try:
+        ch = client.channel("support", channel_id, data={"members": [actor_id, admin_id]})
+        ch.create(actor_id)
+    except StreamAPIException as exc:
+        logger.warning(
+            "chat_token: channel.create failed for %s: Stream code=%s %r — "
+            "if 'channel type does not exist', run backend/scripts/setup_stream.py",
+            channel_id, exc.error_code, exc.error_message,
         )
+    except Exception as exc:
+        logger.warning("chat_token: channel.create unexpected error for %s: %s", channel_id, exc)
 
     return {
         "token": token,
         "userId": actor_id,
         "channelId": channel_id,
-        "apiKey": getattr(settings, "stream_api_key", ""),
+        "apiKey": api_key,
     }
 
 
@@ -133,13 +162,24 @@ def chat_admin_token(_: InternalAPIKey, actor_role: ActorRole):
     if actor_role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
+    StreamAPIException = _stream_api_exception()
     client = _stream_client()
     admin_id = _admin_user_id()
 
-    # Ensure the admin Stream user exists.
-    client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
-
+    # Local JWT — never fails due to Stream API.
     token = client.create_token(admin_id)
+
+    # Best-effort upsert so the admin's Stream profile is current.
+    try:
+        client.upsert_user({"id": admin_id, "role": "admin", "name": "Spree Support"})
+    except StreamAPIException as exc:
+        logger.warning(
+            "chat_admin_token: upsert_user failed: Stream code=%s %r",
+            exc.error_code, exc.error_message,
+        )
+    except Exception as exc:
+        logger.warning("chat_admin_token: upsert_user unexpected error: %s", exc)
+
     return {
         "token": token,
         "userId": admin_id,

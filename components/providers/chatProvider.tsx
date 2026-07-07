@@ -78,25 +78,39 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setErrorMsg(null);
 
     (async () => {
-      const result = await fetchChatToken(15_000);
-      if (cancelled) return;
+      // Bounded retry with exponential backoff on server errors (e.g. 503 during cold start).
+      // Max 2 auto-retries (3 total attempts), 1 s then 2 s gaps.
+      // Timeout and network errors are not retried automatically — show the error immediately.
+      let tokenResult: Awaited<ReturnType<typeof fetchChatToken>> | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          const backoffMs = 1000 * attempt; // 1 s, 2 s
+          await new Promise<void>(resolve => setTimeout(resolve, backoffMs));
+          if (cancelled) return;
+        }
+        tokenResult = await fetchChatToken(15_000);
+        if (cancelled) return;
+        if (tokenResult.ok) break;
+        // Only retry on transient server errors, not timeouts or network failures.
+        if (tokenResult.reason !== "server_error") break;
+      }
 
-      if (!result.ok) {
-        setConnectStatus(result.reason === "timeout" ? "timeout" : "error");
-        setErrorMsg(result.message);
+      if (!tokenResult || !tokenResult.ok) {
+        setConnectStatus(tokenResult?.reason === "timeout" ? "timeout" : "error");
+        setErrorMsg(tokenResult?.message ?? "Unable to reach support chat.");
         return;
       }
 
       try {
         if (!_sharedClient) {
-          _sharedClient = StreamChat.getInstance(result.apiKey);
+          _sharedClient = StreamChat.getInstance(tokenResult.apiKey);
         }
         if (!_sharedClient.userID) {
-          await _sharedClient.connectUser({ id: result.userId }, result.token);
+          await _sharedClient.connectUser({ id: tokenResult.userId }, tokenResult.token);
         }
         if (cancelled) return;
 
-        const ch = _sharedClient.channel("support", result.channelId);
+        const ch = _sharedClient.channel("support", tokenResult.channelId);
         await ch.watch();
         if (cancelled) return;
 

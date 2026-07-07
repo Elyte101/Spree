@@ -36,11 +36,59 @@ def _check_stream_config() -> None:
         )
 
 
+def _ensure_stream_channel_type() -> None:
+    """Idempotently create the 'support' Stream channel type if it doesn't exist.
+
+    Called at startup so the first deploy auto-provisions the channel type
+    without needing a manual script run. Logs a critical warning (not a crash)
+    if creation fails, so the rest of the app still starts.
+    """
+    api_key = getattr(settings, "stream_api_key", "") or ""
+    api_secret = getattr(settings, "stream_api_secret", "") or ""
+    if not api_key or not api_secret:
+        return  # Stream not configured — skip silently in dev
+
+    try:
+        from stream_chat import StreamChat  # type: ignore[import-untyped]
+        from stream_chat.base.exceptions import StreamAPIException  # type: ignore[import-untyped]
+
+        client = StreamChat(api_key=api_key, api_secret=api_secret)
+
+        try:
+            resp = client.get_channel_type("support")
+            if resp.get("name"):
+                return  # already exists
+        except StreamAPIException:
+            pass  # not found or other error — fall through to create
+
+        client.create_channel_type({
+            "name": "support",
+            "typing_events": True,
+            "read_events": True,
+            "connect_events": True,
+            "reactions": True,
+            "replies": False,
+            "mutes": False,
+            "message_retention": "infinite",
+            "max_message_length": 5000,
+            "automod": "disabled",
+        })
+        _startup_log.info("STREAM SETUP: created 'support' channel type.")
+
+    except Exception as exc:
+        _startup_log.critical(
+            "STREAM SETUP: could not ensure 'support' channel type exists: %s — "
+            "run backend/scripts/setup_stream.py manually, then redeploy.",
+            exc,
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     initialize_database()
     _check_payment_config()
     _check_stream_config()
+    _ensure_stream_channel_type()
     yield
 
 
