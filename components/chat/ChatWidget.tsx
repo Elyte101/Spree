@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import {
   Badge,
   Box,
@@ -27,135 +28,37 @@ import {
   Window,
 } from "stream-chat-react";
 import "stream-chat-react/dist/css/index.css";
-import { StreamChat, type Channel as StreamChannel } from "stream-chat";
 
-import { fetchChatToken } from "@/lib/chat";
-
-type ConnectStatus = "idle" | "connecting" | "connected" | "error" | "timeout";
-
-// Singleton client so we don't recreate it on every render
-let _client: StreamChat | null = null;
+import { useChatConnection } from "@/components/providers/chatProvider";
 
 export function ChatWidget() {
   const { status: sessionStatus, data: session } = useSession();
+  const { client, channel, connectStatus, errorMsg, unreadCount, markRead, retry } = useChatConnection();
+  const pathname = usePathname();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
   const [open, setOpen] = React.useState(false);
-  const [connectStatus, setConnectStatus] = React.useState<ConnectStatus>("idle");
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
-  const [client, setClient] = React.useState<StreamChat | null>(null);
-  const [channel, setChannel] = React.useState<StreamChannel | null>(null);
-  const [unreadCount, setUnreadCount] = React.useState(0);
-  // Incrementing this triggers a fresh connection attempt (used by retry).
-  const [retryCount, setRetryCount] = React.useState(0);
 
-  const currentUserId = session?.user?.id ?? null;
-  const isAuthenticated = sessionStatus === "authenticated";
-
-  // M1: disconnect and reset the Stream singleton on logout or user switch so
-  // the next session always starts with a clean connection for the new user.
-  const prevUserIdRef = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    const prevId = prevUserIdRef.current;
-    prevUserIdRef.current = currentUserId;
-
-    if (prevId && prevId !== currentUserId && _client) {
-      void _client.disconnectUser().then(() => {
-        _client = null;
-      });
-      setClient(null);
-      setChannel(null);
-      setConnectStatus("idle");
-      setErrorMsg(null);
-      setUnreadCount(0);
-      setOpen(false);
-    }
-  }, [currentUserId]);
-
-  // Connect when the drawer opens, or when the user explicitly retries.
-  //
-  // IMPORTANT: connectStatus is intentionally NOT in the dependency array.
-  // Including it would cause the effect cleanup to fire when setConnectStatus
-  // is called, which sets cancelled=true and aborts every in-flight connection.
-  React.useEffect(() => {
-    if (!open || !isAuthenticated) return;
-    if (connectStatus === "connected") return; // already established — don't reconnect
-
-    let cancelled = false;
-    setConnectStatus("connecting");
-    setErrorMsg(null);
-
-    async function connect() {
-      const result = await fetchChatToken(15_000);
-      if (cancelled) return;
-
-      if (!result.ok) {
-        setConnectStatus(result.reason === "timeout" ? "timeout" : "error");
-        setErrorMsg(result.message);
-        return;
-      }
-
-      try {
-        if (!_client) {
-          _client = StreamChat.getInstance(result.apiKey);
-        }
-        if (!_client.userID) {
-          await _client.connectUser({ id: result.userId }, result.token);
-        }
-        if (cancelled) return;
-
-        const ch = _client.channel("support", result.channelId);
-        await ch.watch();
-        if (cancelled) return;
-
-        setClient(_client);
-        setChannel(ch);
-        setConnectStatus("connected");
-
-        const updateUnread = () => {
-          setUnreadCount(ch.countUnread());
-        };
-        updateUnread();
-        _client.on("message.new", updateUnread);
-        _client.on("notification.message_new", updateUnread);
-        _client.on("message.read", updateUnread);
-      } catch {
-        if (!cancelled) {
-          setConnectStatus("error");
-          setErrorMsg("Unable to connect to support chat. Please try again.");
-        }
-      }
-    }
-
-    void connect();
-
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isAuthenticated, retryCount]); // connectStatus excluded — see comment above
+  // CH9: admins use the full admin chat page — no FAB for them
+  const isAdmin = session?.user?.role === "admin";
+  // CH10: suppress the FAB when a full-page chat is already on screen
+  const isChatPage = pathname === "/chat" || pathname === "/dashboard/chat";
 
   // Clear unread when drawer opens
   React.useEffect(() => {
-    if (open && channel) {
-      void channel.markRead();
-      setUnreadCount(0);
-    }
-  }, [open, channel]);
+    if (open && channel) markRead();
+  }, [open, channel, markRead]);
 
-  // Listen for navbar chat icon click
+  // Support programmatic open (e.g. from nav bar toggle)
   React.useEffect(() => {
     const handler = () => setOpen(true);
     window.addEventListener("spree:open-chat", handler);
     return () => window.removeEventListener("spree:open-chat", handler);
   }, []);
 
-  const handleRetry = React.useCallback(() => {
-    setRetryCount((c) => c + 1);
-  }, []);
-
-  if (sessionStatus !== "authenticated") return null;
+  // CH9: hide for admins; CH10: hide on full-page chat routes
+  if (sessionStatus !== "authenticated" || isAdmin || isChatPage) return null;
 
   // Stream CSS variable overrides to match Spree's palette
   const streamCssVars: React.CSSProperties = {
@@ -291,7 +194,7 @@ export function ChatWidget() {
                 variant="outlined"
                 size="small"
                 startIcon={<RefreshRounded />}
-                onClick={handleRetry}
+                onClick={retry}
                 sx={{ borderColor: "#655AFF", color: "#655AFF" }}
               >
                 Try again

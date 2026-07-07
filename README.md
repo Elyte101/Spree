@@ -123,6 +123,43 @@ Notes:
 - `CORS_ORIGINS` accepts either a JSON array or a comma-separated list.
 - `/healthz` is a lightweight uptime probe; `/readyz` verifies database connectivity.
 
+## Chat setup
+
+Spree uses [Stream Chat](https://getstream.io/chat/) for buyer–support conversations and an Anthropic Claude Haiku auto-reply bot.
+
+### 1. Create a Stream app
+
+1. Sign up at [dashboard.getstream.io](https://dashboard.getstream.io).
+2. Create a new app. Note the **API Key** and **API Secret**.
+3. Under **Chat** → **Channel Types**, create a channel type named **`support`**.
+4. Under **Webhooks**, add a webhook pointing to `https://your-backend-domain/webhooks/stream`.
+   Copy the **Signing Secret** shown in the dashboard.
+
+### 2. Set environment variables
+
+**Frontend (`.env.local`):**
+
+```text
+NEXT_PUBLIC_STREAM_API_KEY=<your stream api key>
+```
+
+**Backend (`backend/.env`):**
+
+```text
+STREAM_API_KEY=<your stream api key>
+STREAM_API_SECRET=<your stream api secret>
+STREAM_ADMIN_USER_ID=spree-admin          # shared admin identity
+STREAM_WEBHOOK_SECRET=<signing secret from dashboard>
+ANTHROPIC_API_KEY=sk-ant-...              # for auto-reply bot
+```
+
+### 3. How it works
+
+- Each buyer gets a personal `support-{userId}` channel shared with `spree-admin`.
+- The `ChatWidget` FAB connects eagerly on login so the unread badge updates in real time.
+- Admins access all conversations at `/dashboard/chat`.
+- When a buyer sends a message, the webhook fires, Claude Haiku generates a reply (rate-limited to 1 per 20 s per channel, 20 per hour), and an in-app + email notification is sent to the buyer.
+
 ## Local Infrastructure
 
 ```bash

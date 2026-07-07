@@ -8,6 +8,7 @@ import { StoreAppBar } from "@/components/navigation/storeAppBar";
 import { ChatWidget } from "@/components/chat/ChatWidget";
 import { AuthProvider } from "@/components/providers/authProvider";
 import { CartProvider } from "@/components/providers/cartProvider";
+import { ChatProvider } from "@/components/providers/chatProvider";
 import { FavoritesProvider } from "@/components/providers/favoritesProvider";
 import { QueryProvider } from "@/components/providers/queryProvider";
 import ThemeRegistry from "@/components/providers/themeRegistry";
@@ -67,12 +68,14 @@ export default function RootLayout({
             <QueryProvider>
               <FavoritesProvider>
                 <CartProvider>
-                  <StoreAppBar />
-                  <Analytics />
-                  <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
-                    {children}
-                  </main>
-                  <ChatWidget />
+                  <ChatProvider>
+                    <StoreAppBar />
+                    <Analytics />
+                    <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
+                      {children}
+                    </main>
+                    <ChatWidget />
+                  </ChatProvider>
                 </CartProvider>
               </FavoritesProvider>
             </QueryProvider>

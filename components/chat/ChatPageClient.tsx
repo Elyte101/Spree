@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from "react";
-import { useSession } from "next-auth/react";
 import {
   Box,
   Button,
@@ -19,61 +18,17 @@ import {
   Window,
 } from "stream-chat-react";
 import "stream-chat-react/dist/css/index.css";
-import { StreamChat, type Channel as StreamChannel } from "stream-chat";
 import { ChatBubbleRounded, RefreshRounded } from "@mui/icons-material";
 
-import { fetchChatToken } from "@/lib/chat";
+import { useChatConnection } from "@/components/providers/chatProvider";
 
 export function ChatPageClient() {
-  const { status } = useSession();
+  const { client, channel, connectStatus, errorMsg, retry } = useChatConnection();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
 
-  const [client, setClient] = React.useState<StreamChat | null>(null);
-  const [channel, setChannel] = React.useState<StreamChannel | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [retryCount, setRetryCount] = React.useState(0);
-
-  React.useEffect(() => {
-    if (status !== "authenticated") return;
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    async function connect() {
-      try {
-        const result = await fetchChatToken(15_000);
-        if (cancelled) return;
-
-        if (!result.ok) {
-          setError(result.message);
-          return;
-        }
-
-        const sc = StreamChat.getInstance(result.apiKey);
-        if (!sc.userID) {
-          await sc.connectUser({ id: result.userId }, result.token);
-        }
-        if (cancelled) return;
-
-        const ch = sc.channel("support", result.channelId);
-        await ch.watch();
-        if (cancelled) return;
-
-        setClient(sc);
-        setChannel(ch);
-      } catch {
-        if (!cancelled) setError("Unable to connect to chat. Please try again.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void connect();
-    return () => { cancelled = true; };
-  }, [status, retryCount]);
+  const loading = connectStatus === "idle" || connectStatus === "connecting";
+  const hasError = connectStatus === "error" || connectStatus === "timeout";
 
   const streamCssVars: React.CSSProperties = {
     "--str-chat__primary-color": "#655AFF",
@@ -117,16 +72,16 @@ export function ChatPageClient() {
             <CircularProgress />
             <Typography variant="body2" color="text.secondary">Connecting to support…</Typography>
           </Stack>
-        ) : error ? (
+        ) : hasError ? (
           <Stack alignItems="center" justifyContent="center" height="100%" spacing={2} p={3}>
             <Typography variant="body2" color="text.secondary" textAlign="center">
-              {error}
+              {errorMsg}
             </Typography>
             <Button
               variant="outlined"
               size="small"
               startIcon={<RefreshRounded />}
-              onClick={() => setRetryCount((c) => c + 1)}
+              onClick={retry}
               sx={{ borderColor: "#655AFF", color: "#655AFF" }}
             >
               Try again

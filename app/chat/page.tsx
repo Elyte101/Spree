@@ -8,7 +8,7 @@ export const metadata = {
 
 export default async function ChatPage() {
   const session = await auth();
-  if (!session?.user?.id) redirect("/login?next=/chat");
+  if (!session?.user?.id) redirect("/auth/sign-in?callbackUrl=/chat");
   if (session.user.role === "admin") redirect("/dashboard/chat");
   return <ChatPageClient />;
 }

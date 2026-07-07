@@ -48,6 +48,8 @@ DEFAULT_PREFS: dict[str, dict[str, bool]] = {
     "payout_failed":            {"in_app": True,  "email": True,  "push": True},
     # ── Stock alerts (vendor) ─────────────────────────────────────────────────
     "low_stock":                {"in_app": True,  "email": True,  "push": False},
+    # ── Support chat ──────────────────────────────────────────────────────────
+    "chat_reply":               {"in_app": True,  "email": True,  "push": True},
 }
 
 # Events that cannot be disabled by the user

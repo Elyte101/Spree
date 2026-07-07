@@ -16,22 +16,26 @@ POST /chat/admin-token     Returns a Stream Chat token for the admin user.
 POST /webhooks/stream      Public endpoint — called by Stream when a message
                            is sent.  Verified with HMAC-SHA256 signature.
                            If the sender is not the admin and no admin replied
-                           in the last 60 s, Claude posts an AI reply.
+                           in the last 60 s, Claude posts an AI reply inline.
 """
 from __future__ import annotations
 
 import datetime
 import hashlib
 import hmac
+import json
 import logging
 import time
-from typing import Annotated
+from collections import deque
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
+from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey, _check_rate_limit
 from app.core.config import settings
-from app.db.models import User
+from app.db.models import Order, User
+from app.services.notifications import notify_safe
 
 logger = logging.getLogger(__name__)
 
@@ -147,21 +151,20 @@ def chat_admin_token(_: InternalAPIKey, actor_role: ActorRole):
 # POST /webhooks/stream  (mounted on webhook_router — no internal key required)
 # ---------------------------------------------------------------------------
 
-# M3: Track recently processed message IDs in-process to deduplicate retried webhooks.
+# CH12: deque(maxlen=1000) auto-trims oldest entry when full — no manual clear() needed.
 # Best-effort only — cleared on cold starts — but prevents double-posts on warm retries.
-_processed_message_ids: set[str] = set()
+_processed_message_ids: deque[str] = deque(maxlen=1000)
 
 
 def _post_ai_reply(
+    db: Session,
     message_id: str,
     message_text: str,
     sender_id: str,
     channel_id: str,
     channel_type: str,
 ) -> None:
-    """Send a Claude AI reply to the channel. Runs as a background task."""
-    import json as _json  # noqa: F401 (unused here but kept for symmetry)
-
+    """Send a Claude AI reply to the channel. Called inline before the webhook returns."""
     admin_id = _admin_user_id()
     anthropic_key = getattr(settings, "anthropic_api_key", "") or ""
     if not anthropic_key:
@@ -212,6 +215,7 @@ def _post_ai_reply(
         user_id_from_channel = (
             channel_id.replace("support-", "", 1) if channel_id.startswith("support-") else sender_id
         )
+
         system_prompt = (
             "You are Spree Support, the helpful assistant for Spree — a Ghanaian online marketplace. "
             "You help buyers and sellers with orders, payments, delivery, and account issues. "
@@ -220,6 +224,26 @@ def _post_ai_reply(
             "for their Order ID and tell them a human agent will follow up. "
             f"Current user ID: {user_id_from_channel}."
         )
+
+        # CH13: append recent orders to system prompt so the bot can reference order details.
+        try:
+            recent_orders = db.scalars(
+                select(Order)
+                .where(Order.user_id == user_id_from_channel)
+                .order_by(Order.created_at.desc())
+                .limit(5)
+            ).all()
+            if recent_orders:
+                order_lines = []
+                for o in recent_orders:
+                    shipped = f", shipped {o.shipped_at.date()}" if o.shipped_at else ""
+                    eta = f", ETA {o.estimated_delivery_date.date()}" if o.estimated_delivery_date else ""
+                    order_lines.append(
+                        f"- Order #{o.id[:8]} ({o.status}) {o.currency} {float(o.total):.2f}{shipped}{eta}"
+                    )
+                system_prompt += "\n\nUser's recent orders:\n" + "\n".join(order_lines)
+        except Exception as exc:
+            logger.warning("_post_ai_reply: could not fetch orders for context: %s", exc)
 
         import anthropic
         ai_client = anthropic.Anthropic(api_key=anthropic_key)
@@ -237,16 +261,36 @@ def _post_ai_reply(
             bot_channel.send_message({"text": reply_text}, "spree-support")
             logger.info("_post_ai_reply: AI reply posted to channel=%s", channel_id)
 
+            # CH5: in-app + email notification so the user knows they got a reply.
+            try:
+                user_obj = db.get(User, user_id_from_channel)
+                notify_safe(
+                    db,
+                    event_type="chat_reply",
+                    recipient_id=user_id_from_channel,
+                    title="New message from Spree Support",
+                    body=reply_text[:200],
+                    notif_type="account",
+                    href="/chat",
+                    email_subject="You have a new message from Spree Support",
+                    cta_label="View message",
+                    cta_url=f"{settings.frontend_url}/chat",
+                    recipient_email=user_obj.email if user_obj else None,
+                )
+            except Exception as exc:
+                logger.warning("_post_ai_reply: notify_safe failed: %s", exc)
+
     except Exception as exc:
         logger.error("_post_ai_reply: failed for channel=%s: %s", channel_id, exc)
 
 
 @webhook_router.post("/webhooks/stream")
-async def stream_webhook(request: Request, background_tasks: BackgroundTasks):
+async def stream_webhook(request: Request, db: DBSession):
     """
     Stream Chat webhook.  Called for every new message.
     Verified with HMAC-SHA256 (Stream signs with STREAM_WEBHOOK_SECRET).
-    Returns 200 immediately; Claude AI reply is posted in a background task.
+    Claude AI reply is posted inline before returning so Vercel serverless
+    does not kill the process between the response and a background task.
     """
     webhook_secret = getattr(settings, "stream_webhook_secret", "") or ""
 
@@ -272,9 +316,8 @@ async def stream_webhook(request: Request, background_tasks: BackgroundTasks):
             logger.warning("stream_webhook: invalid signature")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid signature")
 
-    import json as _json
     try:
-        payload = _json.loads(body)
+        payload = json.loads(body)
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON")
 
@@ -302,46 +345,43 @@ async def stream_webhook(request: Request, background_tasks: BackgroundTasks):
     if sender_id in (admin_id, "spree-support"):
         return {"ok": True}
 
-    # M3: deduplicate retried webhooks by message_id (best-effort, in-process).
+    # CH4: only process messages in support channels — ignore DMs, team channels, etc.
+    if channel_type != "support" or not channel_id.startswith("support-"):
+        return {"ok": True}
+
+    # CH12: deduplicate retried webhooks by message_id (best-effort, in-process).
     if message_id and message_id in _processed_message_ids:
         logger.info("stream_webhook: duplicate message_id=%s, skipping", message_id)
         return {"ok": True}
     if message_id:
-        _processed_message_ids.add(message_id)
-        # Bound the set size to avoid unbounded growth on long-lived processes.
-        if len(_processed_message_ids) > 1000:
-            _processed_message_ids.clear()
+        _processed_message_ids.append(message_id)
 
-    # --- Dev notification on first message (quick channel query) ----------
+    # CH5: notify the admin team that the user sent a message (every message, not just first).
+    # CH11: first-message Stream query removed — dev_notifier now fires unconditionally.
     try:
-        client = _stream_client()
-        ch = client.channel(channel_type, channel_id)
-        state = ch.query({"messages": {"limit": 2}})
-        if len(state.get("messages", [])) <= 1:
-            try:
-                from app.services import dev_notifier
-                dev_notifier.alert(
-                    "new_support_chat",
-                    f"New support channel opened by user {sender_id}",
-                    {
-                        "user_id": sender_id,
-                        "channel_id": channel_id,
-                        "first_message": message_text[:200],
-                    },
-                )
-            except Exception as exc:
-                logger.warning("stream_webhook: dev_notifier failed: %s", exc)
+        from app.services import dev_notifier
+        dev_notifier.alert(
+            "new_support_chat_message",
+            f"User {sender_id} sent a support message",
+            {
+                "user_id": sender_id,
+                "channel_id": channel_id,
+                "message": message_text[:200],
+            },
+        )
     except Exception as exc:
-        logger.warning("stream_webhook: first-message check failed: %s", exc)
+        logger.warning("stream_webhook: dev_notifier failed: %s", exc)
 
-    # M3: schedule AI reply as background task — return 200 immediately.
-    background_tasks.add_task(
-        _post_ai_reply,
-        message_id,
-        message_text,
-        sender_id,
-        channel_id,
-        channel_type,
-    )
+    # CH7: DB-backed rate limit — prevents AI spam when a user sends many messages quickly.
+    # Limits: 1 AI reply per channel per 20 s; 20 per channel per hour.
+    try:
+        _check_rate_limit(db, f"ai_chat:{channel_id}", max_calls=1, window_seconds=20)
+        _check_rate_limit(db, f"ai_chat_hr:{channel_id}", max_calls=20, window_seconds=3600)
+    except HTTPException:
+        logger.info("stream_webhook: AI rate limit hit for channel=%s, skipping AI reply", channel_id)
+        return {"ok": True}
+
+    # CH3: AI reply inline — Vercel kills background tasks after the response is sent.
+    _post_ai_reply(db, message_id, message_text, sender_id, channel_id, channel_type)
 
     return {"ok": True}
