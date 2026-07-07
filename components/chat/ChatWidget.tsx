@@ -22,7 +22,7 @@ import { ChatBubbleRounded, CloseRounded, RefreshRounded } from "@mui/icons-mate
 import {
   Chat,
   Channel,
-  MessageComposerUI,
+  MessageComposer,
   MessageList,
   Thread,
   Window,
@@ -208,7 +208,7 @@ export function ChatWidget() {
               <Channel channel={channel}>
                 <Window>
                   <MessageList />
-                  <MessageComposerUI />
+                  <MessageComposer audioRecordingEnabled={false} />
                 </Window>
                 <Thread />
               </Channel>

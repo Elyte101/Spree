@@ -20,7 +20,7 @@ import {
   Channel,
   ChannelHeader,
   ChannelList,
-  MessageComposerUI,
+  MessageComposer,
   MessageList,
   Thread,
   Window,
@@ -280,7 +280,7 @@ export function AdminChatPage() {
                 <Window>
                   <ChannelHeader />
                   <MessageList />
-                  <MessageComposerUI />
+                  <MessageComposer audioRecordingEnabled={false} />
                 </Window>
                 <Thread />
               </Channel>

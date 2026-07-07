@@ -12,7 +12,7 @@ import {
 import {
   Chat,
   Channel,
-  MessageComposerUI,
+  MessageComposer,
   MessageList,
   Thread,
   Window,
@@ -92,7 +92,7 @@ export function ChatPageClient() {
             <Channel channel={channel}>
               <Window>
                 <MessageList />
-                <MessageComposerUI />
+                <MessageComposer audioRecordingEnabled={false} />
               </Window>
               <Thread />
             </Channel>

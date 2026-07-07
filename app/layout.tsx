@@ -6,6 +6,7 @@ import "./globals.css";
 
 import { StoreAppBar } from "@/components/navigation/storeAppBar";
 import { ChatWidget } from "@/components/chat/ChatWidget";
+import { ChatErrorBoundary } from "@/components/chat/ChatErrorBoundary";
 import { AuthProvider } from "@/components/providers/authProvider";
 import { CartProvider } from "@/components/providers/cartProvider";
 import { ChatProvider } from "@/components/providers/chatProvider";
@@ -74,7 +75,7 @@ export default function RootLayout({
                     <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
                       {children}
                     </main>
-                    <ChatWidget />
+                    <ChatErrorBoundary><ChatWidget /></ChatErrorBoundary>
                   </ChatProvider>
                 </CartProvider>
               </FavoritesProvider>
