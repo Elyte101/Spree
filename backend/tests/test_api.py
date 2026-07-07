@@ -612,6 +612,94 @@ def test_admin_create_order_recomputes_totals_and_writes_ledger():
             )
 
 
+def test_add_business_days_skips_weekends():
+    """Business-day helper must not count Sat/Sun toward the delivery window."""
+    from datetime import timezone
+    from app.services.orders import _add_business_days
+
+    # Friday 2026-01-02 + 2 bd → should land on Tuesday 2026-01-06 (skips Sat+Sun).
+    friday = datetime(2026, 1, 2, 12, 0, 0, tzinfo=timezone.utc)  # Friday
+    result = _add_business_days(friday, 2)
+    assert result.weekday() == 1, f"Expected Tuesday (1), got weekday {result.weekday()}"
+    assert result.date() == datetime(2026, 1, 6).date(), f"Expected 2026-01-06, got {result.date()}"
+
+
+def test_add_business_days_same_week():
+    """Mid-week advance with no weekend boundary."""
+    from datetime import timezone
+    from app.services.orders import _add_business_days
+
+    # Monday 2026-01-05 + 3 bd → Thursday 2026-01-08.
+    monday = datetime(2026, 1, 5, 8, 0, 0, tzinfo=timezone.utc)
+    result = _add_business_days(monday, 3)
+    assert result.date() == datetime(2026, 1, 8).date(), f"Expected 2026-01-08, got {result.date()}"
+
+
+def test_add_business_days_spanning_full_weekend_plus():
+    """5 business days from Wednesday should skip one full weekend."""
+    from datetime import timezone
+    from app.services.orders import _add_business_days
+
+    # Wednesday 2026-01-07 + 5 bd → Wednesday 2026-01-14 (skips Sat 10 + Sun 11).
+    wednesday = datetime(2026, 1, 7, 0, 0, 0, tzinfo=timezone.utc)
+    result = _add_business_days(wednesday, 5)
+    assert result.date() == datetime(2026, 1, 14).date(), f"Expected 2026-01-14, got {result.date()}"
+
+
+def test_charge_momo_order_gets_estimated_delivery_date():
+    """MoMo order created via PAYMENTS_MOCK must have a non-null estimatedDeliveryDate."""
+    from app.core.config import settings as svc_settings
+    from app.db.session import SessionLocal
+    from app.db.models import Order
+
+    with TestClient(app) as client:
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+        )
+        assert prod_resp.status_code == 201, prod_resp.text
+        product_id = prod_resp.json()["id"]
+        price = float(prod_resp.json()["price"])
+
+        original_mock = svc_settings.payments_mock
+        svc_settings.payments_mock = True
+        try:
+            charge_resp = client.post(
+                "/api/v1/orders/charge-momo",
+                json=_momo_payload(product_id, price),
+                headers=INTERNAL_HEADERS,
+            )
+        finally:
+            svc_settings.payments_mock = original_mock
+
+        assert charge_resp.status_code == 201, charge_resp.text
+        order_id = charge_resp.json()["orderId"]
+
+        # Submit mock OTP to trigger _mark_order_paid
+        svc_settings.payments_mock = True
+        reference = charge_resp.json()["reference"]
+        try:
+            otp_resp = client.post(
+                "/api/v1/orders/submit-otp",
+                json={"otp": "123456", "reference": reference},
+                headers=INTERNAL_HEADERS,
+            )
+        finally:
+            svc_settings.payments_mock = original_mock
+        assert otp_resp.status_code == 200, otp_resp.text
+
+    with SessionLocal() as db:
+        order = db.get(Order, order_id)
+        assert order is not None
+        assert order.estimated_delivery_date is not None, (
+            "estimatedDeliveryDate must be set after payment"
+        )
+        assert order.estimated_delivery_days == 5, (
+            f"standard method → 5 business days, got {order.estimated_delivery_days}"
+        )
+
+
 def _momo_payload(product_id: str, price: float) -> dict:
     return {
         "fullName": "Kofi Buyer",

@@ -19,6 +19,39 @@ from app.services.notifications import create_notification, notify_safe
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Delivery-window configuration (business days)
+# ---------------------------------------------------------------------------
+# Upper bound of the checkout-UI range used as the conservative estimate.
+# standard: 3–5 bd → 5;  express: 2 bd → 2.  Unknown methods fall back to 5.
+DELIVERY_DAYS: dict[str, int] = {
+    "standard": 5,
+    "express": 2,
+}
+_DELIVERY_DAYS_DEFAULT = 5
+
+
+def _add_business_days(start: datetime, days: int) -> datetime:
+    """Advance *start* by *days* business days (Mon–Fri; no holiday calendar)."""
+    current = start
+    remaining = days
+    while remaining > 0:
+        current += timedelta(days=1)
+        if current.weekday() < 5:  # 0=Mon … 4=Fri
+            remaining -= 1
+    return current
+
+
+def _delivery_days_for_method(shipping_method: str) -> int:
+    bd = DELIVERY_DAYS.get(shipping_method)
+    if bd is None:
+        logger.warning(
+            "Unknown shippingMethod %r — using default %d business days for ETA",
+            shipping_method, _DELIVERY_DAYS_DEFAULT,
+        )
+        return _DELIVERY_DAYS_DEFAULT
+    return bd
+
 
 
 def _server_totals(
@@ -497,6 +530,12 @@ def _mark_order_paid(db: Session, order: Order, tx_id: str = "") -> None:
     order.paid_at = now
     if tx_id:
         order.paystack_tx_id = tx_id
+
+    # Set initial delivery estimate from payment confirmation date.
+    # Refined again at ship time (add_tracking) once the parcel is dispatched.
+    bd = _delivery_days_for_method(order.shipping_method or "standard")
+    order.estimated_delivery_days = bd
+    order.estimated_delivery_date = _add_business_days(now, bd)
 
     _decrement_stock(db, order)
 
@@ -1203,9 +1242,14 @@ def add_tracking(
     order.status = "in_transit"
     order.shipped_at = now
 
+    # Refine ETA from ship timestamp.  Seller's own days take precedence;
+    # fall back to the method-based window if not provided.
     if payload.estimatedDeliveryDays and payload.estimatedDeliveryDays > 0:
-        order.estimated_delivery_days = payload.estimatedDeliveryDays
-        order.estimated_delivery_date = now + timedelta(days=payload.estimatedDeliveryDays)
+        bd = payload.estimatedDeliveryDays
+    else:
+        bd = _delivery_days_for_method(order.shipping_method or "standard")
+    order.estimated_delivery_days = bd
+    order.estimated_delivery_date = _add_business_days(now, bd)
 
     db.commit()
     db.refresh(order)
