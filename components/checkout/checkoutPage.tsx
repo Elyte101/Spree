@@ -107,6 +107,32 @@ declare global {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Paystack MoMo status taxonomy
+// Statuses that mean "keep polling / still in progress"
+const MOMO_IN_PROGRESS_STATUSES = new Set([
+  "pay_offline", "send_ussd", "open_url",
+  "pending", "ongoing", "processing",
+  // Paystack may request additional input we don't specifically handle;
+  // show display_text and poll rather than treating as failure.
+  "send_pin", "send_phone", "send_birthday",
+]);
+const MOMO_TERMINAL_FAILURE_STATUSES = new Set(["failed", "abandoned", "reversed", "declined"]);
+
+type MomoStatusKind = "otp" | "in_progress" | "success" | "failure" | "unknown";
+
+function classifyMomoStatus(status: string): MomoStatusKind {
+  if (status === "success") return "success";
+  if (status === "send_otp") return "otp";
+  if (MOMO_IN_PROGRESS_STATUSES.has(status)) return "in_progress";
+  if (MOMO_TERMINAL_FAILURE_STATUSES.has(status)) return "failure";
+  return "unknown"; // fail-safe: log and treat as in_progress
+}
+
+const POLL_INTERVAL_MS = 4000;
+const POLL_MAX_MS = 3 * 60 * 1000; // 3 minutes
+// ---------------------------------------------------------------------------
+
 function loadPaystackJS(): Promise<void> {
   return new Promise((resolve, reject) => {
     if (typeof window !== "undefined" && window.PaystackPop) {
@@ -149,6 +175,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
   // Holds reference + orderId across async steps
   const pendingPaymentRef = React.useRef<{ reference: string; orderId: string } | null>(null);
   const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stable idempotency key for this checkout session — prevents duplicate orders on retries.
   const idempotencyKeyRef = React.useRef<string>(crypto.randomUUID());
 
@@ -174,6 +201,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
   React.useEffect(() => {
     return () => {
       if (pollingRef.current) clearInterval(pollingRef.current);
+      if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);
     };
   }, []);
 
@@ -252,10 +280,8 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
   });
 
   const stopPolling = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
+    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    if (pollingTimeoutRef.current) { clearTimeout(pollingTimeoutRef.current); pollingTimeoutRef.current = null; }
   };
 
   const verifyAndComplete = React.useCallback(async (reference: string, orderId: string) => {
@@ -282,27 +308,61 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
 
   const startPolling = React.useCallback((reference: string, orderId: string) => {
     setStage("polling");
+
     pollingRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/orders/check-charge?reference=${encodeURIComponent(reference)}`);
-        if (!res.ok) return;
-        const data = await res.json() as { status: string; message?: string; gateway_response?: string };
-        if (data.status === "success") {
+        if (!res.ok) return; // network hiccup — keep polling
+        const data = await res.json() as {
+          status: string;
+          message?: string;
+          gateway_response?: string;
+          displayText?: string;
+        };
+        const kind = classifyMomoStatus(data.status);
+        if (kind === "success") {
           stopPolling();
           await verifyAndComplete(reference, orderId);
-        } else if (data.status === "failed" || data.status === "abandoned") {
+        } else if (kind === "failure") {
           stopPolling();
           const errMsg = data.message || data.gateway_response || "Payment was declined. Please try a different number or provider.";
           setSubmitError(errMsg);
           showToast({ message: errMsg, type: "error" });
           setSubmitting(false);
           setStage("idle");
+        } else {
+          // in_progress or unknown — keep polling
+          if (kind === "unknown") {
+            console.warn("[Spree] Unexpected poll status:", data.status, "— still polling");
+          }
+          if (data.displayText) setMomoPrompt(data.displayText);
         }
       } catch {
         // Network error during poll — keep trying
       }
-    }, 3000);
-  }, [verifyAndComplete, showToast]);
+    }, POLL_INTERVAL_MS);
+
+    // Bounded timeout: do a final verify then give up rather than polling forever.
+    pollingTimeoutRef.current = setTimeout(async () => {
+      stopPolling();
+      try {
+        const res = await fetch(`/api/orders/verify-payment?reference=${encodeURIComponent(reference)}`);
+        if (res.ok) {
+          showToast({ message: "Payment confirmed! Redirecting…", type: "success" });
+          clearCart();
+          window.location.href = `/checkout/success?orderId=${orderId}`;
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      const timeoutMsg = "We haven't received payment confirmation yet. Check your phone or contact support if you approved the payment.";
+      setSubmitError(timeoutMsg);
+      showToast({ message: timeoutMsg, type: "info" });
+      setSubmitting(false);
+      setStage("idle");
+    }, POLL_MAX_MS);
+  }, [verifyAndComplete, showToast, clearCart]);
 
   const handleOtpSubmit = async () => {
     const { reference, orderId } = pendingPaymentRef.current ?? {};
@@ -320,13 +380,25 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         const errMsg = data.message || data.gateway_response || data.detail || "OTP submission failed";
         throw new Error(errMsg);
       }
-      const data = await res.json() as { status: string; message?: string; gateway_response?: string };
-      if (data.status === "pending") {
+      const data = await res.json() as { status: string; message?: string; gateway_response?: string; displayText?: string };
+      const kind = classifyMomoStatus(data.status);
+      if (kind === "success") {
+        await verifyAndComplete(reference, orderId);
+      } else if (kind === "otp") {
+        // Paystack requesting another OTP round
+        setOtp("");
+        setMomoPrompt(data.displayText || "Please enter the new OTP sent to your number.");
+        setStage("otp_needed");
+        setSubmitting(false);
+      } else if (kind === "in_progress" || kind === "unknown") {
+        if (kind === "unknown") {
+          console.warn("[Spree] Unexpected OTP response status:", data.status, "— treating as in-progress");
+        }
+        if (data.displayText) setMomoPrompt(data.displayText);
         setOtp("");
         startPolling(reference, orderId);
-      } else if (data.status === "success") {
-        await verifyAndComplete(reference, orderId);
       } else {
+        // Terminal failure
         const errMsg = data.message || data.gateway_response || "OTP verification failed. Please try again.";
         throw new Error(errMsg);
       }
@@ -361,27 +433,38 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
           : (typeof rawDetail === "string" ? rawDetail : "Payment initiation failed");
         throw new Error(errMsg);
       }
-      const { orderId, reference, status, displayText } = await res.json() as {
+      const { orderId, reference, status, displayText, message, gateway_response } = await res.json() as {
         orderId: string;
         reference: string;
         status: string;
         displayText: string;
+        message?: string;
+        gateway_response?: string;
       };
       pendingPaymentRef.current = { reference, orderId };
 
-      if (status === "send_otp") {
-        setMomoPrompt(displayText);
+      const kind = classifyMomoStatus(status);
+      if (kind === "otp") {
+        setMomoPrompt(displayText || "Enter the OTP sent to your MoMo number.");
         setStage("otp_needed");
         setSubmitting(false);
-      } else if (status === "pending") {
-        startPolling(reference, orderId);
-      } else if (status === "success") {
+      } else if (kind === "success") {
         await verifyAndComplete(reference, orderId);
+      } else if (kind === "in_progress" || kind === "unknown") {
+        if (kind === "unknown") {
+          console.warn("[Spree] Unexpected charge status:", status, "— treating as in-progress");
+        }
+        setMomoPrompt(displayText || "Waiting for you to approve the payment on your phone…");
+        startPolling(reference, orderId);
       } else {
-        throw new Error(displayText || "Payment failed. Please try again.");
+        // Terminal failure
+        const errMsg = message || gateway_response || displayText || "Payment was declined. Please try a different number or provider.";
+        throw new Error(errMsg);
       }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      setSubmitError(msg);
+      showToast({ message: msg, type: "error" });
       setSubmitting(false);
       setStage("idle");
     }
@@ -937,7 +1020,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ py: 1 }}>
                           <CircularProgress size={20} />
                           <Typography variant="body2" color="text.secondary">
-                            Waiting for payment confirmation from your MoMo provider…
+                            {momoPrompt || "Waiting for payment confirmation from your MoMo provider…"}
                           </Typography>
                         </Stack>
                       </motion.div>

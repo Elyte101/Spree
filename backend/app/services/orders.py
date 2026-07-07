@@ -809,6 +809,7 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
             "reference": reference,
             "order_id": order_id,
             "paystack_status": charge_status,
+            "display_text": display_text or None,
             "gateway_response": gateway_response or None,
             "message": user_message,
         },
@@ -864,6 +865,7 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
         extra={
             "reference": reference,
             "paystack_status": charge_status,
+            "display_text": display_text or None,
             "gateway_response": gateway_response or None,
             "message": user_message,
         },
@@ -907,6 +909,7 @@ def check_momo_charge(reference: str) -> dict:
         extra={
             "reference": reference,
             "paystack_status": charge_status,
+            "display_text": display_text or None,
             "gateway_response": gateway_response or None,
             "message": user_message,
         },
