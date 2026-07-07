@@ -12,6 +12,7 @@ import { CartProvider } from "@/components/providers/cartProvider";
 import { ChatProvider } from "@/components/providers/chatProvider";
 import { FavoritesProvider } from "@/components/providers/favoritesProvider";
 import { QueryProvider } from "@/components/providers/queryProvider";
+import { ToastProvider } from "@/components/providers/toastProvider";
 import ThemeRegistry from "@/components/providers/themeRegistry";
 
 
@@ -66,6 +67,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <ThemeRegistry>
+            <ToastProvider>
             <QueryProvider>
               <FavoritesProvider>
                 <CartProvider>
@@ -80,6 +82,7 @@ export default function RootLayout({
                 </CartProvider>
               </FavoritesProvider>
             </QueryProvider>
+            </ToastProvider>
           </ThemeRegistry>
         </AuthProvider>
       </body>

@@ -20,6 +20,36 @@ from app.services.notifications import create_notification, notify_safe
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Paystack message helpers
+# ---------------------------------------------------------------------------
+
+_GATEWAY_RESPONSE_MAP: list[tuple[str, str]] = [
+    ("insufficient", "Insufficient balance in your mobile money wallet."),
+    ("declined", "The payment was declined by your provider."),
+    ("timed out", "The payment request timed out. Please try again."),
+    ("timeout", "The payment request timed out. Please try again."),
+    ("abandoned", "The payment was not completed."),
+    ("expired", "The payment session expired. Please try again."),
+]
+
+
+def _paystack_user_message(gateway_response: str, fallback: str = "") -> str:
+    """Map a Paystack gateway_response string to clear user-facing text.
+
+    Matches case-insensitively on known substrings; returns the raw
+    gateway_response for anything else so no detail is hidden from the user.
+    Falls back to *fallback* (or a generic string) when gateway_response is empty.
+    """
+    if not gateway_response:
+        return fallback or "Processing your payment."
+    lower = gateway_response.lower()
+    for keyword, message in _GATEWAY_RESPONSE_MAP:
+        if keyword in lower:
+            return message
+    return gateway_response  # pass through unknown responses verbatim
+
+
+# ---------------------------------------------------------------------------
 # Delivery-window configuration (business days)
 # ---------------------------------------------------------------------------
 # Upper bound of the checkout-UI range used as the conservative estimate.
@@ -769,12 +799,27 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     charge_status = charge_data.get("status", "")
-    display_text = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
+    gateway_response: str = charge_data.get("gateway_response") or ""
+    display_text: str = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
+    user_message = _paystack_user_message(gateway_response, display_text)
+
+    logger.info(
+        "paystack charge initiated",
+        extra={
+            "reference": reference,
+            "order_id": order_id,
+            "paystack_status": charge_status,
+            "gateway_response": gateway_response or None,
+            "message": user_message,
+        },
+    )
     return {
         "orderId": order_id,
         "reference": reference,
         "status": charge_status,
         "displayText": display_text,
+        "message": user_message,
+        "gateway_response": gateway_response,
     }
 
 
@@ -809,8 +854,26 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     charge_status = charge_data.get("status", "")
-    display_text = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
-    return {"status": charge_status, "displayText": display_text}
+    gateway_response: str = charge_data.get("gateway_response") or ""
+    display_text: str = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
+    user_message = _paystack_user_message(gateway_response, display_text)
+
+    _log = logger.warning if charge_status in ("failed", "abandoned") else logger.info
+    _log(
+        "paystack otp result",
+        extra={
+            "reference": reference,
+            "paystack_status": charge_status,
+            "gateway_response": gateway_response or None,
+            "message": user_message,
+        },
+    )
+    return {
+        "status": charge_status,
+        "displayText": display_text,
+        "message": user_message,
+        "gateway_response": gateway_response,
+    }
 
 
 def check_momo_charge(reference: str) -> dict:
@@ -834,8 +897,26 @@ def check_momo_charge(reference: str) -> dict:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     charge_status = charge_data.get("status", "")
-    display_text = charge_data.get("display_text") or charge_data.get("message") or "Checking..."
-    return {"status": charge_status, "displayText": display_text}
+    gateway_response: str = charge_data.get("gateway_response") or ""
+    display_text: str = charge_data.get("display_text") or charge_data.get("message") or "Checking..."
+    user_message = _paystack_user_message(gateway_response, display_text)
+
+    _log = logger.warning if charge_status in ("failed", "abandoned") else logger.info
+    _log(
+        "paystack charge result",
+        extra={
+            "reference": reference,
+            "paystack_status": charge_status,
+            "gateway_response": gateway_response or None,
+            "message": user_message,
+        },
+    )
+    return {
+        "status": charge_status,
+        "displayText": display_text,
+        "message": user_message,
+        "gateway_response": gateway_response,
+    }
 
 
 def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:

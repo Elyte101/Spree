@@ -30,6 +30,7 @@ import {
 } from "@mui/material";
 
 import { useCart } from "@/components/providers/cartProvider";
+import { useToast } from "@/components/providers/toastProvider";
 import { PhoneInput } from "@/components/ui/phoneInput";
 import { useCartStore } from "@/lib/stores/cartStore";
 import { PROCESSING_FEE_RATE } from "@/lib/pricing";
@@ -129,6 +130,7 @@ function loadPaystackJS(): Promise<void> {
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
   const { cart, clearCart } = useCart();
   const refreshPrices = useCartStore((s) => s.refreshPrices);
+  const { showToast } = useToast();
 
   const [shippingMethod, setShippingMethod] = React.useState("standard");
   const [paymentMethod, setPaymentMethod] = React.useState<"momo" | "card">("momo");
@@ -264,18 +266,19 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { detail?: string }).detail ?? "Payment verification failed");
       }
+      showToast({ message: "Payment confirmed! Redirecting…", type: "success" });
       clearCart();
       window.location.href = `/checkout/success?orderId=${orderId}`;
     } catch (err) {
-      setSubmitError(
-        err instanceof Error
-          ? `${err.message} — reference: ${reference}`
-          : `Verification failed — reference: ${reference}`
-      );
+      const msg = err instanceof Error
+        ? `${err.message} — reference: ${reference}`
+        : `Verification failed — reference: ${reference}`;
+      setSubmitError(msg);
+      showToast({ message: msg, type: "error" });
       setSubmitting(false);
       setStage("idle");
     }
-  }, [clearCart]);
+  }, [clearCart, showToast]);
 
   const startPolling = React.useCallback((reference: string, orderId: string) => {
     setStage("polling");
@@ -283,13 +286,15 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
       try {
         const res = await fetch(`/api/orders/check-charge?reference=${encodeURIComponent(reference)}`);
         if (!res.ok) return;
-        const data = await res.json() as { status: string };
+        const data = await res.json() as { status: string; message?: string; gateway_response?: string };
         if (data.status === "success") {
           stopPolling();
           await verifyAndComplete(reference, orderId);
-        } else if (data.status === "failed") {
+        } else if (data.status === "failed" || data.status === "abandoned") {
           stopPolling();
-          setSubmitError("Payment was declined. Please try a different number or provider.");
+          const errMsg = data.message || data.gateway_response || "Payment was declined. Please try a different number or provider.";
+          setSubmitError(errMsg);
+          showToast({ message: errMsg, type: "error" });
           setSubmitting(false);
           setStage("idle");
         }
@@ -297,7 +302,7 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         // Network error during poll — keep trying
       }
     }, 3000);
-  }, [verifyAndComplete]);
+  }, [verifyAndComplete, showToast]);
 
   const handleOtpSubmit = async () => {
     const { reference, orderId } = pendingPaymentRef.current ?? {};
@@ -311,20 +316,24 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
         body: JSON.stringify({ otp: otp.trim(), reference }),
       });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { detail?: string }).detail ?? "OTP submission failed");
+        const data = await res.json().catch(() => ({})) as { detail?: string; message?: string; gateway_response?: string };
+        const errMsg = data.message || data.gateway_response || data.detail || "OTP submission failed";
+        throw new Error(errMsg);
       }
-      const { status } = await res.json() as { status: string };
-      if (status === "pending") {
+      const data = await res.json() as { status: string; message?: string; gateway_response?: string };
+      if (data.status === "pending") {
         setOtp("");
         startPolling(reference, orderId);
-      } else if (status === "success") {
+      } else if (data.status === "success") {
         await verifyAndComplete(reference, orderId);
       } else {
-        throw new Error("OTP verification failed. Please try again.");
+        const errMsg = data.message || data.gateway_response || "OTP verification failed. Please try again.";
+        throw new Error(errMsg);
       }
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Something went wrong.");
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      setSubmitError(msg);
+      showToast({ message: msg, type: "error" });
       setSubmitting(false);
     }
   };
