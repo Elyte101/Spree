@@ -1,5 +1,6 @@
 """
-Paystack API wrapper using stdlib urllib only — no extra deps.
+Paystack API wrapper — uses httpx so Cloudflare's bot filter (error 1010)
+doesn't block outbound requests due to a missing or default User-Agent.
 
 All amounts are in the smallest currency unit:
   GHS → pesewas (1 GHS = 100 pesewas)
@@ -8,16 +9,31 @@ All amounts are in the smallest currency unit:
 
 import hashlib
 import hmac
-import json
 import logging
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+
+import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 _BASE = "https://api.paystack.co"
+
+# A real User-Agent is required: Cloudflare blocks requests with the default
+# Python-urllib or Node user-agents with error code 1010 (browser integrity check).
+_UA = "Spree/1.0 (+https://spreecommerce.vercel.app)"
+
+# Shared client — connection-pooled, default headers applied to every request.
+# Authorization is injected per-request (it reads from settings at call time).
+_http = httpx.Client(
+    base_url=_BASE,
+    headers={
+        "User-Agent": _UA,
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    },
+    timeout=15.0,
+)
 
 
 class PaystackAPIError(RuntimeError):
@@ -29,36 +45,36 @@ class PaystackAPIError(RuntimeError):
         self.provider_message = provider_message
 
 
-def _headers() -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {settings.paystack_secret_key}",
-        "Content-Type": "application/json",
-    }
-
-
 def _request(method: str, path: str, body: dict | None = None) -> dict:
-    url = f"{_BASE}{path}"
-    data = json.dumps(body).encode() if body else None
-    req = Request(url, data=data, headers=_headers(), method=method)
     try:
-        with urlopen(req, timeout=15) as resp:
-            return json.loads(resp.read())
-    except HTTPError as exc:
-        raw_text = exc.read().decode("utf-8", errors="replace")
+        resp = _http.request(
+            method,
+            path,
+            **({"json": body} if body is not None else {}),
+            headers={"Authorization": f"Bearer {settings.paystack_secret_key}"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as exc:
+        raw_text = exc.response.text
         try:
-            parsed = json.loads(raw_text)
+            parsed = exc.response.json()
             ps_status = parsed.get("status", "")
             provider_message = parsed.get("message") or raw_text
         except Exception:
             ps_status = ""
-            provider_message = raw_text or f"HTTP {exc.code}"
+            provider_message = raw_text or f"HTTP {exc.response.status_code}"
         logger.error(
             "Paystack %s %s → HTTP %s | status=%r message=%r",
-            method, path, exc.code, ps_status, provider_message,
+            method, path, exc.response.status_code, ps_status, provider_message,
         )
-        raise PaystackAPIError(exc.code, f"Paystack error: {provider_message}", provider_message) from exc
-    except URLError as exc:
-        logger.error("Paystack network error: %s", exc)
+        raise PaystackAPIError(
+            exc.response.status_code,
+            f"Paystack error: {provider_message}",
+            provider_message,
+        ) from exc
+    except httpx.RequestError as exc:
+        logger.error("Paystack network error %s %s: %s", method, path, exc)
         raise RuntimeError("Could not reach Paystack. Check your internet connection.") from exc
 
 

@@ -647,6 +647,26 @@ def _momo_payload(product_id: str, price: float) -> dict:
     }
 
 
+def test_paystack_client_sends_non_default_user_agent():
+    """Paystack HTTP client must use a branded User-Agent to pass Cloudflare's bot check.
+
+    Default Python-urllib and Node user-agents trigger Cloudflare error 1010; this
+    test ensures the regression cannot be silently reintroduced.
+    """
+    from app.services import paystack as ps
+
+    ua = ps._UA
+    assert ua, "Paystack _UA must not be empty"
+    assert "python" not in ua.lower(), f"Default Python UA detected: {ua!r}"
+    assert "node" not in ua.lower(), f"Default Node UA detected: {ua!r}"
+    assert "urllib" not in ua.lower(), f"urllib UA would trigger Cloudflare block: {ua!r}"
+
+    client_ua = ps._http.headers.get("user-agent", "")
+    assert client_ua == ua, (
+        f"httpx client User-Agent {client_ua!r} does not match _UA {ua!r}"
+    )
+
+
 def test_charge_momo_paystack_403_maps_to_403_not_502():
     """Paystack 403 (bad key) must return HTTP 403 with structured error, not 502."""
     from app.services.paystack import PaystackAPIError

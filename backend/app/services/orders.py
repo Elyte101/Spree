@@ -457,6 +457,19 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
             callback_url=callback_url,
             channels=channels,
         )
+    except PaystackAPIError as exc:
+        db.delete(order)
+        db.commit()
+        logger.error("Paystack initialize failed (status=%s): %s", exc.http_status, exc.provider_message)
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": "paystack_init_failed",
+                "message": "Payment could not be started. Please try again.",
+                "providerStatus": exc.http_status,
+                "providerMessage": exc.provider_message,
+            },
+        ) from exc
     except RuntimeError as exc:
         # Roll back the pending order so the cart stays intact for retry
         db.delete(order)
@@ -611,6 +624,16 @@ def verify_payment(db: Session, reference: str) -> dict:
 
     try:
         tx = paystack_svc.verify_transaction(reference)
+    except PaystackAPIError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={
+                "code": "paystack_verify_failed",
+                "message": "Payment verification failed. Please try again.",
+                "providerStatus": exc.http_status,
+                "providerMessage": exc.provider_message,
+            },
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -1530,9 +1553,24 @@ def refund_order(db: Session, order_id: str) -> dict:
     if order.paystack_reference and settings.paystack_secret_key:
         try:
             paystack_svc.refund_transaction(order.paystack_reference)
+        except PaystackAPIError as exc:
+            logger.error(
+                "Paystack refund failed for order %s (status=%s): %s — "
+                "admin must complete manually via Paystack dashboard",
+                order_id, exc.http_status, exc.provider_message,
+            )
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={
+                    "code": "paystack_refund_failed",
+                    "message": "Refund could not be processed via Paystack. Please retry or complete via the Paystack dashboard.",
+                    "providerStatus": exc.http_status,
+                    "providerMessage": exc.provider_message,
+                },
+            ) from exc
         except RuntimeError as exc:
             logger.error(
-                "Paystack refund failed for order %s after status was committed; "
+                "Paystack refund network error for order %s; "
                 "admin must complete manually via Paystack dashboard: %s",
                 order_id, exc,
             )
