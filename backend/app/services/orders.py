@@ -16,6 +16,7 @@ from app.services import ledger as ledger_svc
 from app.services import paystack as paystack_svc
 from app.services.paystack import PaystackAPIError
 from app.services.notifications import create_notification, notify_safe
+from app.core.logging import safe_extra
 
 logger = logging.getLogger(__name__)
 
@@ -803,17 +804,25 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
     display_text: str = charge_data.get("display_text") or charge_data.get("message") or "Processing..."
     user_message = _paystack_user_message(gateway_response, display_text)
 
-    logger.info(
-        "paystack charge initiated",
-        extra={
-            "reference": reference,
-            "order_id": order_id,
-            "paystack_status": charge_status,
-            "display_text": display_text or None,
-            "gateway_response": gateway_response or None,
-            "message": user_message,
-        },
-    )
+    # Logging must never crash a successful charge — wrap defensively.
+    try:
+        logger.info(
+            "paystack charge initiated",
+            extra=safe_extra({
+                "reference": reference,
+                "order_id": order_id,
+                "paystack_status": charge_status,
+                "display_text": display_text or None,
+                "gateway_response": gateway_response or None,
+                "paystack_message": user_message,
+            }),
+        )
+    except Exception:
+        logger.warning(
+            "paystack charge initiated (structured log failed): ref=%s status=%s",
+            reference, charge_status,
+        )
+
     return {
         "orderId": order_id,
         "reference": reference,
@@ -860,16 +869,20 @@ def submit_otp_for_order(db: Session, otp: str, reference: str) -> dict:
     user_message = _paystack_user_message(gateway_response, display_text)
 
     _log = logger.warning if charge_status in ("failed", "abandoned") else logger.info
-    _log(
-        "paystack otp result",
-        extra={
-            "reference": reference,
-            "paystack_status": charge_status,
-            "display_text": display_text or None,
-            "gateway_response": gateway_response or None,
-            "message": user_message,
-        },
-    )
+    try:
+        _log(
+            "paystack otp result",
+            extra=safe_extra({
+                "reference": reference,
+                "paystack_status": charge_status,
+                "display_text": display_text or None,
+                "gateway_response": gateway_response or None,
+                "paystack_message": user_message,
+            }),
+        )
+    except Exception:
+        _log("paystack otp result (structured log failed): ref=%s status=%s", reference, charge_status)
+
     return {
         "status": charge_status,
         "displayText": display_text,
@@ -904,16 +917,20 @@ def check_momo_charge(reference: str) -> dict:
     user_message = _paystack_user_message(gateway_response, display_text)
 
     _log = logger.warning if charge_status in ("failed", "abandoned") else logger.info
-    _log(
-        "paystack charge result",
-        extra={
-            "reference": reference,
-            "paystack_status": charge_status,
-            "display_text": display_text or None,
-            "gateway_response": gateway_response or None,
-            "message": user_message,
-        },
-    )
+    try:
+        _log(
+            "paystack charge result",
+            extra=safe_extra({
+                "reference": reference,
+                "paystack_status": charge_status,
+                "display_text": display_text or None,
+                "gateway_response": gateway_response or None,
+                "paystack_message": user_message,
+            }),
+        )
+    except Exception:
+        _log("paystack charge result (structured log failed): ref=%s status=%s", reference, charge_status)
+
     return {
         "status": charge_status,
         "displayText": display_text,

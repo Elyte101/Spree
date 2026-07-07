@@ -8,6 +8,31 @@ from app.core.config import settings
 
 logger = logging.getLogger("spree.api")
 
+# Attributes that Python's logging module sets on every LogRecord.
+# Passing any of these as extra= keys raises:
+#   KeyError: "Attempt to overwrite '<key>' in LogRecord"
+# Keep this in sync with cpython/Lib/logging/__init__.py LogRecord.__init__.
+_LOG_RECORD_RESERVED: frozenset[str] = frozenset({
+    "args", "asctime", "created", "exc_info", "exc_text", "filename",
+    "funcName", "id", "levelname", "levelno", "lineno", "message",
+    "module", "msecs", "msg", "name", "pathname", "process",
+    "processName", "relativeCreated", "stack_info", "taskName",
+    "thread", "threadName",
+})
+
+
+def safe_extra(fields: dict) -> dict:
+    """Return *fields* with reserved LogRecord key names prefixed by 'ps_'.
+
+    Prevents ``KeyError: "Attempt to overwrite '<key>' in LogRecord"``
+    when structured-logging data from Paystack or other external sources
+    contains a key that collides with a built-in LogRecord attribute.
+    """
+    return {
+        (f"ps_{k}" if k in _LOG_RECORD_RESERVED else k): v
+        for k, v in fields.items()
+    }
+
 _CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline'; "
