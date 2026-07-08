@@ -5,7 +5,7 @@
 | ID  | Spec Item | Status | Severity | File(s) | Notes |
 |-----|-----------|--------|----------|---------|-------|
 | G1  | Only Ghana Card accepted for ID verification | **done** | high | `backend/app/schemas/auth.py`, `lib/ghana.ts`, `types/types.ts` | `GhanaIdType` restricted to `"ghana-card"` only in schemas, lib, and types. Frontend Step4Identity updated. |
-| G2  | No bank account payout fields | **done** | high | `backend/app/schemas/auth.py`, `components/vendor/steps/Step5Payout.tsx`, `components/profile/profilePage.tsx`, `lib/api/types.ts` | Bank fields removed from all payout schemas and UI. Method is now `"card" | "mobile_money"`. |
+| G2  | Payout: bank reinstated, card removed | **done** | high | `backend/app/schemas/auth.py`, `components/vendor/steps/Step5Payout.tsx`, `components/profile/profilePage.tsx`, `lib/api/types.ts`, `types/types.ts` | Method is now `"mobile_money" \| "bank"`. Card removed. Bank fields added. Step 5 creates Paystack recipient at save time. |
 | G3  | MoMo restricted to MTN and Telecel ONLY | **done** | medium | `lib/ghana.ts`, `backend/app/schemas/auth.py` | AirtelTigo removed from `MOMO_NETWORKS`. Backend validates network against MTN/Telecel only. |
 | G4  | NIA API adapter with mock/sandbox mode | **done** | high | `backend/app/services/nia_adapter.py` | NIAAdapter with mock mode (`NIA_MOCK=true`). Returns `NIAResult` dataclass. Numbers ending in "0" = NOT_FOUND in mock. |
 | G5  | Face-match adapter with mock/sandbox mode | **done** | high | `backend/app/services/face_match_adapter.py` | FaceMatchAdapter with mock mode (`FACE_MATCH_MOCK_FAIL=true` to simulate failure). Returns `FaceMatchResult` dataclass. |
@@ -55,8 +55,8 @@
 ### G1 — Only Ghana Card accepted
 **Fixed**: `GhanaIdType = Literal["ghana-card"]` in backend schema. `GHANA_ID_TYPES` in `lib/ghana.ts` restricted to Ghana Card only. `GovernmentIdType` in `types/types.ts` restricted to `"ghana-card"`. Frontend Step4Identity updated.
 
-### G2 — No bank account payout fields
-**Fixed**: Bank fields removed from `PayoutInfoRequest`, `OnboardingStep5Request`, `OnboardingStep5Payload` (TS), `PayoutInfo` (TS). `Step5Payout.tsx` and `profilePage.tsx` rewritten to use `card | mobile_money` only.
+### G2 — Payout method: bank reinstated, card removed
+**Owner decision (2026-07-08)**: Bank transfer payout reinstated; card removed entirely. Method is now `"mobile_money" | "bank"`. Bank fields (`bankCode`, `bankName`, `accountNumber`) added to all payout schemas (`PayoutInfoRequest`, `OnboardingStep5Request`, `OnboardingStep5Payload` TS, `PayoutInfo` TS). Card fields (`cardLast4`, `cardholderName`) removed everywhere. Bank recipients use `ghipss` type on Paystack. Paystack bank list served via `GET /auth/banks`; account name resolved via `GET /auth/banks/resolve`. Step 5 creates the Paystack transfer recipient at save time — 502 if creation fails. Legacy `"card"` blobs in encrypted `payout_info` are treated as missing payout account (no crash). `Step5Payout.tsx` and `profilePage.tsx` rewritten for MoMo + Bank UI.
 
 ### G3 — MoMo MTN/Telecel ONLY
 **Fixed**: `MOMO_NETWORKS` in `lib/ghana.ts` restricted to MTN and Telecel only. Backend schema validates accordingly.

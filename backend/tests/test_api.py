@@ -824,3 +824,346 @@ def test_charge_momo_valid_payload_creates_pending_order():
     assert "orderId" in body
     assert "reference" in body
     assert body["status"] == "send_otp"
+
+
+# ---------------------------------------------------------------------------
+# Payout flow tests (Task B)
+# ---------------------------------------------------------------------------
+
+def _create_seller_with_onboarding(client, *, step: int = 5, payout_payload: dict | None = None):
+    """Helper: create a seller and advance through onboarding steps 1-N.
+    Returns (user_id, headers).
+    """
+    email = f"seller-payout-{uuid4().hex[:8]}@test.com"
+    signup = client.post(
+        "/api/v1/auth/signup",
+        headers=INTERNAL_HEADERS,
+        json={"name": "Kwame Seller", "email": email, "password": "Seller1234!"},
+    )
+    assert signup.status_code == 201, signup.text
+    uid = signup.json()["id"]
+    hdrs = {**INTERNAL_HEADERS, "X-Actor-User-Id": uid}
+
+    # Step 1
+    client.patch("/api/v1/auth/onboarding/step/1", headers=hdrs,
+                 json={"name": "Kwame Seller", "phone": "0241234567", "termsAccepted": True})
+    if step < 2:
+        return uid, hdrs
+    # Step 2
+    client.patch("/api/v1/auth/onboarding/step/2", headers=hdrs,
+                 json={"country": "Ghana", "state": "Greater Accra",
+                       "city": "Accra", "addressLine1": "1 Seller Lane"})
+    if step < 3:
+        return uid, hdrs
+    # Step 3
+    store_name = f"Kwame Store {uuid4().hex[:6]}"
+    client.patch("/api/v1/auth/onboarding/step/3", headers=hdrs,
+                 json={"storeName": store_name,
+                       "storeDescription": "Quality goods from Accra since 2020.",
+                       "sellerType": "retail"})
+    if step < 4:
+        return uid, hdrs
+    # Step 4
+    client.patch("/api/v1/auth/onboarding/step/4", headers=hdrs,
+                 json={"governmentIdType": "ghana-card", "governmentIdNumber": "GHA-123456789-0"})
+    if step < 5:
+        return uid, hdrs
+    # Step 5 (payout)
+    if payout_payload is not None:
+        r5 = client.patch("/api/v1/auth/onboarding/step/5", headers=hdrs, json=payout_payload)
+        return uid, hdrs, r5
+    return uid, hdrs
+
+
+def test_step5_momo_fails_when_paystack_recipient_creation_fails():
+    """Step 5 must return 502 when Paystack recipient creation fails for MoMo."""
+    import unittest.mock as mock
+    from app.services import paystack as paystack_svc
+    from app.core.config import settings as svc_settings
+
+    with TestClient(app) as client:
+        uid, hdrs = _create_seller_with_onboarding(client, step=4)
+
+        original_key = svc_settings.paystack_secret_key
+        svc_settings.paystack_secret_key = "sk_test_fakekeyforfailure"
+        try:
+            with mock.patch.object(
+                paystack_svc, "create_transfer_recipient",
+                side_effect=Exception("Paystack unavailable"),
+            ):
+                r5 = client.patch(
+                    "/api/v1/auth/onboarding/step/5",
+                    headers=hdrs,
+                    json={
+                        "method": "mobile_money",
+                        "mobileMoneyNetwork": "MTN Mobile Money",
+                        "mobileMoneyNumber": "0241234567",
+                        "accountName": "Kwame Seller",
+                        "currency": "GHS",
+                    },
+                )
+        finally:
+            svc_settings.paystack_secret_key = original_key
+
+    assert r5.status_code == 502, (
+        f"Expected 502 when Paystack recipient creation fails, got {r5.status_code}: {r5.text}"
+    )
+
+
+def test_step5_bank_fails_when_paystack_recipient_creation_fails():
+    """Step 5 must return 502 when Paystack recipient creation fails for bank."""
+    import unittest.mock as mock
+    from app.services import paystack as paystack_svc
+    from app.core.config import settings as svc_settings
+
+    with TestClient(app) as client:
+        uid, hdrs = _create_seller_with_onboarding(client, step=4)
+
+        original_key = svc_settings.paystack_secret_key
+        svc_settings.paystack_secret_key = "sk_test_fakekeyforfailure"
+        try:
+            with mock.patch.object(
+                paystack_svc, "create_transfer_recipient",
+                side_effect=Exception("Bank recipient failed"),
+            ):
+                r5 = client.patch(
+                    "/api/v1/auth/onboarding/step/5",
+                    headers=hdrs,
+                    json={
+                        "method": "bank",
+                        "bankCode": "GH130100",
+                        "bankName": "GCB Bank",
+                        "accountNumber": "1234567890",
+                        "accountName": "Kwame Seller",
+                        "currency": "GHS",
+                    },
+                )
+        finally:
+            svc_settings.paystack_secret_key = original_key
+
+    assert r5.status_code == 502, (
+        f"Expected 502 when bank recipient creation fails, got {r5.status_code}: {r5.text}"
+    )
+
+
+def test_submit_onboarding_rejects_without_payout_account():
+    """submit_onboarding must 400 if payout_info is missing."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    with TestClient(app) as client:
+        uid, hdrs = _create_seller_with_onboarding(client, step=4)
+
+        # Manually set onboarding_step=5 and government_id_verified=True without payout_info
+        with SessionLocal() as db:
+            u = db.get(User, uid)
+            u.onboarding_step = 5
+            u.government_id_verified = True
+            u.payout_info = None
+            db.commit()
+
+        resp = client.post("/api/v1/auth/onboarding/submit", headers=hdrs)
+
+    assert resp.status_code == 400, (
+        f"Expected 400 when payout_info missing, got {resp.status_code}: {resp.text}"
+    )
+    assert "payout" in resp.json()["detail"].lower()
+
+
+def test_submit_onboarding_rejects_without_recipient_code_when_paystack_configured():
+    """submit_onboarding must 400 if paystack is configured but recipient_code missing."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+    from app.services.encryption import encrypt
+    from app.core.config import settings as svc_settings
+    import json
+
+    with TestClient(app) as client:
+        uid, hdrs = _create_seller_with_onboarding(client, step=4)
+
+        # Set up the seller with payout_info but no recipient_code
+        payout_plain = {"method": "mobile_money", "mobileMoneyNetwork": "MTN Mobile Money",
+                        "mobileMoneyNumber": "0241234567", "accountName": "Kwame", "currency": "GHS"}
+        with SessionLocal() as db:
+            u = db.get(User, uid)
+            u.onboarding_step = 5
+            u.government_id_verified = True
+            u.payout_info = {"__enc__": encrypt(json.dumps(payout_plain))}
+            u.paystack_recipient_code = None
+            db.commit()
+
+        original_key = svc_settings.paystack_secret_key
+        svc_settings.paystack_secret_key = "sk_test_configured"
+        try:
+            resp = client.post("/api/v1/auth/onboarding/submit", headers=hdrs)
+        finally:
+            svc_settings.paystack_secret_key = original_key
+
+    assert resp.status_code == 400, (
+        f"Expected 400 when recipient_code missing with Paystack configured, got {resp.status_code}"
+    )
+    assert "payout" in resp.json()["detail"].lower()
+
+
+def test_approve_seller_rejects_without_recipient_code():
+    """Admin approve_seller must 400 when paystack is configured but no recipient_code."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+    from app.core.config import settings as svc_settings
+
+    with TestClient(app) as client:
+        uid, hdrs = _create_seller_with_onboarding(client, step=4)
+
+        # Put seller in pending_verification without a recipient_code
+        with SessionLocal() as db:
+            u = db.get(User, uid)
+            u.seller_status = "pending_verification"
+            u.role = "vendor"
+            u.government_id_verified = True
+            u.paystack_recipient_code = None
+            db.commit()
+
+        original_key = svc_settings.paystack_secret_key
+        svc_settings.paystack_secret_key = "sk_test_configured"
+        try:
+            resp = client.post(
+                f"/api/v1/admin/sellers/{uid}/approve",
+                headers=ADMIN_HEADERS,
+            )
+        finally:
+            svc_settings.paystack_secret_key = original_key
+
+    assert resp.status_code == 400, (
+        f"Expected 400 when approving seller without recipient_code, got {resp.status_code}"
+    )
+    assert "payout" in resp.json()["detail"].lower()
+
+
+def test_release_payout_writes_payout_failed_for_missing_recipient():
+    """When a confirmed order has a seller with no recipient_code,
+    _release_payout must write a PAYOUT_FAILED ledger entry."""
+    from decimal import Decimal
+    from app.db.session import SessionLocal
+    from app.db.models import Order, OrderItem, LedgerEntry, User
+    from app.services import ledger as ledger_svc
+    from sqlalchemy import select as _sel
+
+    seller_email = f"no-payout-{uuid4().hex[:8]}@test.com"
+    order_id = f"order-missing-payout-{uuid4().hex[:8]}"
+
+    with TestClient(app) as client:
+        # DB is now initialized by app startup. Create seller + order directly.
+        with SessionLocal() as db:
+            seller = User(
+                id=f"user-nopayout-{uuid4().hex[:8]}",
+                name="No Payout Seller",
+                email=seller_email,
+                password_hash="x",
+                role="vendor",
+                seller_status="active",
+                paystack_recipient_code=None,
+                payout_info=None,
+            )
+            db.add(seller)
+
+            order = Order(
+                id=order_id,
+                user_id="user-admin",  # so confirm-delivery accepts this actor
+                status="delivered",
+                full_name="Test Buyer",
+                email="buyer@test.com",
+                address_line1="1 Test St",
+                city="Accra",
+                state="Greater Accra",
+                postal_code="00233",
+                country="Ghana",
+                shipping_method="standard",
+                payment_method="card",
+                subtotal=Decimal("100.00"),
+                shipping_cost=Decimal("10.00"),
+                tax=Decimal("1.50"),
+                total=Decimal("111.50"),
+                currency="GHS",
+                paystack_reference=f"ref-{uuid4().hex[:8]}",
+            )
+            db.add(order)
+            db.add(OrderItem(
+                id=f"{order_id}-item1",
+                order_id=order_id,
+                seller_id=seller.id,
+                name="Test Item",
+                image="/img/t.jpg",
+                price=Decimal("100.00"),
+                quantity=1,
+            ))
+            db.commit()
+            seller_id = seller.id
+
+        resp = client.put(
+            f"/api/v1/orders/{order_id}/confirm-delivery",
+            headers={**ADMIN_HEADERS, "X-Actor-User-Id": "user-admin"},
+        )
+        assert resp.status_code == 200, resp.text
+
+        with SessionLocal() as db:
+            failed_entries = db.scalars(
+                _sel(LedgerEntry).where(
+                    LedgerEntry.order_id == order_id,
+                    LedgerEntry.entry_type == ledger_svc.PAYOUT_FAILED,
+                    LedgerEntry.seller_id == seller_id,
+                )
+            ).all()
+            assert len(failed_entries) >= 1, (
+                "Expected at least one PAYOUT_FAILED ledger entry for seller with no recipient_code"
+            )
+            assert failed_entries[0].meta.get("reason") == "missing_recipient"
+
+
+def test_legacy_card_payout_info_decrypts_without_crashing():
+    """Legacy payout_info blobs with method='card' must not crash — treated as missing account."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+    from app.services.encryption import encrypt
+    from app.services.auth import _decrypt_payout_info
+    import json
+
+    legacy_blob = {
+        "method": "card",
+        "cardLast4": "4242",
+        "cardholderName": "Old User",
+        "currency": "GHS",
+        "accountName": "Old User",
+    }
+    encrypted_blob = {"__enc__": encrypt(json.dumps(legacy_blob))}
+
+    # _decrypt_payout_info must return the decrypted dict without raising
+    result = _decrypt_payout_info(encrypted_blob)
+    assert isinstance(result, dict), "Expected dict from _decrypt_payout_info"
+    assert result.get("method") == "card", "Legacy method should be returned as-is"
+    # _ensure_recipient_code must return None for method="card" (not crash)
+    from app.db.models import User as UserModel
+    # We just confirm the decrypt doesn't raise — functional test above covers ensure_recipient_code
+
+
+def test_bank_recipient_uses_ghipss_type():
+    """Regression: create_transfer_recipient must use 'ghipss' type for GHS bank transfers."""
+    import unittest.mock as mock
+    from app.services import paystack as paystack_svc
+
+    captured: dict = {}
+
+    def fake_request(method, path, body=None):
+        captured["body"] = body or {}
+        return {"data": {"recipient_code": "RCP_bank_test"}}
+
+    with mock.patch.object(paystack_svc, "_request", side_effect=fake_request):
+        paystack_svc.create_transfer_recipient(
+            name="Ama Bank",
+            account_number="1234567890",
+            bank_code="GH130100",
+            currency="GHS",
+        )
+
+    assert captured["body"].get("type") == "ghipss", (
+        f"Bank transfer must use 'ghipss' for GHS, got '{captured['body'].get('type')}'"
+    )

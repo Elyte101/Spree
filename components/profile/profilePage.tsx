@@ -11,7 +11,6 @@ import {
   BadgeRounded,
   CheckCircleOutlined,
   CheckCircleRounded,
-  CreditCardRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
@@ -45,6 +44,7 @@ import { PhoneInput } from "@/components/ui/phoneInput";
 import { UserProfile } from "@/types/types";
 import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel, MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
 import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
+import { useBankResolve } from "@/lib/hooks/useBankResolve";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -64,16 +64,18 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
 
-  // Payout info state — spec: card OR MoMo (MTN/Telecel only). NO bank fields.
+  // Payout info state — mobile money or bank transfer.
   const [payout, setPayout] = React.useState({
-    method: (profile.payoutInfo?.method ?? "mobile_money") as "card" | "mobile_money",
+    method: (profile.payoutInfo?.method === "bank" ? "bank" : "mobile_money") as "mobile_money" | "bank",
     mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
     mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
-    cardLast4: profile.payoutInfo?.cardLast4 ?? "",
-    cardholderName: profile.payoutInfo?.cardholderName ?? "",
+    bankCode: profile.payoutInfo?.bankCode ?? "",
+    bankName: profile.payoutInfo?.bankName ?? "",
+    accountNumber: profile.payoutInfo?.accountNumber ?? "",
     currency: "GHS",
     accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
   });
+  const [banks, setBanks] = React.useState<Array<{ id: number; name: string; code: string }>>([]);
   const [paymentNameVerified, setPaymentNameVerified] = React.useState(
     profile.paymentInfo?.momoNameVerified ?? false,
   );
@@ -83,6 +85,16 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [savingPayout, setSavingPayout] = React.useState(false);
   const [payoutError, setPayoutError] = React.useState<string | null>(null);
   const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
+
+  // Fetch bank list once on mount
+  React.useEffect(() => {
+    fetch("/api/banks")
+      .then((r) => r.json())
+      .then((d: { data?: Array<{ id: number; name: string; code: string }> }) => {
+        if (d.data) setBanks(d.data);
+      })
+      .catch(() => {/* non-fatal */});
+  }, []);
 
   // MoMo name-enquiry for payment info section
   const paymentMomoResolve = useMomoResolve(
@@ -106,11 +118,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     }
   }, [paymentMomoResolve.status, paymentMomoResolve.resolvedName]);
 
-  // MoMo name-enquiry for payout info section
+  // Name-enquiry hooks for payout section
   const payoutMomoResolve = useMomoResolve(
     payout.mobileMoneyNumber,
     payout.mobileMoneyNetwork,
   );
+  const payoutBankResolve = useBankResolve(payout.accountNumber, payout.bankCode);
+
   React.useEffect(() => {
     if (payoutMomoResolve.status === "resolved" && payoutMomoResolve.resolvedName) {
       setPayout((p) => ({ ...p, accountName: payoutMomoResolve.resolvedName! }));
@@ -122,6 +136,18 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
       });
     }
   }, [payoutMomoResolve.status, payoutMomoResolve.resolvedName]);
+
+  React.useEffect(() => {
+    if (payoutBankResolve.status === "resolved" && payoutBankResolve.resolvedName) {
+      setPayout((p) => ({ ...p, accountName: payoutBankResolve.resolvedName! }));
+      setPayoutNameVerified(true);
+    } else if (payoutBankResolve.status === "failed") {
+      setPayoutNameVerified((prev) => {
+        if (prev) setPayout((p) => ({ ...p, accountName: "" }));
+        return false;
+      });
+    }
+  }, [payoutBankResolve.status, payoutBankResolve.resolvedName]);
 
   const isAdmin = profile.role === "admin";
   const sellerSwitchChecked = isAdmin || profile.role === "vendor";
@@ -197,7 +223,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   };
 
   const handleSavePayout = async () => {
-    // Client-side validation before hitting the network
     const fieldErrs: Record<string, string> = {};
     if (!payout.accountName.trim()) fieldErrs.accountName = "Account name is required";
     if (payout.method === "mobile_money") {
@@ -207,8 +232,9 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         const momoErr = validateMoMoNumber(payout.mobileMoneyNumber);
         if (momoErr) fieldErrs.mobileMoneyNumber = momoErr;
       }
-    } else if (payout.method === "card") {
-      if (!payout.cardLast4.trim()) fieldErrs.cardLast4 = "Last 4 card digits are required";
+    } else if (payout.method === "bank") {
+      if (!payout.bankCode) fieldErrs.bankCode = "Select a bank";
+      if (!payout.accountNumber.trim()) fieldErrs.accountNumber = "Account number is required";
     }
     setPayoutFieldErrors(fieldErrs);
     if (Object.keys(fieldErrs).length > 0) return;
@@ -825,79 +851,32 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     </Box>
                   </Stack>
 
-                  {/* Method toggle — spec: card OR MoMo only. NO bank account. */}
+                  {/* Method toggle */}
                   <Stack direction="row" spacing={1}>
-                    {(["mobile_money", "card"] as const).map((m) => (
+                    {(["mobile_money", "bank"] as const).map((m) => (
                       <Button
                         key={m}
                         variant={payout.method === m ? "contained" : "outlined"}
                         size="small"
-                        startIcon={m === "mobile_money" ? <PhoneAndroidRounded fontSize="small" /> : <CreditCardRounded fontSize="small" />}
-                        onClick={() => setPayout((p) => ({ ...p, method: m }))}
+                        startIcon={m === "mobile_money" ? <PhoneAndroidRounded fontSize="small" /> : <AccountBalanceRounded fontSize="small" />}
+                        onClick={() => { setPayout((p) => ({ ...p, method: m })); setPayoutNameVerified(false); }}
                         sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                       >
-                        {m === "mobile_money" ? "Mobile money" : "Card"}
+                        {m === "mobile_money" ? "Mobile money" : "Bank account"}
                       </Button>
                     ))}
                   </Stack>
 
                   <Divider />
 
-                  {/* Account name — shared by both methods */}
-                  <TextField
-                    label="Account name"
-                    value={payout.accountName}
-                    slotProps={{
-                      input: {
-                        readOnly: payoutNameVerified && payout.method === "mobile_money",
-                        endAdornment: payout.method === "mobile_money" && payoutMomoResolve.status === "loading" ? (
-                          <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment>
-                        ) : payoutNameVerified && payout.method === "mobile_money" ? (
-                          <InputAdornment position="end">
-                            <Chip icon={<CheckCircleRounded />} label="Verified" color="success" size="small" variant="outlined" />
-                          </InputAdornment>
-                        ) : null,
-                      },
-                    }}
-                    onChange={(e) => {
-                      setPayout((p) => ({ ...p, accountName: e.target.value }));
-                      setPayoutNameVerified(false);
-                    }}
-                    error={!!payoutFieldErrors.accountName}
-                    helperText={
-                      payout.method === "mobile_money" && payoutMomoResolve.status === "loading"
-                        ? "Verifying account…"
-                        : payout.method === "mobile_money" && payoutMomoResolve.status === "failed"
-                        ? "Auto-verify unavailable — enter name manually"
-                        : payoutFieldErrors.accountName || (payoutNameVerified && payout.method === "mobile_money"
-                          ? "Name verified via MoMo network"
-                          : "Full name as it appears on the account")
-                    }
-                    size="small"
-                    fullWidth
-                  />
-
-                  {payout.method === "card" ? (
-                    <Stack spacing={2}>
-                      <TextField
-                        label="Card last 4 digits"
-                        value={payout.cardLast4}
-                        onChange={(e) => setPayout((p) => ({ ...p, cardLast4: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
-                        size="small"
-                        fullWidth
-                        placeholder="1234"
-                        helperText="Last 4 digits of your Spree-registered card"
-                        slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 4 } }}
-                      />
-                    </Stack>
-                  ) : (
+                  {payout.method === "mobile_money" ? (
                     <Stack spacing={2}>
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                         <TextField
                           select
                           label="Network"
                           value={payout.mobileMoneyNetwork}
-                          onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNetwork: e.target.value }))}
+                          onChange={(e) => { setPayout((p) => ({ ...p, mobileMoneyNetwork: e.target.value })); setPayoutNameVerified(false); }}
                           size="small"
                           sx={{ minWidth: 180 }}
                         >
@@ -908,7 +887,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                         <TextField
                           label="Mobile money number"
                           value={payout.mobileMoneyNumber}
-                          onChange={(e) => setPayout((p) => ({ ...p, mobileMoneyNumber: e.target.value }))}
+                          onChange={(e) => { setPayout((p) => ({ ...p, mobileMoneyNumber: e.target.value })); setPayoutNameVerified(false); }}
                           onBlur={() => {
                             if (payout.mobileMoneyNumber.trim()) {
                               const err = validateMoMoNumber(payout.mobileMoneyNumber.trim());
@@ -924,7 +903,85 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                         />
                       </Stack>
                     </Stack>
+                  ) : (
+                    <Stack spacing={2}>
+                      <TextField
+                        select={banks.length > 0}
+                        label="Bank"
+                        value={payout.bankCode}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          const found = banks.find((b) => b.code === code);
+                          setPayout((p) => ({ ...p, bankCode: code, bankName: found?.name ?? code }));
+                          setPayoutNameVerified(false);
+                        }}
+                        size="small"
+                        fullWidth
+                        error={!!payoutFieldErrors.bankCode}
+                        helperText={payoutFieldErrors.bankCode}
+                      >
+                        {banks.map((b) => (
+                          <MenuItem key={b.code} value={b.code}>{b.name}</MenuItem>
+                        ))}
+                      </TextField>
+                      <TextField
+                        label="Account number"
+                        value={payout.accountNumber}
+                        onChange={(e) => { setPayout((p) => ({ ...p, accountNumber: e.target.value.replace(/\D/g, "") })); setPayoutNameVerified(false); }}
+                        size="small"
+                        fullWidth
+                        placeholder="0123456789"
+                        error={!!payoutFieldErrors.accountNumber}
+                        helperText={payoutFieldErrors.accountNumber || "10-digit bank account number"}
+                        slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 13 } }}
+                      />
+                    </Stack>
                   )}
+
+                  {/* Account name — shared by both methods; auto-populated via resolve hooks */}
+                  {(() => {
+                    const resolving =
+                      payout.method === "mobile_money"
+                        ? payoutMomoResolve.status === "loading"
+                        : payoutBankResolve.status === "loading";
+                    const resolveFailed =
+                      payout.method === "mobile_money"
+                        ? payoutMomoResolve.status === "failed"
+                        : payoutBankResolve.status === "failed";
+                    return (
+                      <TextField
+                        label="Account name"
+                        value={payout.accountName}
+                        slotProps={{
+                          input: {
+                            readOnly: payoutNameVerified,
+                            endAdornment: resolving ? (
+                              <InputAdornment position="end"><CircularProgress size={18} /></InputAdornment>
+                            ) : payoutNameVerified ? (
+                              <InputAdornment position="end">
+                                <Chip icon={<CheckCircleRounded />} label="Verified" color="success" size="small" variant="outlined" />
+                              </InputAdornment>
+                            ) : null,
+                          },
+                        }}
+                        onChange={(e) => {
+                          setPayout((p) => ({ ...p, accountName: e.target.value }));
+                          setPayoutNameVerified(false);
+                        }}
+                        error={!!payoutFieldErrors.accountName}
+                        helperText={
+                          resolving
+                            ? "Verifying account…"
+                            : resolveFailed
+                            ? "Auto-verify unavailable — enter name manually"
+                            : payoutFieldErrors.accountName ||
+                              (payoutNameVerified ? "Name verified" : "Full name as it appears on the account")
+                        }
+                        size="small"
+                        fullWidth
+                      />
+                    );
+                  })()}
 
                   <Button
                     variant="contained"

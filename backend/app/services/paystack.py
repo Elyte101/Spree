@@ -165,6 +165,27 @@ _MOMO_BANK_CODE: dict[str, str] = {
 }
 
 
+def list_banks(currency: str = "GHS") -> list[dict]:
+    """Return a list of Paystack-supported banks for the given currency."""
+    result = _request("GET", f"/bank?currency={currency}&use_cursor=false&perPage=100")
+    return result.get("data", [])
+
+
+def resolve_bank_account(account_number: str, bank_code: str) -> str:
+    """Return the account name for a bank account via Paystack /bank/resolve.
+
+    Raises PaystackAPIError on HTTP errors, RuntimeError on network failure.
+    """
+    result = _request(
+        "GET",
+        f"/bank/resolve?account_number={account_number.strip()}&bank_code={bank_code.strip()}",
+    )
+    name: str = (result.get("data") or {}).get("account_name", "")
+    if not name:
+        raise PaystackAPIError(200, "Account name not returned by Paystack", "")
+    return name
+
+
 def resolve_momo_account(phone: str, network: str) -> str:
     """Return the account name for a Ghana MoMo number via Paystack /bank/resolve.
 

@@ -5,9 +5,9 @@ import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   FormControl,
   FormControlLabel,
-  FormHelperText,
   FormLabel,
   MenuItem,
   Radio,
@@ -16,40 +16,93 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { CreditCardRounded, CheckRounded, PhoneAndroidRounded } from "@mui/icons-material";
+import {
+  AccountBalanceRounded,
+  CheckRounded,
+  CheckCircleRounded,
+  PhoneAndroidRounded,
+} from "@mui/icons-material";
 
 import { MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
+import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
+import { useBankResolve } from "@/lib/hooks/useBankResolve";
 import type { StepProps } from "../SellerOnboardingWizard";
 import type { OnboardingStep5Payload } from "@/lib/api/types";
 
-// Spec: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
+interface BankOption {
+  id: number;
+  name: string;
+  code: string;
+}
+
 export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
   const payout = profile?.payoutInfo;
-  const [method, setMethod] = React.useState<"card" | "mobile_money">(
-    (payout?.method as "card" | "mobile_money") || "mobile_money"
+  const [method, setMethod] = React.useState<"mobile_money" | "bank">(
+    payout?.method === "bank" ? "bank" : "mobile_money"
   );
   const [accountName, setAccountName] = React.useState(payout?.accountName || profile?.name || "");
   // MoMo fields
-  const [network, setNetwork]   = React.useState(payout?.mobileMoneyNetwork || MOMO_NETWORKS[0].value);
+  const [network, setNetwork] = React.useState(payout?.mobileMoneyNetwork || MOMO_NETWORKS[0].value);
   const [momoNumber, setMomoNumber] = React.useState(payout?.mobileMoneyNumber || "");
-  // Card fields (reference info only — not raw card data)
-  const [cardLast4, setCardLast4] = React.useState(payout?.cardLast4 || "");
+  // Bank fields
+  const [bankCode, setBankCode] = React.useState(payout?.bankCode || "");
+  const [bankName, setBankName] = React.useState(payout?.bankName || "");
+  const [accountNumber, setAccountNumber] = React.useState(payout?.accountNumber || "");
+  const [banks, setBanks] = React.useState<BankOption[]>([]);
+  const [nameVerified, setNameVerified] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  // Fetch bank list once on mount
+  React.useEffect(() => {
+    fetch("/api/banks")
+      .then((r) => r.json())
+      .then((d: { data?: BankOption[] }) => {
+        if (d.data) setBanks(d.data);
+      })
+      .catch(() => {/* non-fatal — user can still type bank name */});
+  }, []);
+
+  // Auto-resolve names
+  const momoResolve = useMomoResolve(momoNumber, network);
+  const bankResolve = useBankResolve(accountNumber, bankCode);
+
+  React.useEffect(() => {
+    if (momoResolve.status === "resolved" && momoResolve.resolvedName) {
+      setAccountName(momoResolve.resolvedName);
+      setNameVerified(true);
+    } else if (momoResolve.status === "failed") {
+      setNameVerified(false);
+    }
+  }, [momoResolve.status, momoResolve.resolvedName]);
+
+  React.useEffect(() => {
+    if (bankResolve.status === "resolved" && bankResolve.resolvedName) {
+      setAccountName(bankResolve.resolvedName);
+      setNameVerified(true);
+    } else if (bankResolve.status === "failed") {
+      setNameVerified(false);
+    }
+  }, [bankResolve.status, bankResolve.resolvedName]);
+
+  // Reset verified state when inputs change
+  const resolving = method === "mobile_money"
+    ? momoResolve.status === "loading"
+    : bankResolve.status === "loading";
 
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!accountName.trim()) e.accountName = "Account name is required";
     if (method === "mobile_money") {
-      if (!network)               e.network    = "Select a network";
+      if (!network) e.network = "Select a network";
       if (!momoNumber.trim()) {
         e.momoNumber = "Mobile money number is required";
       } else {
-        const momoErr = validateMoMoNumber(momoNumber);
-        if (momoErr) e.momoNumber = momoErr;
+        const err = validateMoMoNumber(momoNumber);
+        if (err) e.momoNumber = err;
       }
     } else {
-      // card
-      if (!cardLast4.trim()) e.cardLast4 = "Card last 4 digits are required";
+      if (!bankCode) e.bankCode = "Select a bank";
+      if (!accountNumber.trim()) e.accountNumber = "Account number is required";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -64,7 +117,7 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
       currency: "GHS",
       ...(method === "mobile_money"
         ? { mobileMoneyNetwork: network, mobileMoneyNumber: momoNumber.trim() }
-        : { cardLast4: cardLast4.trim() }),
+        : { bankCode, bankName, accountNumber: accountNumber.trim() }),
     };
     await onSubmit(payload);
   }
@@ -90,7 +143,10 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
           <RadioGroup
             row
             value={method}
-            onChange={(e) => setMethod(e.target.value as "card" | "mobile_money")}
+            onChange={(e) => {
+              setMethod(e.target.value as "mobile_money" | "bank");
+              setNameVerified(false);
+            }}
           >
             <FormControlLabel
               value="mobile_money"
@@ -103,27 +159,17 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
               }
             />
             <FormControlLabel
-              value="card"
+              value="bank"
               control={<Radio />}
               label={
                 <Stack direction="row" alignItems="center" spacing={0.75}>
-                  <CreditCardRounded fontSize="small" />
-                  <span>Card</span>
+                  <AccountBalanceRounded fontSize="small" />
+                  <span>Bank Account</span>
                 </Stack>
               }
             />
           </RadioGroup>
         </FormControl>
-
-        <TextField
-          label="Account name"
-          value={accountName}
-          onChange={(e) => setAccountName(e.target.value)}
-          error={!!errors.accountName}
-          helperText={errors.accountName || "Full name as it appears on the account"}
-          fullWidth
-          required
-        />
 
         {method === "mobile_money" ? (
           <>
@@ -131,7 +177,7 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
               select
               label="Mobile network"
               value={network}
-              onChange={(e) => setNetwork(e.target.value)}
+              onChange={(e) => { setNetwork(e.target.value); setNameVerified(false); }}
               error={!!errors.network}
               helperText={errors.network}
               fullWidth
@@ -145,7 +191,7 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
             <TextField
               label="Mobile money number"
               value={momoNumber}
-              onChange={(e) => setMomoNumber(e.target.value)}
+              onChange={(e) => { setMomoNumber(e.target.value); setNameVerified(false); }}
               onBlur={() => {
                 if (momoNumber.trim()) {
                   const err = validateMoMoNumber(momoNumber.trim());
@@ -159,37 +205,69 @@ export function Step5Payout({ profile, onSubmit, submitting }: StepProps) {
               placeholder="0241234567"
               slotProps={{ htmlInput: { inputMode: "tel", maxLength: 13 } }}
             />
-
-            {network && momoNumber && !errors.momoNumber && (
-              <Alert severity="success" icon={false} sx={{ borderRadius: 2, py: 1 }}>
-                Payouts will be sent to <strong>{momoNumber}</strong> via <strong>{network}</strong>.
-              </Alert>
-            )}
-
-            <Box sx={(theme) => ({ p: 2, borderRadius: 2, bgcolor: theme.palette.action.hover })}>
-              <Typography variant="caption" color="text.secondary" lineHeight={1.7}>
-                <strong>MTN Mobile Money:</strong> numbers starting with 024, 054, 055, 059<br />
-                <strong>Telecel Cash:</strong> numbers starting with 020, 050
-              </Typography>
-            </Box>
           </>
         ) : (
           <>
             <TextField
-              label="Card last 4 digits"
-              value={cardLast4}
-              onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              error={!!errors.cardLast4}
-              helperText={errors.cardLast4 || "Last 4 digits of your Spree-registered card"}
+              select={banks.length > 0}
+              label="Bank"
+              value={bankCode}
+              onChange={(e) => {
+                const code = e.target.value;
+                setBankCode(code);
+                const found = banks.find((b) => b.code === code);
+                setBankName(found?.name ?? code);
+                setNameVerified(false);
+              }}
+              error={!!errors.bankCode}
+              helperText={errors.bankCode}
               fullWidth
               required
-              slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 4 } }}
+            >
+              {banks.map((b) => (
+                <MenuItem key={b.code} value={b.code}>{b.name}</MenuItem>
+              ))}
+            </TextField>
+
+            <TextField
+              label="Account number"
+              value={accountNumber}
+              onChange={(e) => { setAccountNumber(e.target.value.replace(/\D/g, "")); setNameVerified(false); }}
+              error={!!errors.accountNumber}
+              helperText={errors.accountNumber || "10-digit bank account number"}
+              fullWidth
+              required
+              placeholder="0123456789"
+              slotProps={{ htmlInput: { inputMode: "numeric", maxLength: 13 } }}
             />
-            <Alert severity="info" icon={false} sx={{ borderRadius: 2, py: 1 }}>
-              Payouts to cards are processed via your registered Paystack account. Make sure your card is active.
-            </Alert>
           </>
         )}
+
+        <TextField
+          label="Account name"
+          value={accountName}
+          onChange={(e) => { setAccountName(e.target.value); setNameVerified(false); }}
+          error={!!errors.accountName}
+          helperText={
+            resolving
+              ? "Verifying account…"
+              : (method === "mobile_money" ? momoResolve : bankResolve).status === "failed"
+              ? "Auto-verify unavailable — enter name manually"
+              : errors.accountName || (nameVerified ? "Name verified" : "Full name as it appears on the account")
+          }
+          fullWidth
+          required
+          slotProps={{
+            input: {
+              readOnly: nameVerified,
+              endAdornment: resolving ? (
+                <CircularProgress size={18} />
+              ) : nameVerified ? (
+                <CheckCircleRounded color="success" fontSize="small" />
+              ) : null,
+            },
+          }}
+        />
 
         <Button
           type="submit"

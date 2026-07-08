@@ -331,6 +331,34 @@ async def face_verify(
 
         # Auto-approve: transition pending_verification → active.
         if user.seller_status in ("pending_verification", "incomplete"):
+            if settings.paystack_secret_key and not user.paystack_recipient_code:
+                # Identity verified but no payout account — keep current status.
+                db.commit()
+                verification_sessions.delete(db, body.sessionId)
+                from app.services.notifications import notify_safe as _ns  # noqa: PLC0415
+                _ns(
+                    db,
+                    event_type="payout_pending_account",
+                    recipient_id=user.id,
+                    title="Identity verified — one more step to go",
+                    body=(
+                        "Your identity has been verified! To activate your seller account, "
+                        "please add your payout account (mobile money or bank) in Settings."
+                    ),
+                    notif_type="account",
+                    href="/settings?tab=payout",
+                    email_subject="Almost there: add your payout account to activate your Spree store",
+                    cta_label="Add payout account",
+                    cta_url=f"{settings.frontend_url}/settings?tab=payout",
+                )
+                return FaceVerifyResponse(
+                    verified=True,
+                    confidence=result.confidence_score,
+                    message=(
+                        "Identity verified! Before your account can be activated, "
+                        "please add your payout account (mobile money or bank) in Settings."
+                    ),
+                )
             user.seller_status = "active"
             user.role = "vendor"
             user.verified_at = now

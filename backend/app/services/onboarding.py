@@ -142,20 +142,66 @@ def save_step5(db: Session, user_id: str, payload: OnboardingStep5Request) -> di
     if user.onboarding_step < 4:
         raise HTTPException(status_code=400, detail="Complete step 4 first")
 
-    # G2: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
-    # G13: payout details encrypted at rest via encryption.encrypt().
+    # G13: payout details encrypted at rest.
     import json as _json  # noqa: PLC0415
     payout_plain = {
         "method": payload.method,
         "mobileMoneyNetwork": payload.mobileMoneyNetwork or "",
         "mobileMoneyNumber": payload.mobileMoneyNumber or "",
-        "cardLast4": payload.cardLast4 or "",
-        "cardholderName": payload.cardholderName or "",
+        "bankCode": payload.bankCode or "",
+        "bankName": payload.bankName or "",
+        "accountNumber": payload.accountNumber or "",
         "currency": payload.currency or "GHS",
         "accountName": payload.accountName,
     }
-    # Store as encrypted JSON blob.
     user.payout_info = {"__enc__": encrypt(_json.dumps(payout_plain))}
+
+    # Create Paystack transfer recipient now, so submit_onboarding can validate
+    # that a working payout account exists before going to pending_verification.
+    if settings.paystack_secret_key:
+        from app.services import paystack as paystack_svc  # noqa: PLC0415
+        try:
+            if payload.method == "mobile_money":
+                from app.services.orders import _MOMO_NETWORK_BANK_CODE  # noqa: PLC0415
+                bank_code = _MOMO_NETWORK_BANK_CODE.get((payload.mobileMoneyNetwork or "").lower(), "")
+                if not bank_code or not payload.mobileMoneyNumber:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Mobile money number and network are required for payout",
+                    )
+                code = paystack_svc.create_transfer_recipient(
+                    name=payload.accountName,
+                    account_number=payload.mobileMoneyNumber.strip(),
+                    mobile_money_network=bank_code,
+                    currency=payload.currency or "GHS",
+                )
+            else:  # bank
+                if not payload.bankCode or not payload.accountNumber:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Bank code and account number are required for bank payout",
+                    )
+                code = paystack_svc.create_transfer_recipient(
+                    name=payload.accountName,
+                    account_number=payload.accountNumber.strip(),
+                    bank_code=payload.bankCode.strip(),
+                    currency=payload.currency or "GHS",
+                )
+            if code:
+                user.paystack_recipient_code = code
+            else:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Could not register payout account with Paystack. Please check your details and try again.",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not register payout account with Paystack. Please check your details and try again.",
+            ) from exc
+
     if user.onboarding_step < 5:
         user.onboarding_step = 5
     db.commit()
@@ -203,6 +249,18 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
             status_code=400,
             detail="Identity verification is required before submitting. "
                    "Please complete the Ghana Card NIA lookup and face match.",
+        )
+
+    if not user.payout_info:
+        raise HTTPException(
+            status_code=400,
+            detail="Payout account setup is required. Complete step 5 with your mobile money or bank details.",
+        )
+
+    if settings.paystack_secret_key and not user.paystack_recipient_code:
+        raise HTTPException(
+            status_code=400,
+            detail="Payout account setup is incomplete. Please re-submit your payout details in step 5.",
         )
 
     if not user.store_name:

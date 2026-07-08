@@ -56,12 +56,15 @@ def _paystack_user_message(gateway_response: str, fallback: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 # Maps payout_info["mobileMoneyNetwork"] → Paystack bank_code for transfers.
-# Must stay in sync with paystack.py's _MOMO_BANK_CODE (used for charge) and
-# the values saved by auth.py update_payout_info.
+# Accepts both the Paystack short code (MTN / VOD / ATL) and the full network
+# name that ghana.ts MOMO_NETWORKS stores — looked up case-insensitively.
 _MOMO_NETWORK_BANK_CODE: dict[str, str] = {
     "MTN": "MTN",
     "VOD": "VOD",
     "ATL": "ATL",
+    "mtn mobile money": "MTN",
+    "telecel cash": "VOD",
+    "airteltigo money": "ATL",
 }
 
 
@@ -105,7 +108,7 @@ def _ensure_recipient_code(db: Session, vendor: "User") -> str | None:
     if method == "mobile_money":
         phone = payout.get("mobileMoneyNumber", "").strip()
         network = payout.get("mobileMoneyNetwork", "").strip()
-        bank_code = _MOMO_NETWORK_BANK_CODE.get(network, "")
+        bank_code = _MOMO_NETWORK_BANK_CODE.get(network) or _MOMO_NETWORK_BANK_CODE.get(network.lower(), "")
         if not phone or not bank_code:
             return None
         try:
@@ -376,23 +379,42 @@ def _release_payout(
         recipient_code = _ensure_recipient_code(db, vendor)
 
         if not recipient_code:
-            # Vendor has no payout account configured.
+            # Vendor has no payout account. Write a PAYOUT_FAILED ledger entry so
+            # retry_stuck_payouts can pick this order up once they add their details.
+            ledger_svc.record_payout_failed(
+                db,
+                order_id=order.id,
+                seller_id=sid,
+                amount_ghs=payout,
+                reference=idempotency_key,
+                idempotency_key=f"payout-missing-{order.id}-{sid}",
+                reason="missing_recipient",
+            )
             results[sid] = {"payout_ghs": payout_ghs, "payout_status": "pending_account", "reference": ""}
             notify_safe(
                 db,
                 event_type="payout_pending_account",
                 recipient_id=sid,
-                title="Add your payout account",
+                title="Add your payout account to receive payment",
                 body=(
-                    f"A buyer confirmed delivery of their order. "
-                    f"Your payout of {order.currency} {payout_ghs} is ready — "
-                    "please add your MoMo or bank details in your profile so we can send it."
+                    f"A buyer confirmed delivery — your payout of {order.currency} {payout_ghs} is ready. "
+                    "Add your mobile money or bank details in Settings to receive it."
                 ),
                 notif_type="account",
-                href="/profile?tab=payout",
+                href="/settings?tab=payout",
                 email_subject="Action required: add your Spree payout account",
                 cta_label="Add payout details",
-                cta_url=f"{settings.frontend_url}/profile?tab=payout",
+                cta_url=f"{settings.frontend_url}/settings?tab=payout",
+            )
+            from app.services import dev_notifier  # noqa: PLC0415
+            dev_notifier.alert(
+                "payout_missing_recipient",
+                f"Seller {sid} has no payout account for order {order.id}",
+                {
+                    "seller_id": sid,
+                    "order_id": order.id,
+                    "amount": f"{order.currency} {payout_ghs}",
+                },
             )
             continue
 
@@ -1394,11 +1416,11 @@ def retry_stuck_payouts(db: Session) -> dict:
 
     Returns {"checked": N, "retried": N, "errors": list}.
     """
-    # Find orders stuck in "confirmed" where payout is still in flight or failed.
+    # Find orders stuck in "confirmed" where payout is still in flight, failed, or missing.
     stuck_orders = db.scalars(
         select(Order).where(
             Order.status == "confirmed",
-            Order.payout_status.in_(["processing", "failed", "reversed"]),
+            Order.payout_status.in_(["processing", "failed", "reversed", "pending_account"]),
         )
     ).all()
 
@@ -1460,7 +1482,7 @@ def retry_stuck_payouts(db: Session) -> dict:
                     reference=idempotency_key,
                     idempotency_key=f"payout-init-{order.id}-{sid}",
                 )
-                if order.payout_status in ("failed", "reversed"):
+                if order.payout_status in ("failed", "reversed", "pending_account"):
                     order.payout_status = "processing"
                 db.commit()
                 retried += 1

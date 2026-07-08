@@ -504,11 +504,21 @@ def approve_seller(db: Session, seller_id: str, admin_id: str) -> dict:
             detail=f"Cannot approve a vendor with status '{vendor.seller_status}'. "
                    "Only vendors with status 'pending_verification' can be approved.",
         )
+
+    from app.core.config import settings as _settings  # noqa: PLC0415
+    if _settings.paystack_secret_key and not vendor.paystack_recipient_code:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This seller does not have a verified payout account. "
+                "Ask them to add their mobile money or bank details in Settings before approving."
+            ),
+        )
+
     from datetime import datetime, timezone  # noqa: PLC0415
     now = datetime.now(timezone.utc)
     prev_status = vendor.seller_status
     # G16: set to "active" — the canonical "approved and can list products" state.
-    # The spec calls this "verified" but the entire catalog/order stack checks "active".
     vendor.seller_status = "active"
     vendor.government_id_verified = True
     vendor.rejection_reason = None

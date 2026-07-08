@@ -495,30 +495,42 @@ def update_payout_info(db: Session, user_id: str, payload: "PayoutInfoRequest") 
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # G2: payout is card OR MoMo (MTN/Telecel only). NO bank account fields.
+    # G13: store payout details as an encrypted JSON blob.
     payout_plain = {
         "method": payload.method,
         "mobileMoneyNetwork": payload.mobileMoneyNetwork or "",
         "mobileMoneyNumber": payload.mobileMoneyNumber or "",
-        "cardLast4": payload.cardLast4 or "",
-        "cardholderName": payload.cardholderName or "",
+        "bankCode": payload.bankCode or "",
+        "bankName": payload.bankName or "",
+        "accountNumber": payload.accountNumber or "",
         "currency": payload.currency or "GHS",
         "accountName": payload.accountName or "",
     }
-    # G13: store payout details as an encrypted JSON blob.
     user.payout_info = {"__enc__": encrypt(json.dumps(payout_plain))}
 
-    # Create or refresh the Paystack transfer recipient for MoMo
-    if settings.paystack_secret_key and payload.method == "mobile_money" and payload.mobileMoneyNumber:
+    # Create or refresh the Paystack transfer recipient.
+    if settings.paystack_secret_key:
+        from app.services.orders import _MOMO_NETWORK_BANK_CODE  # noqa: PLC0415
         try:
-            recipient_code = paystack_svc.create_transfer_recipient(
-                name=payload.accountName or user.name,
-                account_number=payload.mobileMoneyNumber,
-                bank_code="",
-                mobile_money_network=payload.mobileMoneyNetwork,
-                currency=payload.currency or "GHS",
-            )
-            user.paystack_recipient_code = recipient_code
+            if payload.method == "mobile_money" and payload.mobileMoneyNumber:
+                network = payload.mobileMoneyNetwork or ""
+                bank_code = _MOMO_NETWORK_BANK_CODE.get(network) or _MOMO_NETWORK_BANK_CODE.get(network.lower(), "")
+                if bank_code:
+                    code = paystack_svc.create_transfer_recipient(
+                        name=payload.accountName or user.name,
+                        account_number=payload.mobileMoneyNumber,
+                        mobile_money_network=bank_code,
+                        currency=payload.currency or "GHS",
+                    )
+                    user.paystack_recipient_code = code
+            elif payload.method == "bank" and payload.accountNumber and payload.bankCode:
+                code = paystack_svc.create_transfer_recipient(
+                    name=payload.accountName or user.name,
+                    account_number=payload.accountNumber,
+                    bank_code=payload.bankCode,
+                    currency=payload.currency or "GHS",
+                )
+                user.paystack_recipient_code = code
         except Exception as exc:
             raise HTTPException(
                 status_code=502,
@@ -528,4 +540,14 @@ def update_payout_info(db: Session, user_id: str, payload: "PayoutInfoRequest") 
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Trigger immediate retry of any stuck payouts for this seller.
+    if user.paystack_recipient_code:
+        try:
+            from app.services.orders import retry_stuck_payouts  # noqa: PLC0415
+            retry_stuck_payouts(db)
+        except Exception as exc:
+            import logging as _logging  # noqa: PLC0415
+            _logging.getLogger(__name__).warning("Payout retry after payout-info update failed: %s", exc)
+
     return _serialize_profile(user)

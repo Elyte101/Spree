@@ -204,3 +204,58 @@ def verify_email(payload: VerifyEmailRequest, db: DBSession, _: InternalAPIKey):
             detail="Invalid or expired verification link",
         )
     return user
+
+
+# ── Bank payout endpoints ──────────────────────────────────────────────────────
+
+@router.get("/banks")
+def list_banks(_: InternalAPIKey):
+    """Return supported GHS banks from Paystack. Cached per-process; safe for frequent calls."""
+    from app.services import paystack as paystack_svc  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
+    if not settings.paystack_secret_key:
+        # Return an empty list in dev/mock mode so the UI degrades gracefully.
+        return {"data": []}
+    try:
+        banks = paystack_svc.list_banks(currency="GHS")
+        return {"data": banks}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not fetch bank list: {exc}") from exc
+
+
+@router.get("/banks/resolve")
+def resolve_bank(account_number: str, bank_code: str, _: InternalAPIKey):
+    """Resolve a bank account number to its account holder name via Paystack."""
+    from app.services import paystack as paystack_svc  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
+    if not settings.paystack_secret_key:
+        raise HTTPException(status_code=503, detail="Bank resolve not available in mock mode")
+    if not account_number or not bank_code:
+        raise HTTPException(status_code=422, detail="account_number and bank_code are required")
+    try:
+        name = paystack_svc.resolve_bank_account(account_number, bank_code)
+        return {"resolved": True, "name": name}
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Could not resolve account: {exc}") from exc
+
+
+@router.get("/sellers-missing-payout")
+def sellers_missing_payout(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
+    """Admin: list active sellers who have no paystack_recipient_code."""
+    if actor_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    from sqlalchemy import select as _sel  # noqa: PLC0415
+    from app.db.models import User  # noqa: PLC0415
+    sellers = db.scalars(
+        _sel(User).where(
+            User.seller_status == "active",
+            User.paystack_recipient_code.is_(None),
+        )
+    ).all()
+    return {
+        "count": len(sellers),
+        "sellers": [
+            {"id": s.id, "name": s.name, "email": s.email, "sellerStatus": s.seller_status}
+            for s in sellers
+        ],
+    }
