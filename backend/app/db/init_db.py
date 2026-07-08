@@ -51,6 +51,34 @@ _COLUMN_TYPE_UPGRADES: list[tuple[str, str, str]] = [
      "ALTER TABLE order_items ALTER COLUMN commission_rate TYPE NUMERIC(12,8)"),
 ]
 
+# RLS migrations — PostgreSQL / Supabase only.
+# Executed once per table; idempotent (ENABLE ROW LEVEL SECURITY is a no-op
+# when already enabled; DROP POLICY IF EXISTS + CREATE POLICY replaces safely).
+#
+# Design intent:
+#   promo_banners    — public marketing content; anyone may SELECT, nobody may
+#                      write via PostgREST (backend uses service_role which
+#                      bypasses RLS for all writes).
+#   identity_sessions — contains NIA mugshot, encrypted Ghana Card number, DOB,
+#                      full name, and a secret session_id.  No PostgREST policy
+#                      at all = complete lockdown; service_role bypasses RLS for
+#                      backend reads/writes.
+_RLS_STATEMENTS: list[str] = [
+    # ── Enable RLS ────────────────────────────────────────────────────────────
+    "ALTER TABLE public.promo_banners ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.identity_sessions ENABLE ROW LEVEL SECURITY",
+    # ── promo_banners: public read ────────────────────────────────────────────
+    "DROP POLICY IF EXISTS promo_banners_public_select ON public.promo_banners",
+    (
+        "CREATE POLICY promo_banners_public_select"
+        " ON public.promo_banners"
+        " FOR SELECT TO anon, authenticated"
+        " USING (true)"
+    ),
+    # identity_sessions: zero policies → PostgREST returns 0 rows for every role.
+    # service_role (used by FastAPI) bypasses RLS entirely.
+]
+
 
 def _run_column_migrations(eng) -> None:
     """
@@ -87,6 +115,25 @@ def _run_column_migrations(eng) -> None:
         logger.warning("Column migration warning (non-fatal): %s", exc)
 
 
+def _run_rls_migrations(eng) -> None:
+    """Enable RLS and apply PostgREST access policies on Supabase-exposed tables.
+
+    No-op on SQLite (RLS is a PostgreSQL feature).  Failures are logged as
+    warnings — a missing policy is a security concern but must not break startup.
+    """
+    if eng.dialect.name != "postgresql":
+        return
+    try:
+        with eng.connect() as conn:
+            for stmt in _RLS_STATEMENTS:
+                conn.execute(text(stmt))
+                logger.debug("RLS: %s", stmt[:72])
+            conn.commit()
+        logger.info("RLS policies applied.")
+    except Exception as exc:
+        logger.warning("RLS migration warning (non-fatal): %s", exc)
+
+
 def initialize_database() -> None:
     if not settings.auto_initialize_database:
         return
@@ -108,6 +155,7 @@ def initialize_database() -> None:
     Base.metadata.create_all(bind=engine)
     logger.info("Database schema ready.")
     _run_column_migrations(engine)
+    _run_rls_migrations(engine)
 
     if not settings.should_seed_admin:
         logger.warning("Skipping admin seed: SEED_ADMIN_* env vars not fully configured.")
