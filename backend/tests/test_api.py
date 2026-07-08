@@ -758,6 +758,7 @@ def test_paystack_client_sends_non_default_user_agent():
 def test_charge_momo_paystack_403_maps_to_403_not_502():
     """Paystack 403 (bad key) must return HTTP 403 with structured error, not 502."""
     from app.services.paystack import PaystackAPIError
+    from app.core.config import settings as svc_settings
 
     with TestClient(app) as client:
         prod_resp = client.post(
@@ -769,13 +770,20 @@ def test_charge_momo_paystack_403_maps_to_403_not_502():
         product_id = prod_resp.json()["id"]
         price = float(prod_resp.json()["price"])
 
-        with patch("app.services.orders.paystack_svc.charge",
-                   side_effect=PaystackAPIError(403, "Paystack error: Invalid key", "Invalid key")):
-            resp = client.post(
-                "/api/v1/orders/charge-momo",
-                json=_momo_payload(product_id, price),
-                headers=INTERNAL_HEADERS,
-            )
+        # Disable mock mode so the handler actually calls paystack_svc.charge,
+        # allowing the patch below to intercept it and simulate a 403.
+        original_mock = svc_settings.payments_mock
+        svc_settings.payments_mock = False
+        try:
+            with patch("app.services.orders.paystack_svc.charge",
+                       side_effect=PaystackAPIError(403, "Paystack error: Invalid key", "Invalid key")):
+                resp = client.post(
+                    "/api/v1/orders/charge-momo",
+                    json=_momo_payload(product_id, price),
+                    headers=INTERNAL_HEADERS,
+                )
+        finally:
+            svc_settings.payments_mock = original_mock
 
     assert resp.status_code == 403, f"Expected 403, got {resp.status_code}: {resp.text}"
     body = resp.json()
