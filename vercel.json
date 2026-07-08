@@ -4,10 +4,6 @@
   "installCommand": "npm install --legacy-peer-deps",
   "crons": [
     {
-      "path": "/api/cron/warmup",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/onboarding-reminder",
       "schedule": "0 9 * * *"
     },
