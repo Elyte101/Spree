@@ -16,6 +16,7 @@ from app.services import ledger as ledger_svc
 from app.services import paystack as paystack_svc
 from app.services.paystack import PaystackAPIError
 from app.services.notifications import create_notification, notify_safe
+from app.services.encryption import decrypt
 from app.core.logging import safe_extra
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,98 @@ def _paystack_user_message(gateway_response: str, fallback: str = "") -> str:
         if keyword in lower:
             return message
     return gateway_response  # pass through unknown responses verbatim
+
+
+# ---------------------------------------------------------------------------
+# Payout helpers
+# ---------------------------------------------------------------------------
+
+# Maps payout_info["mobileMoneyNetwork"] → Paystack bank_code for transfers.
+# Must stay in sync with paystack.py's _MOMO_BANK_CODE (used for charge) and
+# the values saved by auth.py update_payout_info.
+_MOMO_NETWORK_BANK_CODE: dict[str, str] = {
+    "MTN": "MTN",
+    "VOD": "VOD",
+    "ATL": "ATL",
+}
+
+
+def _read_payout_info(raw: dict | None) -> dict:
+    """Decrypt and return payout_info as a plain dict.  Returns {} if empty/invalid."""
+    if not raw:
+        return {}
+    if "__enc__" in raw:
+        import json as _json  # noqa: PLC0415
+        plaintext = decrypt(raw["__enc__"])
+        if plaintext:
+            try:
+                return _json.loads(plaintext)
+            except Exception:
+                return {}
+        return {}
+    return raw  # legacy plaintext
+
+
+def _ensure_recipient_code(db: Session, vendor: "User") -> str | None:
+    """Return vendor's Paystack recipient_code, creating it on the fly if needed.
+
+    Returns None when:
+    - The vendor has no payout_info (no account set up).
+    - The Paystack secret key is absent (payments not configured).
+    - The Paystack API call to create the recipient fails.
+
+    Persists the new recipient_code on the vendor and commits so subsequent
+    calls skip the round-trip.
+    """
+    if vendor.paystack_recipient_code:
+        return vendor.paystack_recipient_code
+
+    if not settings.paystack_secret_key:
+        return None
+
+    payout = _read_payout_info(vendor.payout_info)
+    method = payout.get("method", "")
+    account_name = payout.get("accountName") or vendor.name or ""
+
+    if method == "mobile_money":
+        phone = payout.get("mobileMoneyNumber", "").strip()
+        network = payout.get("mobileMoneyNetwork", "").strip()
+        bank_code = _MOMO_NETWORK_BANK_CODE.get(network, "")
+        if not phone or not bank_code:
+            return None
+        try:
+            code = paystack_svc.create_transfer_recipient(
+                name=account_name,
+                account_number=phone,
+                mobile_money_network=bank_code,
+                currency="GHS",
+            )
+        except Exception as exc:
+            logger.error("create_transfer_recipient failed for vendor %s: %s", vendor.id, exc)
+            return None
+    elif method == "bank":
+        account_number = payout.get("accountNumber", "").strip()
+        bank_code = payout.get("bankCode", "").strip()
+        if not account_number or not bank_code:
+            return None
+        try:
+            code = paystack_svc.create_transfer_recipient(
+                name=account_name,
+                account_number=account_number,
+                bank_code=bank_code,
+                currency="GHS",
+            )
+        except Exception as exc:
+            logger.error("create_transfer_recipient failed for vendor %s: %s", vendor.id, exc)
+            return None
+    else:
+        return None
+
+    if code:
+        vendor.paystack_recipient_code = code
+        db.commit()
+
+    return code or None
 
 
 # ---------------------------------------------------------------------------
@@ -223,12 +316,19 @@ def _release_payout(
     order: Order,
     *,
     is_auto_release: bool = False,
-) -> dict[str, tuple[Decimal, bool]]:
-    """Compute per-seller payouts, increment counters, commit, and initiate Paystack transfers.
+) -> dict[str, dict]:
+    """Compute per-seller payouts, increment counters, and initiate Paystack transfers.
 
-    Must be called after order.status is set to "confirmed" and payout_released_at is set.
-    Commits those state changes together with counter increments, then initiates transfers.
-    Returns {seller_id: (payout_ghs_rounded, transfer_ok)}.
+    Must be called after order.status is set to "confirmed".
+    Does NOT stamp payout_released_at — that is the caller's job once it knows
+    the aggregate result, or the webhook's job on transfer.success.
+
+    Returns {seller_id: {"payout_ghs": Decimal, "payout_status": str, "reference": str}}
+    where payout_status is one of:
+      "released"       — Paystack returned status=success immediately
+      "processing"     — transfer initiated; waiting for Paystack webhook
+      "pending_account"— vendor has no payout account; transfer not attempted
+      "failed"         — transfer call raised an exception
     """
     seller_payouts: dict[str, Decimal] = {}
     total_payout = Decimal("0")
@@ -260,54 +360,93 @@ def _release_payout(
     db.commit()
     db.refresh(order)
 
-    results: dict[str, tuple[Decimal, bool]] = {}
+    results: dict[str, dict] = {}
 
     for sid, payout in seller_payouts.items():
         vendor = db.get(User, sid)
-        payout_minor = int(payout * 100)
-        transfer_ok = False
+        payout_ghs = payout.quantize(Decimal("0.01"))
         idempotency_key = f"payout-{order.id}-{sid}"
 
-        if vendor and vendor.paystack_recipient_code and settings.paystack_secret_key:
-            try:
-                paystack_svc.initiate_transfer(
-                    amount_minor=payout_minor,
-                    recipient_code=vendor.paystack_recipient_code,
-                    reason=f"Spree payout for order {order.id}",
-                    idempotency_key=idempotency_key,
-                )
-                transfer_ok = True
-                if is_auto_release:
-                    ledger_svc.record_auto_release(
-                        db,
-                        order_id=order.id,
-                        seller_id=sid,
-                        amount_ghs=payout,
-                        reference=idempotency_key,
-                        idempotency_key=f"auto-release-{order.id}-{sid}",
-                    )
-                else:
-                    ledger_svc.record_payout_initiated(
-                        db,
-                        order_id=order.id,
-                        seller_id=sid,
-                        amount_ghs=payout,
-                        reference=idempotency_key,
-                        idempotency_key=f"payout-init-{order.id}-{sid}",
-                    )
-            except Exception as exc:
-                logger.error("Paystack transfer failed for vendor %s: %s", sid, exc)
-                ledger_svc.record_payout_failed(
-                    db,
-                    order_id=order.id,
-                    seller_id=sid,
-                    amount_ghs=payout,
-                    reference=idempotency_key,
-                    idempotency_key=f"payout-fail-{order.id}-{sid}",
-                    reason=str(exc),
-                )
+        if not vendor:
+            results[sid] = {"payout_ghs": payout_ghs, "payout_status": "failed", "reference": ""}
+            continue
 
-        results[sid] = (payout.quantize(Decimal("0.01")), transfer_ok)
+        # Get or create Paystack recipient — handles vendors who saved payout_info
+        # before recipient_code was stored, or whose earlier creation failed.
+        recipient_code = _ensure_recipient_code(db, vendor)
+
+        if not recipient_code:
+            # Vendor has no payout account configured.
+            results[sid] = {"payout_ghs": payout_ghs, "payout_status": "pending_account", "reference": ""}
+            notify_safe(
+                db,
+                event_type="payout_pending_account",
+                recipient_id=sid,
+                title="Add your payout account",
+                body=(
+                    f"A buyer confirmed delivery of their order. "
+                    f"Your payout of {order.currency} {payout_ghs} is ready — "
+                    "please add your MoMo or bank details in your profile so we can send it."
+                ),
+                notif_type="account",
+                href="/profile?tab=payout",
+                email_subject="Action required: add your Spree payout account",
+                cta_label="Add payout details",
+                cta_url=f"{settings.frontend_url}/profile?tab=payout",
+            )
+            continue
+
+        payout_minor = int(payout * 100)
+        try:
+            transfer_data = paystack_svc.initiate_transfer(
+                amount_minor=payout_minor,
+                recipient_code=recipient_code,
+                reason=f"Spree payout for order {order.id}",
+                idempotency_key=idempotency_key,
+            )
+            transfer_status = transfer_data.get("status", "")
+            logger.info(
+                "Transfer initiated",
+                extra=safe_extra({
+                    "order_id": order.id,
+                    "seller_id": sid,
+                    "amount_ghs": str(payout_ghs),
+                    "transfer_status": transfer_status,
+                    "reference": idempotency_key,
+                }),
+            )
+
+            # "success" = money left our balance immediately (rare on GHS MoMo);
+            # "otp" / "pending" = waiting for Paystack approval / OTP from operator.
+            payout_status = "released" if transfer_status == "success" else "processing"
+
+            ledger_record = ledger_svc.record_auto_release if is_auto_release else ledger_svc.record_payout_initiated
+            ledger_record(
+                db,
+                order_id=order.id,
+                seller_id=sid,
+                amount_ghs=payout,
+                reference=idempotency_key,
+                idempotency_key=(
+                    f"auto-release-{order.id}-{sid}"
+                    if is_auto_release
+                    else f"payout-init-{order.id}-{sid}"
+                ),
+            )
+            results[sid] = {"payout_ghs": payout_ghs, "payout_status": payout_status, "reference": idempotency_key}
+
+        except Exception as exc:
+            logger.error("Paystack transfer failed for vendor %s: %s", sid, exc)
+            ledger_svc.record_payout_failed(
+                db,
+                order_id=order.id,
+                seller_id=sid,
+                amount_ghs=payout,
+                reference=idempotency_key,
+                idempotency_key=f"payout-fail-{order.id}-{sid}",
+                reason=str(exc),
+            )
+            results[sid] = {"payout_ghs": payout_ghs, "payout_status": "failed", "reference": ""}
 
     db.commit()
     return results
@@ -345,6 +484,7 @@ def _order_to_dict(order: Order) -> dict:
         "deliveredAt": order.delivered_at,
         "payoutAmount": _d(order.payout_amount),
         "payoutReleasedAt": order.payout_released_at,
+        "payoutStatus": order.payout_status,
         "paystackReference": order.paystack_reference,
         "estimatedDeliveryDays": order.estimated_delivery_days,
         "estimatedDeliveryDate": order.estimated_delivery_date,
@@ -1094,6 +1234,9 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
                 idempotency_key=f"payout-fail-wh-{reference}",
                 reason=data.get("failures") or data.get("gateway_response", ""),
             )
+            failed_order = db.get(Order, initiated.order_id)
+            if failed_order and failed_order.payout_status not in ("released", "reversed"):
+                failed_order.payout_status = "failed"
             db.commit()
 
         vendor = (
@@ -1133,6 +1276,80 @@ def handle_paystack_webhook(db: Session, event: str, data: dict) -> None:
                 cta_url=f"{settings.frontend_url}/settings?tab=payout",
             )
 
+    elif event == "transfer.reversed":
+        # Paystack reversed a previously-successful transfer (e.g. bank rejected funds).
+        reference = data.get("reference", "")
+        recipient_code = data.get("recipient", {}).get("recipient_code", "")
+        amount_minor = data.get("amount", 0)
+        logger.warning("Webhook: transfer reversed ref=%s recipient=%s", reference, recipient_code)
+
+        initiated = db.scalar(
+            select(LedgerEntry)
+            .where(
+                LedgerEntry.entry_type.in_(
+                    [ledger_svc.PAYOUT_INITIATED, ledger_svc.AUTO_RELEASE, ledger_svc.PAYOUT_CONFIRMED]
+                ),
+                LedgerEntry.reference == reference,
+            )
+        ) if reference else None
+
+        if initiated:
+            amount = Decimal(str(amount_minor)) / 100 if amount_minor else Decimal(str(initiated.amount_pesewas)) / 100
+            ledger_svc.record_payout_failed(
+                db,
+                order_id=initiated.order_id,
+                seller_id=initiated.seller_id,
+                amount_ghs=amount,
+                reference=reference,
+                idempotency_key=f"payout-reversed-wh-{reference}",
+                reason=data.get("failures") or data.get("gateway_response", "reversal"),
+            )
+            reversed_order = db.get(Order, initiated.order_id)
+            if reversed_order:
+                reversed_order.payout_status = "reversed"
+                if reversed_order.status == "paid_out":
+                    # Revert to confirmed so retry_stuck_payouts can pick this up.
+                    reversed_order.status = "confirmed"
+                    reversed_order.payout_released_at = None
+            db.commit()
+
+        vendor = (
+            db.scalar(select(User).where(User.paystack_recipient_code == recipient_code))
+            if recipient_code else None
+        )
+        if vendor:
+            amount_display = Decimal(str(amount_minor)) / 100 if amount_minor else (
+                Decimal(str(initiated.amount_pesewas)) / 100 if initiated else Decimal("0")
+            )
+            currency = (vendor.payout_info or {}).get("currency", "GHS")
+            dev_notifier.alert(
+                "payout_transfer_reversed",
+                f"Payout transfer reversed for vendor {vendor.id}",
+                {
+                    "vendor_id": vendor.id,
+                    "vendor_email": vendor.email,
+                    "order_id": initiated.order_id if initiated else None,
+                    "recipient_code": recipient_code,
+                    "amount": f"{currency} {amount_display:.2f}",
+                    "reference": reference,
+                },
+            )
+            notify_safe(
+                db,
+                event_type="payout_reversed",
+                recipient_id=vendor.id,
+                title="Payout reversed — we will retry",
+                body=(
+                    f"Your payout of {currency} {amount_display:.2f} was reversed by your bank. "
+                    "We will retry the transfer — please ensure your account details are correct."
+                ),
+                notif_type="account",
+                href="/settings?tab=payout",
+                email_subject="Your Spree payout was reversed",
+                cta_label="Check payout details",
+                cta_url=f"{settings.frontend_url}/settings?tab=payout",
+            )
+
 
 def _maybe_advance_to_paid_out(db: Session, order_id: str) -> None:
     """Advance a 'confirmed' order to 'paid_out' if all sellers now have PAYOUT_CONFIRMED.
@@ -1162,6 +1379,8 @@ def _maybe_advance_to_paid_out(db: Session, order_id: str) -> None:
 
     if set(confirmed_sellers) >= seller_ids:
         order.status = "paid_out"
+        order.payout_status = "released"
+        order.payout_released_at = datetime.now(timezone.utc)
         db.commit()
         logger.info("Order %s advanced to paid_out after all payout confirmations", order_id)
 
@@ -1175,11 +1394,11 @@ def retry_stuck_payouts(db: Session) -> dict:
 
     Returns {"checked": N, "retried": N, "errors": list}.
     """
-    # Find orders stuck in "confirmed" with a payout_released_at set
+    # Find orders stuck in "confirmed" where payout is still in flight or failed.
     stuck_orders = db.scalars(
         select(Order).where(
             Order.status == "confirmed",
-            Order.payout_released_at.is_not(None),
+            Order.payout_status.in_(["processing", "failed", "reversed"]),
         )
     ).all()
 
@@ -1205,7 +1424,10 @@ def retry_stuck_payouts(db: Session) -> dict:
 
         for sid in pending_sellers:
             vendor = db.get(User, sid)
-            if not vendor or not vendor.paystack_recipient_code or not settings.paystack_secret_key:
+            if not vendor or not settings.paystack_secret_key:
+                continue
+            recipient_code = _ensure_recipient_code(db, vendor)
+            if not recipient_code:
                 continue
 
             # Recompute payout amount from items
@@ -1226,7 +1448,7 @@ def retry_stuck_payouts(db: Session) -> dict:
             try:
                 paystack_svc.initiate_transfer(
                     amount_minor=payout_minor,
-                    recipient_code=vendor.paystack_recipient_code,
+                    recipient_code=recipient_code,
                     reason=f"Spree payout retry for order {order.id}",
                     idempotency_key=idempotency_key,
                 )
@@ -1238,6 +1460,8 @@ def retry_stuck_payouts(db: Session) -> dict:
                     reference=idempotency_key,
                     idempotency_key=f"payout-init-{order.id}-{sid}",
                 )
+                if order.payout_status in ("failed", "reversed"):
+                    order.payout_status = "processing"
                 db.commit()
                 retried += 1
             except Exception as exc:
@@ -1456,13 +1680,33 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             detail=f"Cannot confirm delivery for an order with status '{order.status}'",
         )
 
-    now = datetime.now(timezone.utc)
-    # G8: buyer confirmation → 'confirmed', payout release → 'paid_out'.
+    # G8: buyer confirmation → 'confirmed'. payout_released_at stamped only on transfer.success.
     order.status = "confirmed"
-    order.payout_released_at = now
 
     # Releases payouts: computes amounts, increments counters, commits, initiates transfers.
     payout_results = _release_payout(db, order, is_auto_release=False)
+
+    # Derive aggregate payout status across all sellers.
+    statuses = {r["payout_status"] for r in payout_results.values()}
+    if statuses == {"released"}:
+        aggregate_status = "released"
+    elif statuses == {"pending_account"}:
+        aggregate_status = "pending_account"
+    elif "released" in statuses or "processing" in statuses:
+        aggregate_status = "processing"
+    else:
+        aggregate_status = "failed"
+
+    order.payout_status = aggregate_status
+
+    # Advance to paid_out immediately only when Paystack returned "success" for every seller
+    # (rare on GHS MoMo — usually we wait for the transfer.success webhook).
+    if aggregate_status == "released" and payout_results:
+        order.status = "paid_out"
+        order.payout_released_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(order)
 
     # Notify buyer (order already refreshed inside _release_payout)
     if order.user_id:
@@ -1479,24 +1723,26 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             cta_url=f"{settings.frontend_url}/orders/{order.id}",
         )
 
-    # Notify each seller and decide whether to advance to paid_out
-    all_transfers_ok = True
-    for sid, (payout_ghs, transfer_ok) in payout_results.items():
-        if not transfer_ok:
-            all_transfers_ok = False
-        payout_note = (
-            f"Your payout of {order.currency} {payout_ghs} has been sent to your account."
-            if transfer_ok
-            else (
-                f"Your payout of {order.currency} {payout_ghs} is being processed. "
-                "Please ensure your payout details are up to date in your profile."
+    # Notify each seller
+    for sid, result in payout_results.items():
+        payout_ghs = result["payout_ghs"]
+        payout_status = result["payout_status"]
+        if payout_status == "released":
+            payout_note = f"Your payout of {order.currency} {payout_ghs} has been sent to your account."
+        elif payout_status == "pending_account":
+            payout_note = (
+                f"Your payout of {order.currency} {payout_ghs} is ready but we have no account on file. "
+                "Please add your payout details in your profile."
             )
-        )
+        else:
+            payout_note = (
+                f"Your payout of {order.currency} {payout_ghs} has been initiated and is being processed."
+            )
         notify_safe(
             db,
             event_type="payout_released",
             recipient_id=sid,
-            title="Delivery confirmed — payout released",
+            title="Delivery confirmed — payout initiated",
             body=f"The buyer confirmed receipt of their order. {payout_note}",
             notif_type="order",
             href="/dashboard/orders",
@@ -1504,12 +1750,6 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
             cta_label="View orders",
             cta_url=f"{settings.frontend_url}/dashboard/orders",
         )
-
-    # G8: mark paid_out once all transfers have been initiated
-    if all_transfers_ok and payout_results:
-        order.status = "paid_out"
-        db.commit()
-        db.refresh(order)
 
     return _order_to_dict(order)
 
@@ -1558,14 +1798,32 @@ def auto_release_delivered_orders(db: Session) -> dict:
             if order is None:
                 # Another process already locked/processed this order.
                 continue
-            now = datetime.now(timezone.utc)
             order.status = "confirmed"
-            order.payout_released_at = now
 
             # Releases payouts: computes amounts, increments counters, commits, initiates transfers.
             payout_results = _release_payout(db, order, is_auto_release=True)
 
-            # Notify buyer (order already refreshed inside _release_payout)
+            # Derive aggregate payout status
+            statuses = {r["payout_status"] for r in payout_results.values()}
+            if statuses == {"released"}:
+                aggregate_status = "released"
+            elif statuses == {"pending_account"}:
+                aggregate_status = "pending_account"
+            elif "released" in statuses or "processing" in statuses:
+                aggregate_status = "processing"
+            else:
+                aggregate_status = "failed"
+
+            order.payout_status = aggregate_status
+
+            if aggregate_status == "released" and payout_results:
+                order.status = "paid_out"
+                order.payout_released_at = datetime.now(timezone.utc)
+
+            db.commit()
+            db.refresh(order)
+
+            # Notify buyer
             if order.user_id:
                 notify_safe(
                     db,
@@ -1584,19 +1842,18 @@ def auto_release_delivered_orders(db: Session) -> dict:
                 )
 
             # Notify sellers
-            all_transfers_ok = True
-            for sid, (payout_ghs, transfer_ok) in payout_results.items():
-                if not transfer_ok:
-                    all_transfers_ok = False
+            for sid, result in payout_results.items():
+                payout_ghs = result["payout_ghs"]
+                payout_status = result["payout_status"]
+                sent_str = "has been sent." if payout_status == "released" else "is being processed."
                 notify_safe(
                     db,
                     event_type="payout_released",
                     recipient_id=sid,
-                    title="Auto-release payout sent",
+                    title="Auto-release payout initiated",
                     body=(
                         f"Order {order.id} was auto-confirmed after {release_days} days. "
-                        f"Your payout of {order.currency} {payout_ghs} "
-                        + ("has been sent." if transfer_ok else "is being processed.")
+                        f"Your payout of {order.currency} {payout_ghs} {sent_str}"
                     ),
                     notif_type="order",
                     href="/dashboard/orders",
@@ -1604,11 +1861,6 @@ def auto_release_delivered_orders(db: Session) -> dict:
                     cta_label="View orders",
                     cta_url=f"{settings.frontend_url}/dashboard/orders",
                 )
-
-            if all_transfers_ok and payout_results:
-                order.status = "paid_out"
-                db.commit()
-                db.refresh(order)
 
             released += 1
 

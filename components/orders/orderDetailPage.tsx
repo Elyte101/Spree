@@ -255,7 +255,15 @@ export function OrderDetailPage({
         const data = (await res.json()) as { detail?: string };
         setError(data.detail ?? "Failed to confirm delivery.");
       } else {
-        setSuccessMsg("Delivery confirmed! Payment has been released to the vendor.");
+        const data = (await res.json()) as { payoutStatus?: string };
+        const payoutStatus = data.payoutStatus;
+        const msg =
+          payoutStatus === "released"
+            ? "Delivery confirmed! Payment has been sent to the vendor."
+            : payoutStatus === "pending_account"
+            ? "Delivery confirmed! The vendor needs to add payout details before payment can be sent."
+            : "Delivery confirmed! The vendor's payment is being processed.";
+        setSuccessMsg(msg);
         router.refresh();
       }
     } catch {
@@ -772,10 +780,20 @@ export function OrderDetailPage({
                 >
                   <LockOutlined color="success" sx={{ fontSize: 16 }} />
                   <Typography variant="caption" color="success.main" fontWeight={600}>
-                    {["confirmed", "paid_out"].includes(order.status)
-                      ? "Payment released to vendor"
-                      : ["cancelled", "refunded"].includes(order.status)
+                    {["cancelled", "refunded"].includes(order.status)
                       ? "Order cancelled"
+                      : order.payoutStatus === "released"
+                      ? "Payment released to vendor"
+                      : order.payoutStatus === "processing"
+                      ? "Payout is processing"
+                      : order.payoutStatus === "pending_account"
+                      ? "Payout pending — seller has no payout account"
+                      : order.payoutStatus === "failed"
+                      ? "Payout failed — will be retried"
+                      : order.payoutStatus === "reversed"
+                      ? "Payout reversed — will be retried"
+                      : ["confirmed", "paid_out"].includes(order.status)
+                      ? "Payment released to vendor"
                       : "Payment held securely by Spree"}
                   </Typography>
                 </Box>

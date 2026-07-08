@@ -102,6 +102,7 @@ export interface OrderDetail {
   deliveredAt?: string | null;
   payoutAmount?: number | null;
   payoutReleasedAt?: string | null;
+  payoutStatus?: "pending_account" | "processing" | "released" | "failed" | "reversed" | null;
   paystackReference?: string | null;
   estimatedDeliveryDays?: number | null;
   estimatedDeliveryDate?: string | null;

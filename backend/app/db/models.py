@@ -324,6 +324,8 @@ class Order(Base):
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payout_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     payout_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # pending_account | processing | released | failed | reversed
+    payout_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     paystack_reference: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
     paystack_tx_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     paystack_access_code: Mapped[str | None] = mapped_column(String(128), nullable=True)

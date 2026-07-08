@@ -235,7 +235,7 @@ async function fetchBackend(
       ...init,
       headers,
       cache: "no-store",
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000),
     });
   } catch (error) {
     if (isConnectionError(error)) {

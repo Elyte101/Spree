@@ -42,6 +42,8 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("users", "government_id_hash", "VARCHAR(64)", "TEXT"),
     # H3: store Paystack access_code so idempotent replay can return a real authorization URL
     ("orders", "paystack_access_code", "VARCHAR(128)", "TEXT"),
+    # Payout lifecycle: pending_account | processing | released | failed | reversed
+    ("orders", "payout_status", "VARCHAR(32)", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.
