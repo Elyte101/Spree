@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local Vercel CLI build-output cache (gitignored) — compiled/minified
+    // bundles under here (e.g. .vercel/output/functions/**/*.func) aren't
+    // source and shouldn't be linted; without this, `eslint .` on a machine
+    // that has ever run `vercel build`/`vercel dev` crashes entirely.
+    ".vercel/**",
   ]),
   {
     rules: {

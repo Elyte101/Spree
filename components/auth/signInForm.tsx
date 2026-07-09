@@ -383,6 +383,18 @@ export function SignInForm({
               autoComplete={tab === "signup" ? "new-password" : "current-password"}
               required
             />
+            {tab === "signin" && (
+              <Box sx={{ textAlign: "right", mt: -1 }}>
+                <Typography
+                  component={Link}
+                  href="/auth/forgot-password"
+                  variant="caption"
+                  sx={{ color: "primary.main", fontWeight: 700, textDecoration: "none" }}
+                >
+                  Forgot password?
+                </Typography>
+              </Box>
+            )}
             {tab === "signup" && (
               <PasswordField
                 label="Confirm password"
@@ -394,7 +406,7 @@ export function SignInForm({
             )}
             {tab === "signup" && (
               <Typography variant="caption" color="text.secondary">
-                Password must be 8+ characters with uppercase, lowercase, number, and symbol.
+                Password must be at least 8 characters. Avoid common or easily guessed passwords.
               </Typography>
             )}
             <Button

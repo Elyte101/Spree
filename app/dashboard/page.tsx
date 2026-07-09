@@ -54,7 +54,7 @@ export default async function Dashboard() {
       : null;
   const canManageProducts = isAdmin || sellerProfile?.sellerStatus === "active";
   const [overview, catalog] = await Promise.all([
-    isAdmin ? getAdminOverview() : Promise.resolve(null),
+    isAdmin ? getAdminOverview(session.user.id) : Promise.resolve(null),
     canManageProducts
       ? getProducts({ limit: 6, sort: "newest", vendor: sellerProfile?.id })
       : Promise.resolve(null),

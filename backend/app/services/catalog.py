@@ -1070,6 +1070,10 @@ def create_comment(
     rating: int | None,
 ) -> dict:
     """G21: Create a comment/review on a product. One per buyer per product (enforced by UQ or check)."""
+    # A4: a verified email is required before posting a comment/review.
+    from app.services.auth import require_email_verified  # noqa: PLC0415 — avoid import cycle at module load
+    require_email_verified(db, user_id, "post a comment")
+
     # Basic XSS: strip angle-brackets from free text (G32 partial mitigation).
     import re as _re  # noqa: PLC0415
     clean_body = _re.sub(r"<[^>]+>", "", body).strip()

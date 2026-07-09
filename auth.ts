@@ -1,32 +1,29 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import Apple from "next-auth/providers/apple";
 import { z } from "zod";
 
 import { authConfig } from "./auth.config";
-import { checkRateLimit, clearFailedAttempts, recordFailedAttempt } from "@/lib/rateLimit";
+import { mintActorToken } from "@/lib/actorToken";
+import { AppUserRole, callBackend, syncOAuthUser } from "@/lib/authBackend";
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 import { isSafeCallbackUrl } from "@/lib/safeUrl";
 
-type AppUserRole = "customer" | "vendor" | "admin";
-
-const SignInSchema = z.object({ 
+const SignInSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
-async function callBackend(path: string, body: object) {
-  return fetch(`${getBackendApiBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Internal-Api-Key": getBackendInternalApiKey(),
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-    signal: AbortSignal.timeout(5000),
-  });
+// A5/A7: surfaced when the backend's DB-backed login rate limiter (keyed on
+// email + real client IP — see backend/app/services/auth.py) returns 429.
+// signInForm.tsx already handles the "rate_limited" code from the outer
+// app/api/auth/[...nextauth]/route.ts wrapper's own (best-effort, in-memory)
+// pre-check; this is the same code surfaced from the authoritative backend
+// check, reached whenever that pre-check didn't already catch it (e.g. after
+// a serverless cold start reset its in-memory counters).
+class LoginRateLimitedError extends CredentialsSignin {
+  code = "rate_limited";
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -40,24 +37,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const parsed = SignInSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
         const { email, password } = parsed.data;
 
-        const ipKey = "login-ip:server";
-        if (!checkRateLimit(email).allowed) return null;
+        // A5/A7: forward the real client IP so the backend's DB-backed
+        // limiter (survives serverless cold starts, unlike the old
+        // in-memory Map here) can key on it. This is best-effort — a caller
+        // hitting the backend directly could claim any IP — but the
+        // per-email lockout the backend also enforces doesn't depend on it,
+        // so brute-forcing a specific account is still blocked regardless.
+        const clientIp =
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          request.headers.get("x-real-ip") ||
+          "unknown";
 
         try {
-          const res = await callBackend("/auth/login", { email, password });
+          const res = await callBackend(
+            "/auth/login",
+            { email, password },
+            { "X-Client-Ip": clientIp }
+          );
+          if (res.status === 429) {
+            throw new LoginRateLimitedError();
+          }
           if (!res.ok) {
-            recordFailedAttempt(email);
-            recordFailedAttempt(ipKey);
             return null;
           }
           const user = await res.json();
-          clearFailedAttempts(email);
           return {
             id: user.id,
             name: user.name,
@@ -65,7 +74,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             role: user.role as AppUserRole,
             emailVerified: user.email_verified ? new Date() : null,
           };
-        } catch {
+        } catch (err) {
+          if (err instanceof LoginRateLimitedError) throw err;
           return null;
         }
       },
@@ -77,28 +87,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return isSafeCallbackUrl(url) ? new URL(url, baseUrl).toString() : baseUrl;
     },
 
-    async jwt({ token, user, account, trigger, session }) {
+    async jwt({ token, user, account, profile, trigger }) {
       if (user && account) {
         if (account.provider !== "credentials") {
+          // A3: only trust the OAuth email as verified if the provider's own
+          // profile/ID-token claim says so (Google/Apple both expose
+          // `email_verified`, sometimes as the string "true"). The backend
+          // uses this to decide whether it's safe to auto-link to an
+          // existing password account — see upsert_oauth_user.
+          const rawEmailVerified = (profile as { email_verified?: boolean | string } | undefined)
+            ?.email_verified;
+          const providerEmailVerified = rawEmailVerified === true || rawEmailVerified === "true";
+
           // OAuth: sync with FastAPI backend to get our internal user ID + role
-          try {
-            const res = await callBackend("/auth/oauth-upsert", {
-              email: user.email,
-              name: user.name,
-              provider: account.provider,
-              provider_account_id: account.providerAccountId,
-            });
-            if (res.ok) {
-              const backendUser = await res.json();
-              token.id = backendUser.id;
-              token.role = backendUser.role as AppUserRole;
-              token.emailVerified = true;
-            } else {
-              return null as unknown as typeof token; // deny sign-in if backend sync fails
-            }
-          } catch {
-            return null as unknown as typeof token;
+          const synced = await syncOAuthUser(user, account, providerEmailVerified);
+          if (!synced) {
+            return null as unknown as typeof token; // deny sign-in if backend sync fails
           }
+          token.id = synced.id;
+          token.role = synced.role;
+          token.emailVerified = synced.emailVerified;
         } else {
           token.id = user.id;
           token.role = (user as { role?: AppUserRole }).role;
@@ -108,8 +116,42 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.email = user.email;
       }
 
-      if (trigger === "update" && session) {
-        return { ...token, ...session };
+      if (trigger === "update" && token.id) {
+        // A8: re-fetch canonical account state from the backend instead of
+        // blindly merging the client-supplied `session` object into the
+        // token — trusting it as-is would let any caller of
+        // useSession().update({...}) set emailVerified/role themselves.
+        // Triggered by the verify-email page after a successful backend
+        // verification, so a user doesn't have to fully re-login for their
+        // session to reflect it.
+        try {
+          const userId = token.id as string;
+          const res = await fetch(
+            `${getBackendApiBaseUrl()}/auth/profile/${userId}`,
+            {
+              headers: {
+                "X-Internal-Api-Key": getBackendInternalApiKey(),
+                "X-Actor-User-Id": userId,
+                // A2: the backend only trusts a signed actor token, not the
+                // plain header above (kept for log correlation only).
+                "X-Actor-Token": await mintActorToken({
+                  id: userId,
+                  role: (token.role as string) ?? "customer",
+                }),
+              },
+              cache: "no-store",
+              signal: AbortSignal.timeout(5000),
+            }
+          );
+          if (res.ok) {
+            const profile = await res.json();
+            token.emailVerified = Boolean(profile.email_verified);
+            token.role = profile.role as AppUserRole;
+          }
+        } catch {
+          // Keep the existing token state on a refresh failure — don't let a
+          // transient backend hiccup invalidate the current session.
+        }
       }
 
       return token;
@@ -129,9 +171,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 
-  events: {
-    async signIn({ user }) {
-      if (user?.email) clearFailedAttempts(user.email);
-    },
-  },
 });

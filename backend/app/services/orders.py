@@ -16,6 +16,7 @@ from app.services import ledger as ledger_svc
 from app.services import paystack as paystack_svc
 from app.services.paystack import PaystackAPIError
 from app.services.notifications import create_notification, notify_safe
+from app.services.auth import require_email_verified
 from app.services.encryption import decrypt
 from app.core.logging import safe_extra
 
@@ -616,6 +617,10 @@ def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -
     that UI rounding differences don't block legitimate orders, but a manipulated
     total (e.g. client sends 0.01) is rejected before Paystack is called.
     """
+    # A4: signed-in buyers must have a verified email to check out. Guest
+    # checkout (payload.userId is None) is unaffected.
+    require_email_verified(db, payload.userId, "check out")
+
     # 0. Idempotency: return existing pending order if the same key was already used.
     # H3: reconstruct the authorization URL from the stored access_code so the buyer
     #     can actually proceed (returning an empty URL strands them).
@@ -885,6 +890,10 @@ def charge_momo_payment(db: Session, payload: ChargeMomoIn) -> dict:
     Create a pending order and initiate MoMo payment via Paystack Charge API.
     Returns {orderId, reference, status, displayText}.
     """
+    # A4: signed-in buyers must have a verified email to check out. Guest
+    # checkout (payload.userId is None) is unaffected.
+    require_email_verified(db, payload.userId, "check out")
+
     if payload.idempotencyKey:
         existing = db.scalar(select(Order).where(Order.idempotency_key == payload.idempotencyKey))
         if existing:

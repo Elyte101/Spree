@@ -4,9 +4,38 @@ Without this, verified Ghana Card numbers from prior runs persist and cause
 409 uniqueness conflicts in subsequent runs.
 """
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
+
+
+def actor_token(user_id: str, role: str = "customer") -> str:
+    """A2: mint a signed actor token for tests, mirroring lib/actorToken.ts.
+
+    Tests hit the FastAPI app directly (no Next proxy in front), so they need
+    to produce the same X-Actor-Token the proxy would mint from a real
+    session in order to exercise actor-scoped routes.
+    """
+    import jwt
+    from app.core.config import settings
+
+    now = datetime.now(timezone.utc)
+    return jwt.encode(
+        {
+            "sub": user_id,
+            "role": role,
+            "iss": "spree-next-proxy",
+            "aud": "spree-backend",
+            "iat": now,
+            # Generous expiry (unlike the 60s the real proxy mints) so a single
+            # module-level token, e.g. ADMIN_HEADERS, stays valid for an
+            # entire test run rather than expiring mid-suite.
+            "exp": now + timedelta(hours=1),
+        },
+        settings.actor_token_secret,
+        algorithm="HS256",
+    )
 
 
 def pytest_configure(config):

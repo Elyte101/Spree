@@ -11,6 +11,6 @@ export async function GET(request: Request) {
   }
   const { search } = new URL(request.url);
   return proxyBackend(`/sellers${search}`, {
-    headers: { "X-Actor-Role": "admin" },
+    headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
   }, { internal: true });
 }

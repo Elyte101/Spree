@@ -180,6 +180,11 @@ class User(Base):
     payout_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     paystack_recipient_code: Mapped[str | None] = mapped_column(String(128), nullable=True)
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # A6/A10: bumped on password reset (and available for any future
+    # "sign out everywhere" action). JWT sessions can't be revoked server-side,
+    # so sensitive-action revalidation compares the token's issued-at time
+    # against this to reject sessions minted before the last password change.
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_blacklisted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     oauth_provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
@@ -217,6 +222,10 @@ class VerificationToken(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     email: Mapped[str] = mapped_column(String(255), index=True)
     token: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    # A6: "email_verification" (default, 24h expiry) or "password_reset" (1h
+    # expiry) — kept in the same table but distinguished so a leaked/forged
+    # email-verification token can't be replayed to reset a password.
+    purpose: Mapped[str] = mapped_column(String(32), default="email_verification")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

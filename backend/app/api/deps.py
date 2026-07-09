@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 from uuid import uuid4
 
+import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
@@ -95,16 +96,75 @@ def require_internal_api_key(
         )
 
 
-def _get_actor_user_id(
-    x_actor_user_id: Annotated[str | None, Header(alias="X-Actor-User-Id")] = None,
-) -> str | None:
-    return x_actor_user_id
+# ---------------------------------------------------------------------------
+# A2: actor identity comes from a signed, short-lived token minted by the
+# Next proxy (lib/actorToken.ts), not from the plain X-Actor-User-Id/Role
+# headers. Those headers alone were spoofable by anyone who could reach the
+# backend directly with a valid (or leaked) internal key. The token binds
+# id + role together with an expiry, verified here with the shared
+# ACTOR_TOKEN_SECRET. A present-but-invalid/expired token is rejected
+# outright (401) rather than silently falling back to anonymous, so a
+# tampered or replayed token can't quietly downgrade into "no actor".
+# ---------------------------------------------------------------------------
+
+_ACTOR_TOKEN_ISSUER = "spree-next-proxy"
+_ACTOR_TOKEN_AUDIENCE = "spree-backend"
 
 
-def _get_actor_role(
-    x_actor_role: Annotated[str | None, Header(alias="X-Actor-Role")] = None,
-) -> str:
-    return x_actor_role or "customer"
+def _decode_actor_token(token: str) -> tuple[str, str]:
+    try:
+        claims = jwt.decode(
+            token,
+            settings.actor_token_secret,
+            algorithms=["HS256"],
+            issuer=_ACTOR_TOKEN_ISSUER,
+            audience=_ACTOR_TOKEN_AUDIENCE,
+        )
+    except jwt.InvalidTokenError as exc:
+        logger.warning("actor_token_invalid: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired actor token",
+        ) from exc
+
+    actor_id = claims.get("sub")
+    actor_role = claims.get("role") or "customer"
+    if not actor_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid actor token",
+        )
+    return actor_id, actor_role
+
+
+def _get_actor(
+    db: DBSession,
+    x_actor_token: Annotated[str | None, Header(alias="X-Actor-Token")] = None,
+) -> tuple[str | None, str]:
+    if not x_actor_token:
+        return None, "customer"
+    actor_id, _token_role = _decode_actor_token(x_actor_token)
+
+    # A10: re-derive role from the current DB row rather than trusting the
+    # token's role claim. The claim reflects the Next-side session at the
+    # time it was last refreshed (up to `session.maxAge`, currently 24h) —
+    # a seller blacklisted or demoted by an admin in the meantime would
+    # otherwise keep acting under their old role until that session expires.
+    # A blacklisted/soft-deleted user is treated as fully anonymous.
+    from app.db.models import User  # noqa: PLC0415 — avoid circular import at module load
+
+    user = db.get(User, actor_id)
+    if user is None or user.deleted_at is not None or user.is_blacklisted:
+        return None, "customer"
+    return actor_id, user.role
+
+
+def _get_actor_user_id(actor: Annotated[tuple[str | None, str], Depends(_get_actor)]) -> str | None:
+    return actor[0]
+
+
+def _get_actor_role(actor: Annotated[tuple[str | None, str], Depends(_get_actor)]) -> str:
+    return actor[1]
 
 
 def check_optional_internal_key(

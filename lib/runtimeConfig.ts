@@ -30,6 +30,24 @@ const requireEnvOrFallback = (name: string, fallback: string) => {
   return fallback;
 };
 
+// A1: fail closed on weak secrets, not just missing ones. A deployed env that
+// explicitly sets NEXTAUTH_SECRET/BACKEND_INTERNAL_API_KEY to the dev default
+// (or to anything implausibly short) is just as forgeable as leaving it unset.
+const MIN_SECRET_LENGTH = 20;
+
+const requireStrongSecret = (name: string, fallback: string) => {
+  const value = requireEnvOrFallback(name, fallback);
+
+  if (isProductionLikeDeployment && (value === fallback || value.length < MIN_SECRET_LENGTH)) {
+    throw new Error(
+      `${name} must be set to a strong random value (>= ${MIN_SECRET_LENGTH} chars, not the dev default) ` +
+        "in deployed environments."
+    );
+  }
+
+  return value;
+};
+
 export const getBackendApiBaseUrl = () => {
   // Accept either var; BACKEND_API_URL takes priority.
   // Both are normalised the same way: ensure they end with /api/v1.
@@ -50,10 +68,18 @@ export const getBackendApiBaseUrl = () => {
 };
 
 export const getBackendInternalApiKey = () =>
-  requireEnvOrFallback("BACKEND_INTERNAL_API_KEY", DEFAULT_BACKEND_INTERNAL_API_KEY);
+  requireStrongSecret("BACKEND_INTERNAL_API_KEY", DEFAULT_BACKEND_INTERNAL_API_KEY);
 
 export const getBackendStaticBaseUrl = () =>
   getBackendApiBaseUrl().replace(/\/api\/v1$/, "");
 
 export const getNextAuthSecret = () =>
-  requireEnvOrFallback("NEXTAUTH_SECRET", DEFAULT_NEXTAUTH_SECRET);
+  requireStrongSecret("NEXTAUTH_SECRET", DEFAULT_NEXTAUTH_SECRET);
+
+// A2: shared secret used to sign/verify short-lived actor tokens between the
+// Next proxy and the FastAPI backend (see lib/actorToken.ts). Distinct from
+// NEXTAUTH_SECRET so the two can be rotated independently.
+const DEFAULT_ACTOR_TOKEN_SECRET = "spree-dev-actor-token-secret-change-me";
+
+export const getActorTokenSecret = () =>
+  requireStrongSecret("ACTOR_TOKEN_SECRET", DEFAULT_ACTOR_TOKEN_SECRET);

@@ -44,6 +44,9 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     ("orders", "paystack_access_code", "VARCHAR(128)", "TEXT"),
     # Payout lifecycle: pending_account | processing | released | failed | reversed
     ("orders", "payout_status", "VARCHAR(32)", "TEXT"),
+    # A6: password-reset token type marker; A6/A10: session-invalidation stamp
+    ("verification_tokens", "purpose", "VARCHAR(32) NOT NULL DEFAULT 'email_verification'", "TEXT NOT NULL DEFAULT 'email_verification'"),
+    ("users", "password_changed_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.

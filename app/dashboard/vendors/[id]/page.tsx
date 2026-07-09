@@ -22,7 +22,7 @@ export default async function DashboardSellerDetailPage({
   }
 
   const { id } = await params;
-  const vendor = await getAdminSeller(id);
+  const vendor = await getAdminSeller(id, session.user.id);
 
   if (!vendor) {
     notFound();

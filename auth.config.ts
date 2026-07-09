@@ -1,14 +1,20 @@
 import type { NextAuthConfig } from "next-auth";
 
 import { canCreateProductsRole } from "./lib/roles";
+import { getNextAuthSecret } from "./lib/runtimeConfig";
 
 export const authConfig: NextAuthConfig = {
-  secret:
-    process.env.NEXTAUTH_SECRET ??
-    process.env.AUTH_SECRET ??
-    "spree-dev-secret-change-me",
+  // A1: fails closed — throws at import time in production/Vercel if
+  // NEXTAUTH_SECRET/AUTH_SECRET is unset, instead of silently signing
+  // JWTs with a publicly-known default secret.
+  secret: getNextAuthSecret(),
 
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // A10: shorter-lived sessions so a blacklisted/soft-deleted user's stale
+    // role can't be relied on for more than a day; rolling refresh on activity.
+    maxAge: 24 * 60 * 60,
+  },
 
   pages: {
     signIn: "/auth/sign-in",

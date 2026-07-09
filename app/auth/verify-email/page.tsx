@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import {
   alpha,
@@ -21,6 +22,7 @@ function VerifyEmailContent() {
   const token = searchParams.get("token");
   const [state, setState] = React.useState<State>("verifying");
   const [message, setMessage] = React.useState("");
+  const { update: updateSession } = useSession();
 
   React.useEffect(() => {
     if (!token) {
@@ -42,6 +44,10 @@ function VerifyEmailContent() {
         if (res.ok) {
           setState("success");
           setMessage("Your email has been verified. You're all set!");
+          // A8: refresh the current session's emailVerified flag (if signed
+          // in) so the user doesn't need to fully re-login for it to take
+          // effect — see the jwt callback's trigger === "update" handling.
+          void updateSession();
         } else {
           setState("error");
           setMessage((data as { detail?: string }).detail ?? "This link is invalid or has expired.");
@@ -55,7 +61,7 @@ function VerifyEmailContent() {
     })();
 
     return () => { cancelled = true; };
-  }, [token]);
+  }, [token, updateSession]);
 
   const icon =
     state === "verifying" ? (

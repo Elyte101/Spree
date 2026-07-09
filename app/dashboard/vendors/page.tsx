@@ -31,7 +31,7 @@ export default async function DashboardSellersPage({ searchParams }: PageProps) 
     ? (filter as "all" | "blacklisted" | "inactive")
     : "all";
 
-  const sellers = await getAdminSellers(validFilter);
+  const sellers = await getAdminSellers(session.user.id, validFilter);
 
   return (
     <Stack spacing={3}>

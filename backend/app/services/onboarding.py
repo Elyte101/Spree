@@ -220,6 +220,13 @@ def submit_onboarding(db: Session, user_id: str) -> dict:
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # A4: a verified email is required before a seller application can be submitted.
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before you can submit your seller application.",
+        )
+
     # G35: guard against invalid resubmit states
     blocked_statuses = {"pending_verification", "active", "suspended", "removed"}
     if user.seller_status in blocked_statuses:

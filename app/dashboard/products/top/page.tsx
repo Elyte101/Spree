@@ -40,7 +40,7 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
 
   const { page } = await searchParams;
   const currentPage = Math.max(1, Number(page ?? "1") || 1);
-  const ranked = await getAdminTopProducts(currentPage, 100);
+  const ranked = await getAdminTopProducts(session.user.id, currentPage, 100);
 
   return (
     <Stack spacing={3}>

@@ -4,12 +4,13 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.core.common_passwords import COMMON_PASSWORDS
 from app.core.config import settings
 from app.core.security import hash_password, verify_password
-from app.db.models import User, VerificationToken
+from app.db.models import RateLimitEvent, User, VerificationToken
 from app.schemas.auth import OAuthUpsertRequest, PayoutInfoRequest, ProfileUpdateRequest, SignupRequest
 from app.services import paystack as paystack_svc
 from app.services.encryption import decrypt, encrypt
@@ -31,17 +32,26 @@ def _normalize_email(email: str) -> str:
 
 
 def _validate_password_strength(password: str) -> None:
-    checks = [
-        any(character.islower() for character in password),
-        any(character.isupper() for character in password),
-        any(character.isdigit() for character in password),
-        any(not character.isalnum() for character in password),
-    ]
-
-    if len(password) < 8 or not all(checks):
+    """A11: NIST 800-63B-style policy — length-first, no forced composition
+    rules (they push users toward predictable substitutions like "P@ssw0rd1"
+    without meaningfully raising entropy), a hard max length to prevent a
+    huge input being pushed through scrypt (DoS), and a common/breached
+    password blocklist instead.
+    """
+    if len(password) < 8:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Password must include upper, lower, number, and symbol characters",
+            detail="Password must be at least 8 characters",
+        )
+    if len(password) > 128:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must be at most 128 characters",
+        )
+    if password.lower() in COMMON_PASSWORDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="This password is too common. Please choose a stronger password.",
         )
 
 
@@ -211,6 +221,69 @@ def _serialize_profile(user: User) -> dict:
     }
 
 
+def require_email_verified(db: Session, user_id: str | None, action: str) -> None:
+    """A4: gate sensitive actions (checkout, seller onboarding, posting) on a
+    verified email, without blocking sign-in/browsing entirely. Guests
+    (user_id is None) are unaffected — this only gates signed-in users with
+    an unverified account.
+    """
+    if not user_id:
+        return
+    user = db.get(User, user_id)
+    if user is not None and not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Please verify your email before you can {action}.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# A5/A7: DB-backed login rate limiting — the old lib/rateLimit.ts on the Next
+# side used a module-level Map, which resets on every Vercel cold start and
+# is invisible to anyone calling this backend directly (bypassing the Next
+# proxy entirely). Enforced here so neither escape hatch works. Keyed on
+# email AND client IP: either exceeding the limit locks out the attempt, so
+# an attacker can't dodge the per-email lockout by rotating IPs, nor spray
+# many different emails from one IP without also tripping the IP key.
+# ---------------------------------------------------------------------------
+
+_LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+_LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
+
+
+def _login_rate_limit_keys(email: str, client_ip: str) -> list[str]:
+    return [f"login:email:{email.lower().strip()}", f"login:ip:{client_ip}"]
+
+
+def check_login_rate_limit(db: Session, email: str, client_ip: str) -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=_LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+    for key in _login_rate_limit_keys(email, client_ip):
+        count = db.scalar(
+            select(func.count(RateLimitEvent.id)).where(
+                RateLimitEvent.key == key,
+                RateLimitEvent.created_at > cutoff,
+            )
+        ) or 0
+        if count >= _LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts. Please try again later.",
+                headers={"Retry-After": str(_LOGIN_RATE_LIMIT_WINDOW_SECONDS)},
+            )
+
+
+def record_login_failure(db: Session, email: str, client_ip: str) -> None:
+    for key in _login_rate_limit_keys(email, client_ip):
+        db.add(RateLimitEvent(id=f"rl-{uuid4().hex[:18]}", key=key))
+    db.commit()
+
+
+def clear_login_failures(db: Session, email: str, client_ip: str) -> None:
+    for key in _login_rate_limit_keys(email, client_ip):
+        db.execute(delete(RateLimitEvent).where(RateLimitEvent.key == key))
+    db.commit()
+
+
 def authenticate_user(db: Session, email: str, password: str) -> dict | None:
     user = db.scalar(select(User).where(User.email == email.lower().strip()))
 
@@ -279,9 +352,42 @@ def upsert_oauth_user(db: Session, req: OAuthUpsertRequest) -> dict:
     user = db.scalar(select(User).where(User.email == email))
 
     if user is not None:
-        if not user.oauth_provider:
-            user.oauth_provider = req.provider
-            user.oauth_provider_id = req.provider_account_id
+        if user.oauth_provider:
+            # Already linked to an OAuth provider from a prior sign-in — this
+            # is a repeat login, not a new link. Never downgrade a previously
+            # verified email based on a single unverified assertion.
+            if req.email_verified:
+                user.email_verified = True
+            db.commit()
+            db.refresh(user)
+            return _serialize_user(user)
+
+        # A3: first-time OAuth link against an *existing* account. Auto-linking
+        # here is an account-takeover vector — an attacker who controls (or
+        # can register) an OAuth account for the victim's email address would
+        # otherwise gain access to the victim's password-protected account.
+        # Only allow it when the provider itself asserts the email is
+        # verified AND the account has no password to protect (i.e. nothing
+        # for the attacker to take over).
+        if not req.email_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "This email is already registered but not verified with "
+                    f"{req.provider}. Please sign in with your password instead."
+                ),
+            )
+        if user.password_hash:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "An account with this email already exists. "
+                    "Please sign in with your password instead."
+                ),
+            )
+
+        user.oauth_provider = req.provider
+        user.oauth_provider_id = req.provider_account_id
         user.email_verified = True
         db.commit()
         db.refresh(user)
@@ -296,7 +402,7 @@ def upsert_oauth_user(db: Session, req: OAuthUpsertRequest) -> dict:
         seller_status="buyer",
         oauth_provider=req.provider,
         oauth_provider_id=req.provider_account_id,
-        email_verified=True,
+        email_verified=bool(req.email_verified),
     )
     db.add(user)
     db.commit()
@@ -306,12 +412,18 @@ def upsert_oauth_user(db: Session, req: OAuthUpsertRequest) -> dict:
 
 def create_verification_token(db: Session, email: str) -> str:
     email = email.lower().strip()
-    db.execute(delete(VerificationToken).where(VerificationToken.email == email))
+    db.execute(
+        delete(VerificationToken).where(
+            VerificationToken.email == email,
+            VerificationToken.purpose == "email_verification",
+        )
+    )
     token = secrets.token_urlsafe(32)
     vt = VerificationToken(
         id=uuid4().hex,
         email=email,
         token=token,
+        purpose="email_verification",
         expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
     )
     db.add(vt)
@@ -323,6 +435,7 @@ def verify_email_token(db: Session, token: str) -> dict | None:
     vt = db.scalar(
         select(VerificationToken).where(
             VerificationToken.token == token,
+            VerificationToken.purpose == "email_verification",
             VerificationToken.expires_at > datetime.now(timezone.utc),
         )
     )
@@ -336,6 +449,94 @@ def verify_email_token(db: Session, token: str) -> dict | None:
     db.commit()
     db.refresh(user)
     return _serialize_user(user)
+
+
+# ---------------------------------------------------------------------------
+# A6: password reset — request (emailed short-expiry token) → confirm (set
+# new password) → invalidate existing sessions. Reuses the VerificationToken
+# table (purpose="password_reset", 1h expiry vs 24h for email verification)
+# and the Resend-backed notify_safe/MANDATORY_EVENTS pattern used elsewhere.
+# ---------------------------------------------------------------------------
+
+_PASSWORD_RESET_TOKEN_TTL = timedelta(hours=1)
+
+
+def request_password_reset(db: Session, email: str) -> None:
+    """Always succeeds from the caller's perspective (no user-existence signal
+    leaked) — if the email doesn't match an account, this is a silent no-op."""
+    email = email.lower().strip()
+    user = db.scalar(select(User).where(User.email == email))
+    if user is None:
+        return
+
+    db.execute(
+        delete(VerificationToken).where(
+            VerificationToken.email == email,
+            VerificationToken.purpose == "password_reset",
+        )
+    )
+    token = secrets.token_urlsafe(32)
+    vt = VerificationToken(
+        id=uuid4().hex,
+        email=email,
+        token=token,
+        purpose="password_reset",
+        expires_at=datetime.now(timezone.utc) + _PASSWORD_RESET_TOKEN_TTL,
+    )
+    db.add(vt)
+    db.commit()
+
+    reset_url = f"{settings.frontend_url}/auth/reset-password?token={token}"
+    notify_safe(
+        db,
+        event_type="password_reset",
+        recipient_id=user.id,
+        title="Reset your Spree password",
+        body="We received a request to reset your password. This link expires in 1 hour. "
+        "If you didn't request this, you can safely ignore this email.",
+        notif_type="account",
+        email_subject="Reset your Spree password",
+        cta_label="Reset password",
+        cta_url=reset_url,
+        recipient_email=user.email,
+    )
+
+
+def reset_password_with_token(db: Session, token: str, new_password: str) -> bool:
+    vt = db.scalar(
+        select(VerificationToken).where(
+            VerificationToken.token == token,
+            VerificationToken.purpose == "password_reset",
+            VerificationToken.expires_at > datetime.now(timezone.utc),
+        )
+    )
+    if not vt:
+        return False
+
+    user = db.scalar(select(User).where(User.email == vt.email))
+    if user is None:
+        db.delete(vt)
+        db.commit()
+        return False
+
+    _validate_password_strength(new_password)
+
+    user.password_hash = hash_password(new_password)
+    # A6/A10: bumping this invalidates every session issued before now — see
+    # the sensitive-action revalidation check that compares a JWT's issued-at
+    # claim against this timestamp.
+    user.password_changed_at = datetime.now(timezone.utc)
+    db.delete(vt)
+    # One-time use: any other outstanding reset tokens for this email are
+    # invalidated too, so an older leaked link can't be replayed afterward.
+    db.execute(
+        delete(VerificationToken).where(
+            VerificationToken.email == vt.email,
+            VerificationToken.purpose == "password_reset",
+        )
+    )
+    db.commit()
+    return True
 
 
 def get_user_profile(db: Session, user_id: str) -> dict:

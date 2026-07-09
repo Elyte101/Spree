@@ -174,6 +174,18 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  requestPasswordReset: (email: string) =>
+    requestJson<{ detail: string }>("/api/auth/password-reset/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  confirmPasswordReset: (token: string, password: string) =>
+    requestJson<{ detail: string }>("/api/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
+
   /* ---------- NON-CRITICAL (SAFE) ---------- */
 
   getNotifications: () =>

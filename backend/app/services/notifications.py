@@ -50,6 +50,8 @@ DEFAULT_PREFS: dict[str, dict[str, bool]] = {
     "low_stock":                {"in_app": True,  "email": True,  "push": False},
     # ── Support chat ──────────────────────────────────────────────────────────
     "chat_reply":               {"in_app": True,  "email": True,  "push": True},
+    # ── Account security ──────────────────────────────────────────────────────
+    "password_reset":           {"in_app": True,  "email": True,  "push": False},
 }
 
 # Events that cannot be disabled by the user
@@ -62,6 +64,9 @@ MANDATORY_EVENTS = {
     "order_placed_seller",
     "payout_released",
     "payout_failed",
+    # A6: a password-reset email must always be deliverable — it's a
+    # security-critical action, not a discretionary notification.
+    "password_reset",
 }
 
 

@@ -109,8 +109,11 @@ def products_create(
     payload: ProductCreateIn,
     db: DBSession,
     _: InternalAPIKey,
-    actor_user_id: str | None = Header(default=None, alias="X-Actor-User-Id"),
+    actor_user_id: ActorUserId,
 ):
+    # A2: actor_user_id comes from the verified signed actor token (deps.py),
+    # not a raw X-Actor-User-Id header — a raw header here would let anyone
+    # with the internal key create products under any vendor's account.
     return create_product(db, payload, actor_user_id)
 
 

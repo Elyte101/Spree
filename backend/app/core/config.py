@@ -9,6 +9,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
+# A1/A2: fail closed on weak/default secrets in deployed environments — a
+# secret that's merely present but equal to the checked-in dev default (or
+# implausibly short) is exactly as forgeable as leaving it unset.
+_MIN_SECRET_LENGTH = 20
+_DEFAULT_SECRETS = {
+    "backend_internal_api_key": "spree-internal-dev-key",
+    "actor_token_secret": "spree-dev-actor-token-secret-change-me",
+}
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -41,6 +50,12 @@ class Settings(BaseSettings):
     # Default matches the Next.js runtimeConfig.ts dev fallback so local dev
     # works without setting the env var on either side.
     backend_internal_api_key: str = "spree-internal-dev-key"
+
+    # A2: shared secret used to verify short-lived HS256 actor tokens minted by
+    # the Next proxy (lib/actorToken.ts). Must match ACTOR_TOKEN_SECRET on the
+    # frontend. Distinct from backend_internal_api_key so the two can rotate
+    # independently.
+    actor_token_secret: str = "spree-dev-actor-token-secret-change-me"
 
     auto_initialize_database: bool = True
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -102,13 +117,23 @@ class Settings(BaseSettings):
     # Max face-verify attempts before the step is locked (seller must contact support)
     smileid_max_attempts: int = 3
 
-    @field_validator("backend_internal_api_key", mode="after")
+    @field_validator("backend_internal_api_key", "actor_token_secret", mode="after")
     @classmethod
-    def warn_default_api_key(cls, value: str) -> str:
-        if value == "2de75f671a37aaddae2b209a9a8d3844ae1c58a0":
+    def require_strong_secret_when_deployed(cls, value: str, info) -> str:
+        is_deployed = os.getenv("VERCEL") == "1" or info.data.get("environment") == "production"
+        default_value = _DEFAULT_SECRETS.get(info.field_name, "")
+
+        if is_deployed and (value == default_value or len(value) < _MIN_SECRET_LENGTH):
+            raise ValueError(
+                f"{info.field_name.upper()} must be set to a strong random value "
+                f"(>= {_MIN_SECRET_LENGTH} chars, not the dev default) in deployed environments. "
+                "Refusing to start with a default or weak secret."
+            )
+
+        if not is_deployed and value == default_value:
             import warnings
             warnings.warn(
-                "BACKEND_INTERNAL_API_KEY is using the hardcoded default. "
+                f"{info.field_name.upper()} is using the hardcoded dev default. "
                 "Set a strong random value in your environment before going to production.",
                 stacklevel=2,
             )

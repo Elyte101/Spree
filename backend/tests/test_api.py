@@ -14,10 +14,18 @@ if _env_path.exists():
 from fastapi.testclient import TestClient
 
 from app.main import app
+from conftest import actor_token
 
 INTERNAL_KEY = os.environ.get("BACKEND_INTERNAL_API_KEY", "spree-internal-dev-key")
 INTERNAL_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY}
-ADMIN_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY, "X-Actor-Role": "admin"}
+# A2: actor identity is now proven with a signed token, not raw X-Actor-*
+# headers — see conftest.actor_token. "user-admin" is the seeded admin user
+# (app/db/init_db.py), so this also satisfies routes that look the actor up
+# in the DB, not just ones that only check the role claim.
+ADMIN_HEADERS = {
+    "X-Internal-Api-Key": INTERNAL_KEY,
+    "X-Actor-Token": actor_token("user-admin", "admin"),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +201,313 @@ def test_login_endpoint_accepts_seeded_admin():
         assert payload["role"] == "admin"
 
 
+# ---------------------------------------------------------------------------
+# A5/A7: DB-backed login rate limiting (enforced in the backend, so it can't
+# be skipped by calling this endpoint directly instead of via the Next proxy)
+# ---------------------------------------------------------------------------
+
+def test_login_locks_out_after_five_failures_same_email():
+    email = f"lockout-email-{uuid4().hex[:8]}@test.com"
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Lockout Target", "email": email, "password": "RealPass123!"},
+        )
+        assert signup.status_code == 201
+
+        for i in range(5):
+            resp = client.post(
+                "/api/v1/auth/login",
+                headers={**INTERNAL_HEADERS, "X-Client-Ip": f"10.0.{i}.1"},
+                json={"email": email, "password": "WrongPassword!"},
+            )
+            assert resp.status_code == 401, f"attempt {i} should be a plain auth failure"
+
+        # 6th attempt (even from yet another IP, even with the correct password)
+        # must be locked out by the per-email key.
+        locked = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": "10.0.99.1"},
+            json={"email": email, "password": "RealPass123!"},
+        )
+        assert locked.status_code == 429
+        assert locked.headers.get("retry-after")
+
+
+def test_login_locks_out_after_five_failures_same_ip_different_emails():
+    ip = f"10.1.{uuid4().hex[:2]}.1"
+    with TestClient(app) as client:
+        for i in range(5):
+            resp = client.post(
+                "/api/v1/auth/login",
+                headers={**INTERNAL_HEADERS, "X-Client-Ip": ip},
+                json={"email": f"spray-{i}-{uuid4().hex[:6]}@test.com", "password": "WrongPassword!"},
+            )
+            assert resp.status_code == 401
+
+        locked = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": ip},
+            json={"email": f"spray-final-{uuid4().hex[:6]}@test.com", "password": "WrongPassword!"},
+        )
+        assert locked.status_code == 429
+
+
+def test_login_direct_backend_call_is_still_rate_limited():
+    """A5/A7 regression guard: even calling this endpoint directly (as if
+    bypassing the Next proxy entirely, so no X-Client-Ip is set — only the
+    backend's own edge-set X-Forwarded-For is available) must still hit the
+    lockout — this is the exact gap the audit flagged (old limiter was
+    Next-side, in-memory)."""
+    email = f"direct-backend-{uuid4().hex[:8]}@test.com"
+    attacker_ip = f"203.0.113.{uuid4().hex[:2]}"
+    with TestClient(app) as client:
+        for _ in range(5):
+            resp = client.post(
+                "/api/v1/auth/login",
+                headers={**INTERNAL_HEADERS, "X-Forwarded-For": attacker_ip},
+                json={"email": email, "password": "WrongPassword!"},
+            )
+            assert resp.status_code == 401
+
+        locked = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Forwarded-For": attacker_ip},
+            json={"email": email, "password": "WrongPassword!"},
+        )
+        assert locked.status_code == 429
+
+
+def test_login_success_clears_prior_failures():
+    email = f"clears-lockout-{uuid4().hex[:8]}@test.com"
+    ip = f"10.2.{uuid4().hex[:2]}.1"
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Clears Lockout", "email": email, "password": "RealPass123!"},
+        )
+        assert signup.status_code == 201
+
+        for _ in range(3):
+            resp = client.post(
+                "/api/v1/auth/login",
+                headers={**INTERNAL_HEADERS, "X-Client-Ip": ip},
+                json={"email": email, "password": "WrongPassword!"},
+            )
+            assert resp.status_code == 401
+
+        ok = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": ip},
+            json={"email": email, "password": "RealPass123!"},
+        )
+        assert ok.status_code == 200
+
+        # Prior failures were cleared by the successful login, so 3 more
+        # failures shouldn't reach the 5-attempt lockout yet.
+        for _ in range(3):
+            resp = client.post(
+                "/api/v1/auth/login",
+                headers={**INTERNAL_HEADERS, "X-Client-Ip": ip},
+                json={"email": email, "password": "WrongPassword!"},
+            )
+            assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# A6: password reset flow
+# ---------------------------------------------------------------------------
+
+def _extract_reset_token(monkeypatch) -> list[str]:
+    """Capture the token minted by request_password_reset without needing a
+    real Resend account — patches notify_safe to record the cta_url it was
+    given and pulls the token back out of it."""
+    from app.services import auth as auth_svc
+
+    captured: list[str] = []
+    original = auth_svc.notify_safe
+
+    def _fake_notify_safe(db, **kwargs):
+        cta_url = kwargs.get("cta_url") or ""
+        if "token=" in cta_url:
+            captured.append(cta_url.split("token=")[1])
+
+    monkeypatch.setattr(auth_svc, "notify_safe", _fake_notify_safe)
+    return captured
+
+
+def test_password_reset_happy_path(monkeypatch):
+    captured = _extract_reset_token(monkeypatch)
+    with TestClient(app) as client:
+        email = f"reset-happy-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Happy", "email": email, "password": "OldPass123!"},
+        )
+        assert signup.status_code == 201
+
+        req = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers=INTERNAL_HEADERS,
+            json={"email": email},
+        )
+        assert req.status_code == 200
+        assert captured, "expected request_password_reset to email a reset link"
+        token = captured[0]
+
+        confirm = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            headers=INTERNAL_HEADERS,
+            json={"token": token, "password": "NewPass456!"},
+        )
+        assert confirm.status_code == 200
+
+        # Old password no longer works; new password does.
+        old_login = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": "10.5.0.1"},
+            json={"email": email, "password": "OldPass123!"},
+        )
+        assert old_login.status_code == 401
+
+        new_login = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": "10.5.0.1"},
+            json={"email": email, "password": "NewPass456!"},
+        )
+        assert new_login.status_code == 200
+
+
+def test_password_reset_token_is_single_use():
+    with TestClient(app) as client:
+        email = f"reset-reuse-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Reuse", "email": email, "password": "OldPass123!"},
+        )
+        assert signup.status_code == 201
+
+        from app.db.session import SessionLocal
+        from app.db.models import VerificationToken
+        from datetime import datetime, timedelta, timezone
+        from uuid import uuid4 as _uuid4
+
+        token = _uuid4().hex
+        with SessionLocal() as db:
+            db.add(VerificationToken(
+                id=_uuid4().hex,
+                email=email,
+                token=token,
+                purpose="password_reset",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            ))
+            db.commit()
+
+        first = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            headers=INTERNAL_HEADERS,
+            json={"token": token, "password": "NewPass456!"},
+        )
+        assert first.status_code == 200
+
+        second = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            headers=INTERNAL_HEADERS,
+            json={"token": token, "password": "AnotherPass789!"},
+        )
+        assert second.status_code == 400
+
+
+def test_password_reset_expired_token_rejected():
+    with TestClient(app) as client:
+        email = f"reset-expired-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Expired", "email": email, "password": "OldPass123!"},
+        )
+        assert signup.status_code == 201
+
+        from app.db.session import SessionLocal
+        from app.db.models import VerificationToken
+        from datetime import datetime, timedelta, timezone
+        from uuid import uuid4 as _uuid4
+
+        token = _uuid4().hex
+        with SessionLocal() as db:
+            db.add(VerificationToken(
+                id=_uuid4().hex,
+                email=email,
+                token=token,
+                purpose="password_reset",
+                expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+            ))
+            db.commit()
+
+        resp = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            headers=INTERNAL_HEADERS,
+            json={"token": token, "password": "NewPass456!"},
+        )
+        assert resp.status_code == 400
+
+
+def test_password_reset_request_does_not_leak_account_existence():
+    with TestClient(app) as client:
+        known = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers=INTERNAL_HEADERS,
+            json={"email": "admin@spree.local"},
+        )
+        unknown = client.post(
+            "/api/v1/auth/password-reset/request",
+            headers=INTERNAL_HEADERS,
+            json={"email": f"no-such-user-{uuid4().hex[:8]}@test.com"},
+        )
+        assert known.status_code == unknown.status_code == 200
+        assert known.json() == unknown.json()
+
+
+def test_password_reset_does_not_consume_email_verification_token():
+    """A6: purpose scoping — a password-reset token must not verify email,
+    and vice versa (they share a table, distinguished by `purpose`)."""
+    with TestClient(app) as client:
+        email = f"reset-scope-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Scope", "email": email, "password": "OldPass123!"},
+        )
+        assert signup.status_code == 201
+
+        from app.db.session import SessionLocal
+        from app.db.models import VerificationToken
+        from datetime import datetime, timedelta, timezone
+        from uuid import uuid4 as _uuid4
+
+        token = _uuid4().hex
+        with SessionLocal() as db:
+            db.add(VerificationToken(
+                id=_uuid4().hex,
+                email=email,
+                token=token,
+                purpose="password_reset",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            ))
+            db.commit()
+
+        resp = client.post(
+            "/api/v1/auth/verify-email",
+            headers=INTERNAL_HEADERS,
+            json={"token": token},
+        )
+        assert resp.status_code == 400
+
+
 def test_signup_endpoint_creates_customer_account():
     with TestClient(app) as client:
         email = f"taylor-{uuid4().hex[:8]}@example.com"
@@ -210,6 +525,106 @@ def test_signup_endpoint_creates_customer_account():
         payload = response.json()
         assert payload["email"] == email
         assert payload["role"] == "customer"
+
+
+# ---------------------------------------------------------------------------
+# A11: NIST-style password policy
+# ---------------------------------------------------------------------------
+
+def test_signup_rejects_common_password():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={
+                "name": "Common Password User",
+                "email": f"common-pw-{uuid4().hex[:8]}@example.com",
+                "password": "password123",
+            },
+        )
+        assert response.status_code == 422
+        assert "too common" in response.json()["detail"].lower()
+
+
+def test_signup_rejects_common_password_case_insensitive():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={
+                "name": "Common Password User",
+                "email": f"common-pw-case-{uuid4().hex[:8]}@example.com",
+                "password": "QWERTY123",
+            },
+        )
+        assert response.status_code == 422
+        assert "too common" in response.json()["detail"].lower()
+
+
+def test_signup_accepts_long_passphrase_without_composition_rules():
+    """A11: the mandatory upper/lower/digit/symbol composition rule was
+    dropped in favor of a length-first NIST-style policy — a long,
+    all-lowercase passphrase with no digits or symbols must now succeed."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={
+                "name": "Passphrase User",
+                "email": f"passphrase-{uuid4().hex[:8]}@example.com",
+                "password": "correcthorsebatterystaple",
+            },
+        )
+        assert response.status_code == 201
+
+
+def test_signup_rejects_password_over_max_length():
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={
+                "name": "Huge Password User",
+                "email": f"huge-pw-{uuid4().hex[:8]}@example.com",
+                "password": "a1" * 100,  # 200 chars, well over the 128 cap
+            },
+        )
+        assert response.status_code == 422
+
+
+def test_password_reset_confirm_rejects_common_password():
+    with TestClient(app) as client:
+        email = f"reset-common-pw-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Common", "email": email, "password": "OriginalPass123!"},
+        )
+        assert signup.status_code == 201
+
+        from app.db.session import SessionLocal
+        from app.db.models import VerificationToken
+        from datetime import datetime, timedelta, timezone
+        from uuid import uuid4 as _uuid4
+
+        token = _uuid4().hex
+        with SessionLocal() as db:
+            db.add(VerificationToken(
+                id=_uuid4().hex,
+                email=email,
+                token=token,
+                purpose="password_reset",
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            ))
+            db.commit()
+
+        resp = client.post(
+            "/api/v1/auth/password-reset/confirm",
+            headers=INTERNAL_HEADERS,
+            json={"token": token, "password": "letmein123"},
+        )
+        assert resp.status_code == 422
+        assert "too common" in resp.json()["detail"].lower()
 
 
 def test_profile_endpoint_updates_customer_to_seller():
@@ -231,7 +646,7 @@ def test_profile_endpoint_updates_customer_to_seller():
 
         profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(created_user["id"])},
             json=_seller_profile_payload(email, store_name=store_name),
         )
 
@@ -265,7 +680,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(created_user["id"])},
             json=_seller_profile_payload(email, store_name=f"Paused Select {uuid4().hex[:6]}"),
         )
         assert profile_response.status_code == 200
@@ -307,7 +722,7 @@ def test_suspended_seller_cannot_reactivate_through_profile_update():
 
         updated_profile_response = client.put(
             f"/api/v1/auth/profile/{created_user['id']}",
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": created_user["id"]},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(created_user["id"])},
             json=_seller_profile_payload(email, store_name=suspend_response.json()["storeName"]),
         )
 
@@ -325,7 +740,7 @@ def test_product_details_endpoint_returns_created_product():
             json=_create_product_payload(),
             headers={
                 "X-Internal-Api-Key": INTERNAL_KEY,
-                "X-Actor-User-Id": "user-admin",
+                "X-Actor-Token": actor_token("user-admin", "admin"),
             },
         )
         assert create_response.status_code == 201
@@ -352,7 +767,7 @@ def test_admin_product_creation_requires_internal_api_key():
             json=payload,
             headers={
                 "X-Internal-Api-Key": INTERNAL_KEY,
-                "X-Actor-User-Id": "user-admin",
+                "X-Actor-Token": actor_token("user-admin", "admin"),
             },
         )
 
@@ -391,9 +806,17 @@ def test_chat_token_requires_actor_user_id():
 def test_chat_token_returns_503_when_stream_not_configured():
     """GET /chat/token returns 503 gracefully when Stream env vars are not set."""
     with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Chat Tester", "email": f"chat-test-{uuid4().hex[:8]}@test.com", "password": "ChatPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
         response = client.get(
             "/api/v1/chat/token",
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-test-123"},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
         )
         # Either 503 (Stream not configured) or 200 (if STREAM_API_KEY is set in test env)
         assert response.status_code in (200, 503)
@@ -402,7 +825,7 @@ def test_chat_token_returns_503_when_stream_not_configured():
             assert "token" in data
             assert "userId" in data
             assert "channelId" in data
-            assert data["channelId"] == "support-user-test-123"
+            assert data["channelId"] == f"support-{uid}"
         else:
             assert "Stream Chat" in response.json().get("detail", "")
 
@@ -415,6 +838,422 @@ def test_chat_admin_token_requires_admin_role():
             headers={**INTERNAL_HEADERS, "X-Actor-Role": "customer"},
         )
         assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# A2: actor token verification tests
+# ---------------------------------------------------------------------------
+
+def test_forged_actor_token_wrong_secret_is_rejected():
+    """A token signed with a different secret than ACTOR_TOKEN_SECRET must be
+    rejected (401), not silently trusted — this is exactly the forgery A2
+    closes off (previously a raw X-Actor-Role: admin header was enough)."""
+    import jwt as _jwt
+    from datetime import datetime, timezone, timedelta as _timedelta
+
+    now = datetime.now(timezone.utc)
+    forged = _jwt.encode(
+        {
+            "sub": "user-admin",
+            "role": "admin",
+            "iss": "spree-next-proxy",
+            "aud": "spree-backend",
+            "iat": now,
+            "exp": now + _timedelta(seconds=60),
+        },
+        "attacker-controlled-secret-not-the-real-one",
+        algorithm="HS256",
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/orders/order-does-not-matter/refund",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": forged},
+        )
+        assert response.status_code == 401
+
+
+def test_forged_actor_token_expired_is_rejected():
+    """An expired actor token must be rejected, not treated as anonymous."""
+    import jwt as _jwt
+    from datetime import datetime, timezone, timedelta as _timedelta
+    from app.core.config import settings as svc_settings
+
+    now = datetime.now(timezone.utc)
+    expired = _jwt.encode(
+        {
+            "sub": "user-admin",
+            "role": "admin",
+            "iss": "spree-next-proxy",
+            "aud": "spree-backend",
+            "iat": now - _timedelta(seconds=120),
+            "exp": now - _timedelta(seconds=60),
+        },
+        svc_settings.actor_token_secret,
+        algorithm="HS256",
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/orders/order-does-not-matter/refund",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": expired},
+        )
+        assert response.status_code == 401
+
+
+def test_plain_actor_role_header_no_longer_grants_admin():
+    """A2 regression guard: a raw X-Actor-Role: admin header with no signed
+    token must NOT be trusted — this is the exact vulnerability the audit
+    flagged (spoofable headers gated only by the shared internal key)."""
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/orders/order-does-not-matter/refund",
+            headers={**INTERNAL_HEADERS, "X-Actor-Role": "admin", "X-Actor-User-Id": "user-admin"},
+        )
+        # Falls back to the "customer" default (no valid X-Actor-Token) → 403,
+        # not treated as admin.
+        assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# A10: role/status revalidated from the DB, not trusted from the token claim
+# ---------------------------------------------------------------------------
+
+def test_blacklisted_admin_loses_access_despite_valid_admin_token():
+    """A blacklisted admin's actor token still claims role=admin (it was
+    minted from their now-stale Next-side session), but the backend must
+    re-check the DB and refuse — this is the exact scenario the audit
+    flagged: a blacklisted/soft-deleted user keeping access until their JWT
+    naturally expires."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Rogue Admin", "email": f"rogue-admin-{uuid4().hex[:8]}@test.com", "password": "RoguePass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "admin"
+            db.commit()
+
+        # Token still claims "admin" — as if minted before the blacklist below.
+        admin_hdrs = {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid, "admin")}
+        ok = client.get("/api/v1/admin/verification", headers=admin_hdrs)
+        assert ok.status_code == 200
+
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.is_blacklisted = True
+            db.commit()
+
+        blocked = client.get("/api/v1/admin/verification", headers=admin_hdrs)
+        assert blocked.status_code == 403
+
+
+def test_soft_deleted_user_treated_as_anonymous():
+    from app.db.session import SessionLocal
+    from app.db.models import User
+    from datetime import datetime, timezone
+
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Deleted User", "email": f"deleted-user-{uuid4().hex[:8]}@test.com", "password": "DeletedPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "admin"
+            user.deleted_at = datetime.now(timezone.utc)
+            db.commit()
+
+        blocked = client.get(
+            "/api/v1/admin/verification",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid, "admin")},
+        )
+        assert blocked.status_code == 403
+
+
+def test_demoted_vendor_role_downgrade_takes_effect_immediately():
+    """A vendor demoted back to customer by an admin must lose vendor-level
+    access on the very next request, even with an actor token still
+    claiming role=vendor from before the demotion."""
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Demoted Vendor", "email": f"demoted-{uuid4().hex[:8]}@test.com", "password": "VendorPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        from app.db.session import SessionLocal
+        from app.db.models import User
+
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "customer"
+            db.commit()
+
+        # Actor token claims "vendor" (stale), but /admin/verification requires
+        # the DB-derived role to be "admin" — demonstrates the claim alone
+        # carries no weight; it's the re-fetched User.role that's checked.
+        stale_vendor_token = {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid, "vendor")}
+        resp = client.get("/api/v1/admin/verification", headers=stale_vendor_token)
+        assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# A3: OAuth auto-link account-takeover tests
+# ---------------------------------------------------------------------------
+
+def test_oauth_upsert_denies_link_when_provider_email_unverified():
+    """An attacker who signs in via OAuth with an unverified claim to a
+    victim's existing email must NOT be linked into the victim's account."""
+    with TestClient(app) as client:
+        email = f"oauth-takeover-{uuid4().hex[:8]}@example.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Victim", "email": email, "password": "VictimPass123!"},
+        )
+        assert signup.status_code == 201
+
+        resp = client.post(
+            "/api/v1/auth/oauth-upsert",
+            headers=INTERNAL_HEADERS,
+            json={
+                "email": email,
+                "name": "Attacker",
+                "provider": "google",
+                "provider_account_id": "attacker-google-id",
+                "email_verified": False,
+            },
+        )
+        assert resp.status_code == 403
+
+        # The victim's account must still be password-only — not linked.
+        with TestClient(app) as client2:
+            login = client2.post(
+                "/api/v1/auth/login",
+                headers=INTERNAL_HEADERS,
+                json={"email": email, "password": "VictimPass123!"},
+            )
+            assert login.status_code == 200
+
+
+def test_oauth_upsert_denies_link_to_existing_password_account_even_when_verified():
+    """Even with a provider-verified email, auto-linking into an existing
+    password account is denied — the attacker must not gain access just
+    because they happen to control a verified OAuth identity for that
+    address (email verification alone doesn't prove they set the password)."""
+    with TestClient(app) as client:
+        email = f"oauth-takeover-verified-{uuid4().hex[:8]}@example.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Victim", "email": email, "password": "VictimPass123!"},
+        )
+        assert signup.status_code == 201
+
+        resp = client.post(
+            "/api/v1/auth/oauth-upsert",
+            headers=INTERNAL_HEADERS,
+            json={
+                "email": email,
+                "name": "Attacker",
+                "provider": "google",
+                "provider_account_id": "attacker-google-id-2",
+                "email_verified": True,
+            },
+        )
+        assert resp.status_code == 409
+
+
+def test_oauth_upsert_creates_new_user_when_no_existing_account():
+    """A brand-new email with a verified OAuth claim creates a fresh account
+    (not blocked — nothing to take over)."""
+    with TestClient(app) as client:
+        email = f"oauth-newuser-{uuid4().hex[:8]}@example.com"
+        resp = client.post(
+            "/api/v1/auth/oauth-upsert",
+            headers=INTERNAL_HEADERS,
+            json={
+                "email": email,
+                "name": "Fresh User",
+                "provider": "google",
+                "provider_account_id": "fresh-google-id",
+                "email_verified": True,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["email_verified"] is True
+
+
+# ---------------------------------------------------------------------------
+# A4: email verification gates sensitive actions
+# ---------------------------------------------------------------------------
+
+def test_checkout_rejects_unverified_signed_in_buyer():
+    """A signed-in buyer with an unverified email cannot check out."""
+    with TestClient(app) as client:
+        email = f"unverified-buyer-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Unverified Buyer", "email": email, "password": "BuyerPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+        )
+        assert prod_resp.status_code == 201
+        product = prod_resp.json()
+
+        resp = client.post(
+            "/api/v1/orders/initialize-payment",
+            headers=INTERNAL_HEADERS,
+            json={
+                "userId": uid,
+                "fullName": "Unverified Buyer",
+                "email": email,
+                "phone": "0240000000",
+                "addressLine1": "1 Test St",
+                "city": "Accra",
+                "state": "Greater Accra",
+                "postalCode": "00233",
+                "country": "Ghana",
+                "shippingMethod": "standard",
+                "paymentMethod": "card",
+                "subtotal": float(product["price"]),
+                "shippingCost": 0.0,
+                "tax": 0.0,
+                "total": float(product["price"]),
+                "currency": "GHS",
+                "items": [{
+                    "productId": product["id"],
+                    "name": product["name"],
+                    "image": "/img/test.jpg",
+                    "price": float(product["price"]),
+                    "quantity": 1,
+                }],
+            },
+        )
+        assert resp.status_code == 403
+        assert "verify your email" in resp.json()["detail"].lower()
+
+
+def test_checkout_allows_guest_regardless_of_verification():
+    """Guest checkout (no userId) is not gated on email verification."""
+    with TestClient(app) as client:
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+        )
+        assert prod_resp.status_code == 201
+        product = prod_resp.json()
+
+        resp = client.post(
+            "/api/v1/orders/initialize-payment",
+            headers=INTERNAL_HEADERS,
+            json={
+                "userId": None,
+                "fullName": "Guest Buyer",
+                "email": "guest@test.com",
+                "phone": "0240000000",
+                "addressLine1": "1 Test St",
+                "city": "Accra",
+                "state": "Greater Accra",
+                "postalCode": "00233",
+                "country": "Ghana",
+                "shippingMethod": "standard",
+                "paymentMethod": "card",
+                "subtotal": float(product["price"]),
+                "shippingCost": 0.0,
+                "tax": 0.0,
+                "total": float(product["price"]),
+                "currency": "GHS",
+                "items": [{
+                    "productId": product["id"],
+                    "name": product["name"],
+                    "image": "/img/test.jpg",
+                    "price": float(product["price"]),
+                    "quantity": 1,
+                }],
+            },
+        )
+        assert resp.status_code != 403
+
+
+def test_submit_onboarding_rejects_unverified_email():
+    """Seller onboarding cannot be submitted until the seller's email is verified."""
+    with TestClient(app) as client:
+        email = f"unverified-seller-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Unverified Seller", "email": email, "password": "SellerPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+        hdrs = {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)}
+
+        client.patch("/api/v1/auth/onboarding/step/1", headers=hdrs,
+                     json={"name": "Unverified Seller", "phone": "0241234567", "termsAccepted": True})
+        client.patch("/api/v1/auth/onboarding/step/2", headers=hdrs,
+                     json={"country": "Ghana", "state": "Greater Accra",
+                           "city": "Accra", "addressLine1": "1 Seller Lane"})
+        client.patch("/api/v1/auth/onboarding/step/3", headers=hdrs,
+                     json={"storeName": f"Unverified Store {uuid4().hex[:6]}",
+                           "storeDescription": "Quality goods from Accra since 2020.",
+                           "sellerType": "retail"})
+        client.patch("/api/v1/auth/onboarding/step/4", headers=hdrs,
+                     json={"governmentIdType": "ghana-card", "governmentIdNumber": "GHA-987654321-0"})
+
+        resp = client.post("/api/v1/auth/onboarding/submit", headers=hdrs)
+        assert resp.status_code == 403
+        assert "verify your email" in resp.json()["detail"].lower()
+
+
+def test_comment_rejects_unverified_email():
+    """Posting a product comment/review requires a verified email."""
+    with TestClient(app) as client:
+        email = f"unverified-commenter-{uuid4().hex[:8]}@test.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Unverified Commenter", "email": email, "password": "CommentPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        prod_resp = client.post(
+            "/api/v1/products",
+            json=_create_product_payload(),
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+        )
+        assert prod_resp.status_code == 201
+        product_id = prod_resp.json()["id"]
+
+        resp = client.post(
+            f"/api/v1/products/{product_id}/comments",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+            json={"body": "Great product!", "rating": 5},
+        )
+        assert resp.status_code == 403
+        assert "verify your email" in resp.json()["detail"].lower()
 
 
 def test_stream_webhook_accepts_non_message_events():
@@ -546,7 +1385,7 @@ def test_admin_create_order_recomputes_totals_and_writes_ledger():
         prod_resp = client.post(
             "/api/v1/products",
             json=product_payload,
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
         )
         assert prod_resp.status_code == 201, prod_resp.text
         product_id = prod_resp.json()["id"]
@@ -656,7 +1495,7 @@ def test_charge_momo_order_gets_estimated_delivery_date():
         prod_resp = client.post(
             "/api/v1/products",
             json=_create_product_payload(),
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
         )
         assert prod_resp.status_code == 201, prod_resp.text
         product_id = prod_resp.json()["id"]
@@ -764,7 +1603,7 @@ def test_charge_momo_paystack_403_maps_to_403_not_502():
         prod_resp = client.post(
             "/api/v1/products",
             json=_create_product_payload(),
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
         )
         assert prod_resp.status_code == 201, prod_resp.text
         product_id = prod_resp.json()["id"]
@@ -802,7 +1641,7 @@ def test_charge_momo_valid_payload_creates_pending_order():
         prod_resp = client.post(
             "/api/v1/products",
             json=_create_product_payload(),
-            headers={**INTERNAL_HEADERS, "X-Actor-User-Id": "user-admin"},
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
         )
         assert prod_resp.status_code == 201, prod_resp.text
         product_id = prod_resp.json()["id"]
@@ -842,7 +1681,17 @@ def _create_seller_with_onboarding(client, *, step: int = 5, payout_payload: dic
     )
     assert signup.status_code == 201, signup.text
     uid = signup.json()["id"]
-    hdrs = {**INTERNAL_HEADERS, "X-Actor-User-Id": uid}
+    hdrs = {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)}
+
+    # A4: seller onboarding submission requires a verified email — this
+    # helper is reused by tests that exercise later-stage submit/payout
+    # logic, so verify it directly rather than round-tripping the email flow.
+    from app.db.session import SessionLocal
+    from app.db.models import User
+    with SessionLocal() as db:
+        seller = db.get(User, uid)
+        seller.email_verified = True
+        db.commit()
 
     # Step 1
     client.patch("/api/v1/auth/onboarding/step/1", headers=hdrs,
@@ -1101,7 +1950,7 @@ def test_release_payout_writes_payout_failed_for_missing_recipient():
 
         resp = client.put(
             f"/api/v1/orders/{order_id}/confirm-delivery",
-            headers={**ADMIN_HEADERS, "X-Actor-User-Id": "user-admin"},
+            headers=ADMIN_HEADERS,
         )
         assert resp.status_code == 200, resp.text
 

@@ -34,6 +34,10 @@ class OAuthUpsertRequest(BaseModel):
     name: str
     provider: str
     provider_account_id: str
+    # A3: whether the OAuth provider itself asserts this email is verified
+    # (e.g. Google/Apple's `email_verified` ID token claim). Required to be
+    # true before we'll auto-link to an existing password account.
+    email_verified: bool = False
 
 
 class SendVerificationRequest(BaseModel):
@@ -42,6 +46,15 @@ class SendVerificationRequest(BaseModel):
 
 class VerifyEmailRequest(BaseModel):
     token: str
+
+
+class PasswordResetRequestIn(BaseModel):
+    email: str
+
+
+class PasswordResetConfirmIn(BaseModel):
+    token: str
+    password: str = Field(min_length=8, max_length=128)
 
 
 class ShippingAddress(BaseModel):

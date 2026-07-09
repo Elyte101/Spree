@@ -18,6 +18,7 @@ import {
 } from "@/types/types";
 import { buildQueryString } from "@/lib/api/queryString";
 import { ProductQueryParams } from "@/lib/api/types";
+import { mintActorToken } from "@/lib/actorToken";
 import { getBackendApiBaseUrl, getBackendInternalApiKey } from "@/lib/runtimeConfig";
 
 export const BACKEND_UNAVAILABLE_MESSAGE =
@@ -225,6 +226,17 @@ async function fetchBackend(
   if (options?.internal) {
     try {
       headers.set("X-Internal-Api-Key", getBackendInternalApiKey());
+
+      // A2: mint a short-lived signed actor token from the caller-supplied
+      // X-Actor-User-Id/Role headers (which are only ever set here from a
+      // verified session.user — see lib/serverApi.ts callers). The backend
+      // verifies this token instead of trusting the plain headers, which
+      // are kept only for log correlation.
+      const actorId = headers.get("X-Actor-User-Id");
+      if (actorId) {
+        const actorRole = headers.get("X-Actor-Role") ?? "customer";
+        headers.set("X-Actor-Token", await mintActorToken({ id: actorId, role: actorRole }));
+      }
     } catch (err) {
       throw new BackendUnavailableError(err);
     }
@@ -315,13 +327,15 @@ export async function proxyBackend(
 export const getHomeFeed = () =>
   getJson<HomeFeed>("/home", undefined, { fallback: createFallbackHomeFeed });
 
-export const getProducts = (params?: ProductQueryParams) => {
+export const getProducts = (params?: ProductQueryParams, actorId?: string) => {
   const { includeBlacklisted, ...rest } = params ?? {};
   const useInternal = Boolean(includeBlacklisted);
   const queryParams = includeBlacklisted ? { ...rest, includeBlacklisted: true } : rest;
   return getJson<CatalogResponse>(
     `/products${buildQueryString(queryParams)}`,
-    useInternal ? { headers: { "X-Actor-Role": "admin" } } : undefined,
+    useInternal
+      ? { headers: { "X-Actor-Role": "admin", ...(actorId ? { "X-Actor-User-Id": actorId } : {}) } }
+      : undefined,
     { internal: useInternal, fallback: () => createFallbackCatalog(params) }
   );
 };
@@ -361,10 +375,10 @@ export const getNotifications = (userId?: string) =>
     { internal: true, fallback: () => [] }
   );
 
-export const getAdminOverview = () =>
+export const getAdminOverview = (actorId: string) =>
   getJson<AdminOverview | null>(
     "/admin/overview",
-    { headers: { "X-Actor-Role": "admin" } },
+    { headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": actorId } },
     { internal: true, fallback: () => null }
   );
 
@@ -385,17 +399,17 @@ export const getSeller = async (identifier: string) => {
   return response.json() as Promise<SellerDetail>;
 };
 
-export const getAdminSellers = (filter?: "all" | "blacklisted" | "inactive") =>
+export const getAdminSellers = (actorId: string, filter?: "all" | "blacklisted" | "inactive") =>
   getJson<SellerSummary[]>(
     `/admin/sellers${buildQueryString(filter && filter !== "all" ? { filter } : {})}`,
-    { headers: { "X-Actor-Role": "admin" } },
+    { headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": actorId } },
     { internal: true, fallback: () => [] }
   );
 
-export const getAdminSeller = async (identifier: string) => {
+export const getAdminSeller = async (identifier: string, actorId: string) => {
   const response = await fetchBackend(
     `/admin/sellers/${identifier}`,
-    { headers: { "X-Actor-Role": "admin" } },
+    { headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": actorId } },
     { internal: true }
   );
 
@@ -410,10 +424,10 @@ export const getAdminSeller = async (identifier: string) => {
   return response.json() as Promise<AdminSellerDetail>;
 };
 
-export const getAdminTopProducts = (page = 1, limit = 100) =>
+export const getAdminTopProducts = (actorId: string, page = 1, limit = 100) =>
   getJson<TopProductsResponse>(
     `/admin/products/top${buildQueryString({ page, limit })}`,
-    { headers: { "X-Actor-Role": "admin" } },
+    { headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": actorId } },
     {
       internal: true,
       fallback: () => ({

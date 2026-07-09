@@ -13,3 +13,7 @@ cryptography>=43.0.0,<45.0.0
 stream-chat>=4.0.0
 # Anthropic Claude — AI support auto-replies
 anthropic>=0.25.0
+# A2: verify short-lived HS256 actor tokens minted by the Next proxy.
+# Already present transitively via stream-chat; pinned directly so it can't
+# disappear from the dependency graph on an unrelated upgrade.
+PyJWT>=2.8.0,<3.0.0

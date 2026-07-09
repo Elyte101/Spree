@@ -23,13 +23,16 @@ if _env_path.exists():
 from fastapi.testclient import TestClient
 
 from app.main import app
+from conftest import actor_token
 
 INTERNAL_KEY = os.environ.get("BACKEND_INTERNAL_API_KEY", "spree-internal-dev-key")
 INTERNAL_HEADERS = {"X-Internal-Api-Key": INTERNAL_KEY}
 
 
 def _actor_headers(user_id: str) -> dict:
-    return {**INTERNAL_HEADERS, "X-Actor-User-Id": user_id}
+    # A2: actor identity is proven with a signed token now, not a raw
+    # X-Actor-User-Id header — see conftest.actor_token.
+    return {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(user_id)}
 
 
 def _register_user(client: TestClient) -> str:

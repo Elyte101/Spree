@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Body, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
-from app.api.deps import DBSession, InternalAPIKey
+from app.api.deps import ActorRole, DBSession, InternalAPIKey
 from app.schemas.order import ChargeMomoIn, ChargeMomoOut, OrderCreateIn, PaymentInitOut, PaymentVerifyOut, SubmitOtpIn
 from app.services.orders import (
     charge_momo_payment,
@@ -129,8 +129,11 @@ def order_refund(
     order_id: str,
     db: DBSession,
     _: InternalAPIKey,
-    x_actor_role: str = Header(default="", alias="X-Actor-Role"),
+    actor_role: ActorRole,
 ):
-    if x_actor_role != "admin":
+    # A2: actor_role comes from the verified signed actor token (deps.py),
+    # not a raw X-Actor-Role header — a raw header here would let anyone
+    # with the internal key self-declare "admin" and refund any order.
+    if actor_role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return refund_order(db, order_id)

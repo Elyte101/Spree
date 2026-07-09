@@ -57,13 +57,16 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
   const { filter = "all" } = await searchParams;
 
   const [catalog, overview] = await Promise.all([
-    getProducts({
-      limit: 48,
-      sort: "newest",
-      vendor: sellerProfile?.id,
-      includeBlacklisted: isAdmin,
-    }),
-    isAdmin ? getAdminOverview() : Promise.resolve(null),
+    getProducts(
+      {
+        limit: 48,
+        sort: "newest",
+        vendor: sellerProfile?.id,
+        includeBlacklisted: isAdmin,
+      },
+      session.user.id
+    ),
+    isAdmin ? getAdminOverview(session.user.id) : Promise.resolve(null),
   ]);
 
   const featuredCount = catalog.items.filter((p) => p.tags.includes("featured")).length;

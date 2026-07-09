@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
 
-from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey
+from fastapi import APIRouter, Header, HTTPException, status
+
+from app.api.deps import ActorRole, ActorUserId, DBSession, InternalAPIKey, _check_rate_limit
 from app.schemas.auth import (
     AuthUserOut,
     LoginRequest,
@@ -13,6 +15,8 @@ from app.schemas.auth import (
     OnboardingStep3Request,
     OnboardingStep4Request,
     OnboardingStep5Request,
+    PasswordResetConfirmIn,
+    PasswordResetRequestIn,
     PayoutInfoRequest,
     ProfileUpdateRequest,
     SendVerificationRequest,
@@ -22,9 +26,14 @@ from app.schemas.auth import (
 )
 from app.services.auth import (
     authenticate_user,
+    check_login_rate_limit,
+    clear_login_failures,
     create_verification_token,
     get_user_profile,
+    record_login_failure,
     register_user,
+    request_password_reset,
+    reset_password_with_token,
     update_payout_info,
     update_user_profile,
     upsert_oauth_user,
@@ -36,13 +45,32 @@ router = APIRouter(prefix="/auth")
 
 
 @router.post("/login", response_model=AuthUserOut)
-def login(payload: LoginRequest, db: DBSession, _: InternalAPIKey):
+def login(
+    payload: LoginRequest,
+    db: DBSession,
+    _: InternalAPIKey,
+    # X-Client-Ip: set by the Next proxy from the original browser request —
+    # trustworthy on the normal path since only our own server code sets it.
+    # X-Forwarded-For: set by Vercel's own edge for *this* deployment; used
+    # as a fallback so a caller hitting this endpoint directly (bypassing
+    # Next entirely) still gets attributed to their real IP instead of
+    # everyone collapsing into one shared "unknown" bucket.
+    x_client_ip: Annotated[str | None, Header(alias="X-Client-Ip")] = None,
+    x_forwarded_for: Annotated[str | None, Header(alias="X-Forwarded-For")] = None,
+):
+    # A5/A7: DB-backed rate limit, enforced here so it can't be skipped by
+    # calling this endpoint directly instead of through the Next proxy.
+    client_ip = x_client_ip or (x_forwarded_for.split(",")[0].strip() if x_forwarded_for else "unknown")
+    check_login_rate_limit(db, payload.email, client_ip)
+
     user = authenticate_user(db, payload.email, payload.password)
     if user is None:
+        record_login_failure(db, payload.email, client_ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+    clear_login_failures(db, payload.email, client_ip)
     return user
 
 
@@ -204,6 +232,33 @@ def verify_email(payload: VerifyEmailRequest, db: DBSession, _: InternalAPIKey):
             detail="Invalid or expired verification link",
         )
     return user
+
+
+# ── Password reset ────────────────────────────────────────────────────────────
+
+@router.post("/password-reset/request", status_code=status.HTTP_200_OK)
+def password_reset_request(payload: PasswordResetRequestIn, db: DBSession, _: InternalAPIKey):
+    # A6: rate-limited per email to slow down enumeration/spam of the reset
+    # flow; response is identical whether or not the email has an account
+    # (see request_password_reset — no user-existence signal is leaked).
+    _check_rate_limit(db, f"password_reset_request:{payload.email.lower().strip()}", max_calls=3, window_seconds=3600)
+    request_password_reset(db, payload.email)
+    return {"detail": "If an account exists for that email, a password reset link has been sent."}
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_200_OK)
+def password_reset_confirm(payload: PasswordResetConfirmIn, db: DBSession, _: InternalAPIKey):
+    ok = reset_password_with_token(db, payload.token, payload.password)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired password reset link",
+        )
+    # A6: the caller must sign in again with the new password — we don't
+    # return a session here, and any session issued before this point is
+    # invalidated the next time it hits a sensitive-action revalidation check
+    # (see A10 — the JWT's issued-at is compared against password_changed_at).
+    return {"detail": "Your password has been reset. Please sign in with your new password."}
 
 
 # ── Bank payout endpoints ──────────────────────────────────────────────────────

@@ -7,6 +7,6 @@ export async function GET() {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
   return proxyBackend("/admin/verification", {
-    headers: { "X-Actor-Role": "admin" },
+    headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": session.user.id },
   }, { internal: true });
 }
