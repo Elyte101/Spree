@@ -1,5 +1,26 @@
 import { Resend } from "resend";
 
+// STEP 2 (2026-07-10 email flow assessment): bound well under the Next
+// proxy's 15s AbortSignal.timeout (lib/serverApi.ts) so a slow Resend API
+// call can never itself cause an upstream timeout — this send is now also
+// reachable from signup, not just the logged-in "resend verification"
+// route. The Resend JS SDK's typed options don't expose a `signal`/timeout
+// (only `headers`/`idempotencyKey`), so this is enforced with a manual race
+// instead of relying on the SDK. Also called (sequentially, after a
+// token-generation call) from signup — leaves headroom under a Vercel
+// function's own execution-time limit (e.g. 10s on the Hobby plan).
+const RESEND_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); }
+    );
+  });
+}
+
 export async function sendVerificationEmail(email: string, token: string) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
@@ -8,15 +29,42 @@ export async function sendVerificationEmail(email: string, token: string) {
   }
 
   const resend = new Resend(apiKey);
-  const FROM = process.env.EMAIL_FROM ?? "Spree <noreply@spree.market>";
+  // 2026-07-10 email flow assessment: this used to default to a different
+  // domain (spree.market) than the backend (spree.com) — neither was a
+  // verified Resend domain, so one send path silently failed on every call.
+  // Both now default to Resend's sandbox sender; EMAIL_FROM must be set to
+  // the SAME value here and in the backend once a real domain is verified.
+  const FROM = process.env.EMAIL_FROM ?? "Spree <onboarding@resend.dev>";
   const APP_URL = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
   const verifyUrl = `${APP_URL}/auth/verify-email?token=${encodeURIComponent(token)}`;
 
-  return resend.emails.send({
-    from: FROM,
-    to: email,
-    subject: "Verify your Spree account",
-    html: `
+  try {
+    const response = await withTimeout(
+      resend.emails.send({
+        from: FROM,
+        to: email,
+        subject: "Verify your Spree account",
+        html: _verificationEmailHtml(verifyUrl),
+      }),
+      RESEND_TIMEOUT_MS,
+      "Resend verification email send"
+    );
+    console.log(
+      "[email] verification email sent",
+      JSON.stringify({ email_status: "sent", resend_message: response.data?.id ?? null })
+    );
+    return response;
+  } catch (err) {
+    console.error(
+      "[email] verification email failed",
+      JSON.stringify({ email_status: "failed", error: err instanceof Error ? err.message : String(err) })
+    );
+    throw err;
+  }
+}
+
+function _verificationEmailHtml(verifyUrl: string): string {
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -63,6 +111,5 @@ export async function sendVerificationEmail(email: string, token: string) {
     </tr>
   </table>
 </body>
-</html>`,
-  });
+</html>`;
 }

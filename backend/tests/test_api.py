@@ -528,6 +528,50 @@ def test_signup_endpoint_creates_customer_account():
 
 
 # ---------------------------------------------------------------------------
+# 2026-07-10 email flow assessment — signup verification email pipeline
+# ---------------------------------------------------------------------------
+
+def test_send_verification_then_verify_email_flips_flag():
+    """The EXISTING pipeline (create_verification_token + verify-email) works
+    end to end: a fresh signup is email_verified=False; requesting a token via
+    /auth/send-verification and redeeming it via /auth/verify-email flips it
+    to True, reflected on the next login."""
+    with TestClient(app) as client:
+        email = f"verify-flow-{uuid4().hex[:8]}@example.com"
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Verify Flow", "email": email, "password": "VerifyFlow123!"},
+        )
+        assert signup.status_code == 201
+        assert signup.json()["email_verified"] is False
+
+        token_resp = client.post(
+            "/api/v1/auth/send-verification",
+            headers=INTERNAL_HEADERS,
+            json={"email": email},
+        )
+        assert token_resp.status_code == 200
+        token = token_resp.json()["token"]
+
+        verify_resp = client.post(
+            "/api/v1/auth/verify-email",
+            headers=INTERNAL_HEADERS,
+            json={"token": token},
+        )
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["email_verified"] is True
+
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            headers={**INTERNAL_HEADERS, "X-Client-Ip": f"10.9.{uuid4().hex[:2]}.1"},
+            json={"email": email, "password": "VerifyFlow123!"},
+        )
+        assert login_resp.status_code == 200
+        assert login_resp.json()["email_verified"] is True
+
+
+# ---------------------------------------------------------------------------
 # A11: NIST-style password policy
 # ---------------------------------------------------------------------------
 
@@ -1343,6 +1387,115 @@ def test_auto_release_does_not_double_process_delivered_orders():
         assert r2.status_code == 200
         # released count must not include our order again
         assert r2.json().get("released", 0) == 0
+
+
+def test_webhook_retry_does_not_double_notify_order_placed():
+    """2026-07-10 email flow assessment, STEP 3 finding: a sequential webhook
+    retry of the same charge.success event does NOT double-fire order_placed
+    — the existing `order.status == "pending"` guard in
+    handle_paystack_webhook already makes _mark_order_paid's notifications
+    idempotent for this (the realistic) retry pattern, contrary to the
+    "no guard" premise in the original task prompt. No new idempotency-stamp
+    columns were added as a result — see FIXLOG.md. Kept as a permanent
+    regression test guarding this invariant."""
+    import unittest.mock as mock
+    from decimal import Decimal
+    from app.db.session import SessionLocal
+    from app.db.models import Order, OrderItem
+    from app.services import orders as orders_svc
+
+    order_id = f"order-webhook-retry-{uuid4().hex[:8]}"
+    reference = f"ref-webhook-retry-{uuid4().hex[:8]}"
+    notify_calls: list[str] = []
+
+    def _fake_notify_safe(db, **kwargs):
+        notify_calls.append(kwargs.get("event_type"))
+
+    with TestClient(app):
+        with SessionLocal() as db:
+            db.add(Order(
+                id=order_id, user_id="user-admin", status="pending", full_name="Retry Buyer",
+                email=f"retry-{uuid4().hex[:6]}@test.com",
+                address_line1="1 Test St", city="Accra", state="Greater Accra",
+                postal_code="00233", country="Ghana", shipping_method="standard",
+                payment_method="card", subtotal=Decimal("100.00"), shipping_cost=Decimal("10.00"),
+                tax=Decimal("1.50"), total=Decimal("111.50"), currency="GHS",
+                paystack_reference=reference,
+            ))
+            db.add(OrderItem(
+                id=f"{order_id}-item1", order_id=order_id, name="Test Item",
+                image="/img/t.jpg", price=Decimal("100.00"), quantity=1,
+            ))
+            db.commit()
+
+        with mock.patch.object(orders_svc, "notify_safe", side_effect=_fake_notify_safe):
+            orders_svc.handle_paystack_webhook(
+                SessionLocal(), "charge.success", {"reference": reference, "id": "tx-1"}
+            )
+            # Sequential retry of the exact same event, after the first has fully committed.
+            orders_svc.handle_paystack_webhook(
+                SessionLocal(), "charge.success", {"reference": reference, "id": "tx-1"}
+            )
+
+    order_placed_count = notify_calls.count("order_placed")
+    assert order_placed_count == 1, (
+        f"Expected exactly 1 order_placed notification across two webhook deliveries, "
+        f"got {order_placed_count} (all calls: {notify_calls}) — the order.status == "
+        f"'pending' guard in handle_paystack_webhook should have skipped the retry."
+    )
+
+
+def test_add_tracking_retry_does_not_double_notify_order_shipped():
+    """2026-07-10 email flow assessment, STEP 3: a retried add_tracking call
+    (e.g. a seller double-submitting the tracking form) must not double-send
+    order_shipped — add_tracking's existing `order.status != "paid"` guard
+    (status is "in_transit" after the first call) already prevents this."""
+    import unittest.mock as mock
+    from decimal import Decimal
+    from app.db.session import SessionLocal
+    from app.db.models import Order, OrderItem
+    from app.services import orders as orders_svc
+    from app.schemas.order import OrderTrackingIn
+
+    order_id = f"order-ship-retry-{uuid4().hex[:8]}"
+    seller_id = "user-admin"
+    with TestClient(app):
+        with SessionLocal() as db:
+            db.add(Order(
+                id=order_id, user_id="user-admin", status="paid", full_name="Ship Retry Buyer",
+                email=f"ship-retry-{uuid4().hex[:6]}@test.com",
+                address_line1="1 Test St", city="Accra", state="Greater Accra",
+                postal_code="00233", country="Ghana", shipping_method="standard",
+                payment_method="card", subtotal=Decimal("100.00"), shipping_cost=Decimal("10.00"),
+                tax=Decimal("1.50"), total=Decimal("111.50"), currency="GHS",
+                paystack_reference=f"ref-{uuid4().hex[:8]}",
+            ))
+            db.add(OrderItem(
+                id=f"{order_id}-item1", order_id=order_id, seller_id=seller_id,
+                name="Test Item", image="/img/t.jpg", price=Decimal("100.00"), quantity=1,
+            ))
+            db.commit()
+
+        notify_calls: list[str] = []
+
+        def _fake_notify_safe(db, **kwargs):
+            notify_calls.append(kwargs.get("event_type"))
+
+        payload = OrderTrackingIn(trackingNumber="TRK123", carrier="DHL")
+        with mock.patch.object(orders_svc, "notify_safe", side_effect=_fake_notify_safe):
+            with SessionLocal() as db:
+                orders_svc.add_tracking(db, order_id, payload, seller_id)
+
+            # Retry: seller resubmits the same tracking form.
+            with SessionLocal() as db:
+                try:
+                    orders_svc.add_tracking(db, order_id, payload, seller_id)
+                    raised = False
+                except Exception:
+                    raised = True
+
+    assert raised, "Expected the retried add_tracking call to be rejected (order no longer 'paid')"
+    assert notify_calls.count("order_shipped") == 1
 
 
 def test_transfer_recipient_type_ghs_uses_ghipss():

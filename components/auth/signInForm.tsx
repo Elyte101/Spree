@@ -8,8 +8,11 @@ import {
   alpha,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   Divider,
+  FormControlLabel,
+  FormHelperText,
   IconButton,
   InputAdornment,
   Paper,
@@ -24,7 +27,14 @@ import {
   VisibilityOutlined,
 } from "@mui/icons-material";
 
-import { api, ApiClientError } from "@/lib/api";
+import { api } from "@/lib/api";
+import {
+  hasFieldErrors,
+  mapSignupError,
+  SignupFieldErrors,
+  validateSigninFields,
+  validateSignupFields,
+} from "@/lib/authFormErrors";
 import { useThemeContext } from "@/theme/themeContext";
 
 interface SignInFormProps {
@@ -59,27 +69,34 @@ function AppleIcon({ mode }: { mode: "light" | "dark" }) {
 }
 
 function PasswordField({
+  id,
   label,
   value,
   onChange,
   autoComplete,
   required,
+  error,
 }: {
+  id?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
   autoComplete: string;
   required?: boolean;
+  error?: string;
 }) {
   const [show, setShow] = React.useState(false);
   return (
     <TextField
+      id={id}
       label={label}
       type={show ? "text" : "password"}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       autoComplete={autoComplete}
       required={required}
+      error={!!error}
+      helperText={error}
       slotProps={{
         input: {
           endAdornment: (
@@ -115,16 +132,60 @@ export function SignInForm({
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
+  const [agreedToTerms, setAgreedToTerms] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [socialLoading, setSocialLoading] = React.useState<"google" | "apple" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [info, setInfo] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<SignupFieldErrors>({});
 
   const isSellerRestricted =
     reason === "vendor" &&
     currentUserRole !== undefined &&
     currentUserRole !== "vendor" &&
     currentUserRole !== "admin";
+
+  const clearFieldError = (field: keyof SignupFieldErrors) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const handleNameChange = (value: string) => {
+    setName(value);
+    setError(null);
+    clearFieldError("name");
+  };
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    setError(null);
+    clearFieldError("email");
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    setError(null);
+    clearFieldError("password");
+    // A stale "Passwords do not match" on confirmPassword may no longer
+    // apply once the password itself changes — recomputed fresh on submit.
+    clearFieldError("confirmPassword");
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value);
+    setError(null);
+    clearFieldError("confirmPassword");
+  };
+
+  const handleTermsChange = (checked: boolean) => {
+    setAgreedToTerms(checked);
+    setError(null);
+    clearFieldError("terms");
+  };
 
   const handleSocialSignIn = async (provider: "google" | "apple") => {
     setSocialLoading(provider);
@@ -150,31 +211,35 @@ export function SignInForm({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSubmitting(true);
     setError(null);
 
-    if (tab === "signup") {
-      if (password !== confirmPassword) {
-        setError("Passwords do not match.");
-        setSubmitting(false);
-        return;
-      }
+    // Recompute validation fresh on every submit — never reuse a previous
+    // submit's error state, so a corrected field can't show a stale message.
+    const validationErrors =
+      tab === "signup"
+        ? validateSignupFields({ name, email, password, confirmPassword, agreedToTerms })
+        : validateSigninFields({ email, password });
+    setFieldErrors(validationErrors);
+    if (hasFieldErrors(validationErrors)) {
+      return;
+    }
 
+    setSubmitting(true);
+
+    if (tab === "signup") {
       try {
-        await api.signUp({ name, email, password });
+        await api.signUp({ name: name.trim(), email: email.trim(), password });
       } catch (err) {
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "We couldn't create your account. Please try again."
-        );
+        const { formMessage, fieldErrors: serverFieldErrors } = mapSignupError(err);
+        setError(formMessage);
+        setFieldErrors((prev) => ({ ...prev, ...serverFieldErrors }));
         setSubmitting(false);
         return;
       }
     }
 
     const result = await signIn("credentials", {
-      email,
+      email: email.trim(),
       password,
       callbackUrl: redirectTarget,
       redirect: false,
@@ -286,7 +351,7 @@ export function SignInForm({
             {(["signin", "signup"] as const).map((t) => (
               <Button
                 key={t}
-                onClick={() => { setTab(t); setError(null); }}
+                onClick={() => { setTab(t); setError(null); setFieldErrors({}); }}
                 variant="text"
                 sx={{
                   flex: 1,
@@ -358,30 +423,38 @@ export function SignInForm({
           </Divider>
 
           {/* Email/password form */}
-          <Stack component="form" spacing={2} onSubmit={handleSubmit}>
+          <Stack component="form" spacing={2} onSubmit={handleSubmit} noValidate>
             {tab === "signup" && (
               <TextField
+                id="signup-name"
                 label="Full name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => handleNameChange(e.target.value)}
                 autoComplete="name"
                 required
+                error={!!fieldErrors.name}
+                helperText={fieldErrors.name}
               />
             )}
             <TextField
+              id="auth-email"
               label="Email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => handleEmailChange(e.target.value)}
               autoComplete="email"
               required
+              error={!!fieldErrors.email}
+              helperText={fieldErrors.email}
             />
             <PasswordField
+              id="auth-password"
               label="Password"
               value={password}
-              onChange={setPassword}
+              onChange={handlePasswordChange}
               autoComplete={tab === "signup" ? "new-password" : "current-password"}
               required
+              error={fieldErrors.password}
             />
             {tab === "signin" && (
               <Box sx={{ textAlign: "right", mt: -1 }}>
@@ -397,17 +470,52 @@ export function SignInForm({
             )}
             {tab === "signup" && (
               <PasswordField
+                id="signup-confirm-password"
                 label="Confirm password"
                 value={confirmPassword}
-                onChange={setConfirmPassword}
+                onChange={handleConfirmPasswordChange}
                 autoComplete="new-password"
                 required
+                error={fieldErrors.confirmPassword}
               />
             )}
-            {tab === "signup" && (
+            {tab === "signup" && !fieldErrors.password && (
               <Typography variant="caption" color="text.secondary">
                 Password must be at least 8 characters. Avoid common or easily guessed passwords.
               </Typography>
+            )}
+            {tab === "signup" && (
+              <Box>
+                <FormControlLabel
+                  sx={{ alignItems: "flex-start", ml: 0 }}
+                  control={
+                    <Checkbox
+                      checked={agreedToTerms}
+                      onChange={(e) => handleTermsChange(e.target.checked)}
+                      color="primary"
+                      sx={{ pt: 0.25 }}
+                    />
+                  }
+                  label={
+                    <Typography variant="body2" color="text.secondary">
+                      I agree to Spree&apos;s{" "}
+                      <Link href="/terms" target="_blank" rel="noopener noreferrer">
+                        Terms of Service
+                      </Link>{" "}
+                      and{" "}
+                      <Link href="/privacy" target="_blank" rel="noopener noreferrer">
+                        Privacy Policy
+                      </Link>
+                      .
+                    </Typography>
+                  }
+                />
+                {fieldErrors.terms && (
+                  <FormHelperText error sx={{ ml: 1.5, mt: -0.5 }}>
+                    {fieldErrors.terms}
+                  </FormHelperText>
+                )}
+              </Box>
             )}
             <Button
               type="submit"

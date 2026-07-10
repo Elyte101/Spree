@@ -281,7 +281,7 @@ export function ProductListingPage({
             }}
           />
           <Stack
-            direction={{ xs: "column", lg: "row" }}
+            direction={{ xs: "column", md: "row" }}
             spacing={3}
             justifyContent="space-between"
             sx={{ position: "relative" }}

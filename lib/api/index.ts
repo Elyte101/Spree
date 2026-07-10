@@ -57,20 +57,34 @@ export type {
 
 export class ApiClientError extends Error {
   status: number;
+  /** Full parsed JSON error body, when the response had one — lets callers
+   * that need field-level detail (e.g. `{ errors: [{ path, code }] }`) read
+   * past the flattened `message` string. Shape is endpoint-specific. */
+  body?: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.name = "ApiClientError";
     this.status = status;
+    this.body = body;
   }
 }
 
-async function parseError(response: Response): Promise<string> {
+async function parseError(response: Response): Promise<{ message: string; body: unknown }> {
   try {
     const payload = await response.json();
-    return payload?.detail || payload?.message || `Request failed (${response.status})`;
+    // `detail` is sometimes a non-string (e.g. FastAPI's raw pydantic
+    // validation error shape is a list of issue objects) — only trust it as
+    // a display message when it's actually a string.
+    const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
+    const message =
+      typeof payload?.message === "string" ? payload.message : undefined;
+    return {
+      message: detail || message || `Request failed (${response.status})`,
+      body: payload,
+    };
   } catch {
-    return `Request failed (${response.status})`;
+    return { message: `Request failed (${response.status})`, body: undefined };
   }
 }
 
@@ -107,7 +121,8 @@ async function requestJson<T>(
       if (options?.safe) {
         return options.fallback as T;
       }
-      throw new ApiClientError(response.status, await parseError(response));
+      const { message, body } = await parseError(response);
+      throw new ApiClientError(response.status, message, body);
     }
 
     if (response.status === 204) {

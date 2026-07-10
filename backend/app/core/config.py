@@ -94,7 +94,14 @@ class Settings(BaseSettings):
 
     # Resend email API
     resend_api_key: str = ""
-    email_from: str = "Spree <no-reply@spree.com>"
+    # 2026-07-10 email flow assessment: the frontend (lib/email.ts) and backend
+    # used two different sender domains (spree.com / spree.market), neither of
+    # which is a verified Resend domain — one silently failed on every send.
+    # Both now default to Resend's sandbox sender (works without domain
+    # verification, but only delivers to the Resend account's own email).
+    # Swap this to a real address once a custom domain is verified in Resend —
+    # EMAIL_FROM must be set to the SAME value on both frontend and backend.
+    email_from: str = "Spree <onboarding@resend.dev>"
     frontend_url: str = "http://localhost:3000"
 
     # Developer alert email (sent by dev_notifier on critical events)

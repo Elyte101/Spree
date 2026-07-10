@@ -19,9 +19,31 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import safe_extra
 from app.db.models import Notification, PushSubscription, User
 
 logger = logging.getLogger(__name__)
+
+# 2026-07-10 email flow assessment (STEP 2): Resend's Python SDK defaults to
+# a 30s HTTP timeout (resend.http_client_requests.RequestsClient), longer
+# than the Next.js proxy's 15s AbortSignal.timeout in lib/serverApi.ts. A
+# slow Resend API call could block this backend's response past the proxy's
+# budget, surfacing as "upstream_unreachable" on the frontend even though
+# the backend was still working. Bounded well under 15s (leaving headroom for
+# this function's own Vercel execution-time limit too, e.g. 10s on the
+# Hobby plan) so a slow/hanging Resend call can never itself cause a proxy
+# timeout.
+_RESEND_TIMEOUT_SECONDS = 6
+_resend_client_configured = False
+
+
+def _configure_resend_client() -> None:
+    global _resend_client_configured
+    if _resend_client_configured:
+        return
+    import resend
+    resend.default_http_client = resend.RequestsClient(timeout=_RESEND_TIMEOUT_SECONDS)
+    _resend_client_configured = True
 
 # ── Default notification preferences (all channels on for mandatory events) ───
 
@@ -108,19 +130,43 @@ def _create_in_app(
 
 def _send_email(recipient_email: str, subject: str, html: str) -> None:
     if not settings.resend_api_key:
-        logger.debug("Resend not configured; skipping email to %s", recipient_email)
+        logger.warning(
+            "Resend not configured (RESEND_API_KEY unset) — skipping email",
+            extra=safe_extra({"email_status": "skipped_no_api_key", "recipient": recipient_email}),
+        )
         return
     try:
         import resend
+        _configure_resend_client()
         resend.api_key = settings.resend_api_key
-        resend.Emails.send({
+        response = resend.Emails.send({
             "from": settings.email_from,
             "to": [recipient_email],
             "subject": subject,
             "html": html,
         })
+        logger.info(
+            "Email sent via Resend",
+            extra=safe_extra({
+                "email_status": "sent",
+                "recipient": recipient_email,
+                "resend_message": response.get("id") if response else None,
+                "email_from": settings.email_from,
+            }),
+        )
     except Exception as exc:
-        logger.warning("Failed to send email to %s: %s", recipient_email, exc)
+        # Never fatal — a failed notification email must not break the
+        # caller's primary operation (order confirmation, password reset, etc).
+        logger.warning(
+            "Failed to send email via Resend: %s",
+            exc,
+            extra=safe_extra({
+                "email_status": "failed",
+                "recipient": recipient_email,
+                "email_from": settings.email_from,
+                "error": str(exc),
+            }),
+        )
 
 
 def _send_push(db: Session, recipient_id: str, title: str, body: str, href: str | None) -> None:
