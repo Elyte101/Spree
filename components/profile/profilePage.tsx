@@ -45,6 +45,7 @@ import { UserProfile } from "@/types/types";
 import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel, MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
 import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
 import { useBankResolve } from "@/lib/hooks/useBankResolve";
+import { PasskeyManager } from "@/components/auth/passkeyManager";
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -704,6 +705,18 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
           </Stack>
 
           <Stack spacing={2.5}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2.5,
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <PasskeyManager />
+            </Paper>
+
             <Paper
               elevation={0}
               sx={{

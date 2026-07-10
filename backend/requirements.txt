@@ -17,3 +17,5 @@ anthropic>=0.25.0
 # Already present transitively via stream-chat; pinned directly so it can't
 # disappear from the dependency graph on an unrelated upgrade.
 PyJWT>=2.8.0,<3.0.0
+# Passkey (WebAuthn) registration + authentication ceremonies
+webauthn>=3.0.0,<4.0.0

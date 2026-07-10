@@ -558,3 +558,51 @@ class RateLimitEvent(Base):
         server_default=func.now(),
         index=True,
     )
+
+
+class WebAuthnCredential(Base):
+    """A registered passkey (WebAuthn public-key credential) for a user.
+
+    Registration is usernameless/discoverable (residentKey="required"), so
+    authentication never needs an email up front — the browser's platform
+    authenticator UI lets the user pick from credentials scoped to this RP,
+    and the credential's stored `user_id` tells us who just signed in.
+    """
+    __tablename__ = "webauthn_credentials"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    # Base64url-encoded credential ID — what the authenticator/browser sends
+    # back on every subsequent authentication to identify which key was used.
+    credential_id: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Base64url-encoded COSE public key — used to verify the signed assertion.
+    public_key: Mapped[str] = mapped_column(Text)
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    transports: Mapped[str | None] = mapped_column(String(255), nullable=True)  # comma-joined
+    device_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class WebAuthnChallenge(Base):
+    """Server-side WebAuthn ceremony challenge — DB-backed (not an in-memory
+    dict) for the same reason as IdentitySession/RateLimitEvent: Vercel
+    serverless invocations don't share process memory, so an in-memory
+    challenge store would 404 the browser's follow-up /verify call as soon
+    as it landed on a different invocation.
+
+    `user_id` is set for registration (the user is already logged in) and
+    unset for authentication (unknown until the assertion is verified).
+    """
+    __tablename__ = "webauthn_challenges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    challenge: Mapped[str] = mapped_column(String(255))  # base64url
+    purpose: Mapped[str] = mapped_column(String(32))  # "registration" | "authentication"
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

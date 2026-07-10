@@ -22,8 +22,23 @@ const getSecretKey = (): Uint8Array => {
   return cachedSecretKey;
 };
 
-export async function mintActorToken(actor: { id: string; role: string }): Promise<string> {
-  return new SignJWT({ role: actor.role })
+export async function mintActorToken(actor: {
+  id: string;
+  role: string;
+  // Unix seconds the underlying NextAuth session was first established
+  // (session.user.sessionIssuedAt) — distinct from this token's own `iat`,
+  // which is always "now" since the token is re-minted on every request.
+  // Lets the backend reject a still-unexpired session that predates a
+  // password reset instead of waiting for the session's own maxAge to
+  // naturally expire. Optional so callers that mint outside a full NextAuth
+  // session (none today) don't need it.
+  sessionIssuedAt?: number;
+}): Promise<string> {
+  const claims: Record<string, unknown> = { role: actor.role };
+  if (actor.sessionIssuedAt !== undefined) {
+    claims.siat = actor.sessionIssuedAt;
+  }
+  return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(actor.id)
     .setIssuer(ISSUER)

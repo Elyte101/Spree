@@ -26,6 +26,13 @@ class LoginRateLimitedError extends CredentialsSignin {
   code = "rate_limited";
 }
 
+// Signed in via a garbage/unregistered/expired passkey response — mapped to
+// a distinct code so signInForm.tsx can show a passkey-specific message
+// instead of the password-flow's generic "Invalid email or password."
+class PasskeySignInError extends CredentialsSignin {
+  code = "passkey_failed";
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
 
@@ -80,6 +87,59 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       },
     }),
+    // Usernameless passkey sign-in. A second Credentials-type provider (not
+    // NextAuth's built-in `type: "webauthn"` provider, which expects a full
+    // Adapter implementing authenticator storage — this app has no NextAuth
+    // Adapter at all, the FastAPI backend owns all persistence, same as the
+    // password provider above) — its `authorize()` just hands an
+    // already-completed WebAuthn assertion to the backend for verification,
+    // exactly like the password provider hands it a password.
+    Credentials({
+      id: "passkey",
+      name: "Passkey",
+      credentials: {
+        challengeId: { label: "challengeId", type: "text" },
+        credential: { label: "credential", type: "text" },
+      },
+      async authorize(credentials) {
+        const challengeId = credentials?.challengeId;
+        const credentialJson = credentials?.credential;
+        if (typeof challengeId !== "string" || typeof credentialJson !== "string") {
+          return null;
+        }
+
+        let credential: unknown;
+        try {
+          credential = JSON.parse(credentialJson);
+        } catch {
+          return null;
+        }
+
+        try {
+          const res = await callBackend("/auth/webauthn/authenticate/verify", {
+            challengeId,
+            credential,
+          });
+          if (res.status === 429) {
+            throw new LoginRateLimitedError();
+          }
+          if (!res.ok) {
+            throw new PasskeySignInError();
+          }
+          const user = await res.json();
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role as AppUserRole,
+            emailVerified: user.email_verified ? new Date() : null,
+          };
+        } catch (err) {
+          if (err instanceof LoginRateLimitedError || err instanceof PasskeySignInError) throw err;
+          return null;
+        }
+      },
+    }),
   ],
 
   callbacks: {
@@ -89,7 +149,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
     async jwt({ token, user, account, profile, trigger }) {
       if (user && account) {
-        if (account.provider !== "credentials") {
+        // A10 follow-up: stamped once, at genuine sign-in, only — never
+        // touched again for the life of this session (not even on the
+        // trigger === "update" refresh below). This is what lets the
+        // backend tell "a session established before the user's last
+        // password reset" apart from "a session established after it".
+        token.sessionIssuedAt = Math.floor(Date.now() / 1000);
+
+        if (account.type !== "credentials") {
           // A3: only trust the OAuth email as verified if the provider's own
           // profile/ID-token claim says so (Google/Apple both expose
           // `email_verified`, sometimes as the string "true"). The backend
@@ -137,6 +204,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 "X-Actor-Token": await mintActorToken({
                   id: userId,
                   role: (token.role as string) ?? "customer",
+                  sessionIssuedAt: token.sessionIssuedAt as number | undefined,
                 }),
               },
               cache: "no-store",
@@ -166,6 +234,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.emailVerified = token.emailVerified
           ? new Date()
           : null;
+        session.user.sessionIssuedAt = token.sessionIssuedAt as number | undefined;
       }
       return session;
     },

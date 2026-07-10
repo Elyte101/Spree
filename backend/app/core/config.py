@@ -104,6 +104,22 @@ class Settings(BaseSettings):
     email_from: str = "Spree <onboarding@resend.dev>"
     frontend_url: str = "http://localhost:3000"
 
+    # Passkeys (WebAuthn). RP ID must be the frontend's own hostname (no
+    # scheme/port) — it's the origin the browser's navigator.credentials
+    # call actually runs on, not the backend's. Derived from frontend_url so
+    # there's one source of truth; override WEBAUTHN_RP_ID directly only if
+    # the frontend is ever served from a different host than frontend_url.
+    webauthn_rp_id_override: str = ""
+    webauthn_rp_name: str = "Spree"
+
+    @computed_field
+    @property
+    def webauthn_rp_id(self) -> str:
+        if self.webauthn_rp_id_override:
+            return self.webauthn_rp_id_override
+        from urllib.parse import urlparse
+        return urlparse(self.frontend_url).hostname or "localhost"
+
     # Developer alert email (sent by dev_notifier on critical events)
     # Requires resend_api_key to be configured.
     dev_alert_email: str = ""

@@ -1054,6 +1054,102 @@ def test_demoted_vendor_role_downgrade_takes_effect_immediately():
         assert resp.status_code == 403
 
 
+def test_actor_token_rejected_when_session_predates_password_reset():
+    """A10 follow-up: an actor token minted from a session established
+    BEFORE the user's password was reset must be treated as anonymous, not
+    trusted until the session's own maxAge naturally expires."""
+    from datetime import datetime, timedelta, timezone
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Reset Session Admin", "email": f"reset-session-{uuid4().hex[:8]}@test.com", "password": "AdminPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        password_changed_at = datetime.now(timezone.utc)
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "admin"
+            user.password_changed_at = password_changed_at
+            db.commit()
+
+        # Session established 5 minutes BEFORE the password reset above.
+        stale_session_iat = int((password_changed_at - timedelta(minutes=5)).timestamp())
+        stale_headers = {
+            **INTERNAL_HEADERS,
+            "X-Actor-Token": actor_token(uid, "admin", session_issued_at=stale_session_iat),
+        }
+        resp = client.get("/api/v1/admin/verification", headers=stale_headers)
+        assert resp.status_code == 403
+
+
+def test_actor_token_accepted_when_session_postdates_password_reset():
+    """A session established AFTER the password reset (e.g. the user logged
+    back in after resetting) must keep working normally."""
+    from datetime import datetime, timedelta, timezone
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "Fresh Session Admin", "email": f"fresh-session-{uuid4().hex[:8]}@test.com", "password": "AdminPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        password_changed_at = datetime.now(timezone.utc)
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "admin"
+            user.password_changed_at = password_changed_at
+            db.commit()
+
+        # Session established 5 minutes AFTER the password reset above.
+        fresh_session_iat = int((password_changed_at + timedelta(minutes=5)).timestamp())
+        fresh_headers = {
+            **INTERNAL_HEADERS,
+            "X-Actor-Token": actor_token(uid, "admin", session_issued_at=fresh_session_iat),
+        }
+        resp = client.get("/api/v1/admin/verification", headers=fresh_headers)
+        assert resp.status_code == 200
+
+
+def test_actor_token_without_siat_claim_is_not_rejected():
+    """Backward compat: a token minted without the `siat` claim (e.g. during
+    a mixed frontend/backend deploy window) must not be treated as expired —
+    the session-age check is skipped, not fail-closed, for this population."""
+    from datetime import datetime, timezone
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    with TestClient(app) as client:
+        signup = client.post(
+            "/api/v1/auth/signup",
+            headers=INTERNAL_HEADERS,
+            json={"name": "No Siat Admin", "email": f"no-siat-{uuid4().hex[:8]}@test.com", "password": "AdminPass123!"},
+        )
+        assert signup.status_code == 201
+        uid = signup.json()["id"]
+
+        with SessionLocal() as db:
+            user = db.get(User, uid)
+            user.role = "admin"
+            user.password_changed_at = datetime.now(timezone.utc)
+            db.commit()
+
+        # No session_issued_at passed at all — same as actor_token()'s default.
+        no_siat_headers = {**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid, "admin")}
+        resp = client.get("/api/v1/admin/verification", headers=no_siat_headers)
+        assert resp.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # A3: OAuth auto-link account-takeover tests
 # ---------------------------------------------------------------------------

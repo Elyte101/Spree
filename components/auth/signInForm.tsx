@@ -135,6 +135,7 @@ export function SignInForm({
   const [agreedToTerms, setAgreedToTerms] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [socialLoading, setSocialLoading] = React.useState<"google" | "apple" | null>(null);
+  const [passkeyLoading, setPasskeyLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [info, setInfo] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<SignupFieldErrors>({});
@@ -197,9 +198,52 @@ export function SignInForm({
     }
   };
 
-  const handlePasskey = () => {
-    setInfo("Passkey login is coming soon — stay tuned!");
-    setTimeout(() => setInfo(null), 4000);
+  const handlePasskey = async () => {
+    setError(null);
+    setPasskeyLoading(true);
+    try {
+      const optionsRes = await fetch("/api/auth/webauthn/authenticate/options", { method: "POST" });
+      if (!optionsRes.ok) {
+        setError("Passkey sign-in isn't available right now. Please try again.");
+        return;
+      }
+      const { options, challengeId } = await optionsRes.json();
+
+      const { startAuthentication } = await import("@simplewebauthn/browser");
+      const assertion = await startAuthentication({ optionsJSON: options });
+
+      const result = await signIn("passkey", {
+        challengeId,
+        credential: JSON.stringify(assertion),
+        callbackUrl: redirectTarget,
+        redirect: false,
+      });
+
+      if (!result) {
+        setError("Sign-in failed. Please try again.");
+        return;
+      }
+      if (result.error) {
+        if (result.error === "rate_limited") {
+          setError("Too many attempts. Please wait a few minutes before trying again.");
+        } else {
+          setError("That passkey didn't work. Please try again or sign in with your password.");
+        }
+        return;
+      }
+
+      window.location.assign(redirectTarget);
+    } catch (err) {
+      // The browser throws (not rejects-with-a-normal-Error) when the user
+      // cancels the prompt or it times out — that's a routine dismissal, not
+      // a failure worth alarming the user about.
+      const name = err instanceof DOMException ? err.name : "";
+      if (name !== "NotAllowedError" && name !== "AbortError") {
+        setError("Passkey sign-in didn't work. Please try again or sign in with your password.");
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
   };
 
   const handleAccountSwitch = async () => {
@@ -410,11 +454,11 @@ export function SignInForm({
               variant="outlined"
               fullWidth
               onClick={handlePasskey}
-              disabled={!!socialLoading || submitting}
-              startIcon={<FingerprintRounded />}
+              disabled={!!socialLoading || submitting || passkeyLoading}
+              startIcon={passkeyLoading ? <CircularProgress size={16} /> : <FingerprintRounded />}
               sx={{ ...socialBtnSx, color: "primary.main", borderColor: "primary.main" }}
             >
-              Use Passkey
+              {passkeyLoading ? "Waiting for passkey…" : "Use Passkey"}
             </Button>
           </Stack>
 

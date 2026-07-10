@@ -111,7 +111,7 @@ _ACTOR_TOKEN_ISSUER = "spree-next-proxy"
 _ACTOR_TOKEN_AUDIENCE = "spree-backend"
 
 
-def _decode_actor_token(token: str) -> tuple[str, str]:
+def _decode_actor_token(token: str) -> tuple[str, str, int | None]:
     try:
         claims = jwt.decode(
             token,
@@ -134,7 +134,14 @@ def _decode_actor_token(token: str) -> tuple[str, str]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid actor token",
         )
-    return actor_id, actor_role
+    # A10 follow-up: Unix-seconds timestamp of when the underlying NextAuth
+    # session was established (lib/actorToken.ts's `sessionIssuedAt`) — not
+    # this token's own `iat`, which is always "now" since the token is
+    # re-minted fresh on every request. Absent for tokens minted before this
+    # claim existed or outside a full session; treated as "unknown", not
+    # "invalid", by the caller.
+    session_issued_at = claims.get("siat")
+    return actor_id, actor_role, session_issued_at
 
 
 def _get_actor(
@@ -143,7 +150,7 @@ def _get_actor(
 ) -> tuple[str | None, str]:
     if not x_actor_token:
         return None, "customer"
-    actor_id, _token_role = _decode_actor_token(x_actor_token)
+    actor_id, _token_role, session_issued_at = _decode_actor_token(x_actor_token)
 
     # A10: re-derive role from the current DB row rather than trusting the
     # token's role claim. The claim reflects the Next-side session at the
@@ -156,6 +163,20 @@ def _get_actor(
     user = db.get(User, actor_id)
     if user is None or user.deleted_at is not None or user.is_blacklisted:
         return None, "customer"
+
+    # A10 follow-up: reject a session that predates the actor's last
+    # password reset, instead of trusting it until it naturally expires
+    # (session.maxAge, currently 24h). `session_issued_at` is only absent
+    # for sessions established before this check existed (or a genuinely
+    # actor-less internal call) — that's a self-resolving population
+    # (ages out within maxAge) with no attacker-controlled bypass, so it's
+    # treated as "not applicable" rather than failing closed and mass-
+    # logging-out every currently active session on deploy.
+    if session_issued_at is not None and user.password_changed_at is not None:
+        password_changed_epoch = user.password_changed_at.timestamp()
+        if session_issued_at < password_changed_epoch:
+            return None, "customer"
+
     return actor_id, user.role
 
 

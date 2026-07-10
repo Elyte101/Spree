@@ -235,7 +235,26 @@ async function fetchBackend(
       const actorId = headers.get("X-Actor-User-Id");
       if (actorId) {
         const actorRole = headers.get("X-Actor-Role") ?? "customer";
-        headers.set("X-Actor-Token", await mintActorToken({ id: actorId, role: actorRole }));
+        // A10 follow-up: re-decode the current session (cheap — it's just
+        // reading/verifying the already-set cookie, no extra network call)
+        // to thread through when THIS session was established. Lets the
+        // backend reject an actor token minted from a session that predates
+        // a password reset, without threading a new header through every
+        // one of the ~40 call sites that set X-Actor-User-Id — same
+        // chokepoint pattern as the token minting itself.
+        let sessionIssuedAt: number | undefined;
+        try {
+          const { auth } = await import("@/auth");
+          const session = await auth();
+          sessionIssuedAt = session?.user?.sessionIssuedAt;
+        } catch {
+          // Non-fatal — worst case the new session-age check is skipped for
+          // this request, falling back to the existing id/role verification.
+        }
+        headers.set(
+          "X-Actor-Token",
+          await mintActorToken({ id: actorId, role: actorRole, sessionIssuedAt })
+        );
       }
     } catch (err) {
       throw new BackendUnavailableError(err);
