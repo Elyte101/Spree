@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { Button, Paper, Stack, Typography } from "@mui/material";
 import { ProductDetailsPage } from "@/components/product/productDetailsPage";
 import { ThemedPageShell } from "@/components/ui/themedPageShell";
@@ -92,15 +93,28 @@ export default async function ProductDetailsRoute({
 }: ProductDetailsRouteProps) {
   const { id } = await params;
   let product: Product | undefined;
+  let fetchFailed = false;
 
   try {
     product = await getProductByIdOrSlug(id);
   } catch {
-    product = undefined;
+    // The backend call itself failed (network/5xx) — distinct from a clean
+    // 404, which getProductByIdOrSlug already turns into `undefined` rather
+    // than throwing. Show a friendly "try again" state, not a hard 404: a
+    // transient backend hiccup isn't "this product doesn't exist."
+    fetchFailed = true;
+  }
+
+  if (fetchFailed) {
+    return <ProductDetailsUnavailableState />;
   }
 
   if (!product) {
-    return <ProductDetailsUnavailableState />;
+    // A real 404 (not just this UI's fallback) — matters because a bare
+    // local path that isn't a real product (e.g. a broken/malformed image
+    // URL colliding with this route) should be cheap to reject, not trigger
+    // a full page render every time something requests it. See FIXLOG DEV1.
+    notFound();
   }
 
   let relatedProducts: Product[] = [];
