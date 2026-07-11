@@ -11,12 +11,12 @@ import {
   BadgeRounded,
   CheckCircleOutlined,
   CheckCircleRounded,
+  EditRounded,
   Inventory2Rounded,
   LocalShippingRounded,
   LogoutRounded,
   PaymentRounded,
   PhoneAndroidRounded,
-  SaveRounded,
   StorefrontRounded,
 } from "@mui/icons-material";
 import {
@@ -38,14 +38,61 @@ import {
   Typography,
 } from "@mui/material";
 
-import { api, ApiClientError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { canCreateProductsRole } from "@/lib/roles";
 import { PhoneInput } from "@/components/ui/phoneInput";
+import { SaveButton } from "@/components/ui/saveButton";
 import { UserProfile } from "@/types/types";
 import { COUNTRY_LIST, getRegionsForCountry, getRegionLabel, MOMO_NETWORKS, validateMoMoNumber } from "@/lib/ghana";
 import { useMomoResolve } from "@/lib/hooks/useMomoResolve";
 import { useBankResolve } from "@/lib/hooks/useBankResolve";
+import { useSaveState } from "@/lib/hooks/useSaveState";
 import { PasskeyManager } from "@/components/auth/passkeyManager";
+
+type ProfileSection = "personal" | "shipping" | "payment";
+
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  isEditing,
+  onEdit,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle?: string;
+  isEditing: boolean;
+  onEdit: () => void;
+}) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+      <Stack direction="row" spacing={1} alignItems="center">
+        {icon}
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 900 }}>
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography variant="body2" color="text.secondary">
+              {subtitle}
+            </Typography>
+          )}
+        </Box>
+      </Stack>
+      {!isEditing && (
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<EditRounded fontSize="small" />}
+          onClick={onEdit}
+          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700, flexShrink: 0 }}
+        >
+          Edit
+        </Button>
+      )}
+    </Stack>
+  );
+}
 
 interface ProfilePageProps {
   initialProfile: UserProfile;
@@ -56,26 +103,50 @@ const sellerTypeLabels: Record<UserProfile["sellerType"], string> = {
   wholesale: "Wholesale vendor",
 };
 
+const emptyPayout = (profile: UserProfile) => ({
+  method: (profile.payoutInfo?.method === "bank" ? "bank" : "mobile_money") as "mobile_money" | "bank",
+  mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
+  mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
+  bankCode: profile.payoutInfo?.bankCode ?? "",
+  bankName: profile.payoutInfo?.bankName ?? "",
+  accountNumber: profile.payoutInfo?.accountNumber ?? "",
+  currency: "GHS",
+  accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
+});
+
 export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const router = useRouter();
   const { update } = useSession();
+
+  // `profile` is also the live draft while a section is being edited.
+  // `savedProfile` is the last server-confirmed snapshot — what read-only
+  // sections render, and what "Cancel" resets an edited section back to.
+  // Invariant: whenever a section isn't in edit mode, its slice of `profile`
+  // equals the same slice of `savedProfile`.
   const [profile, setProfile] = React.useState(initialProfile);
+  const [savedProfile, setSavedProfile] = React.useState(initialProfile);
 
-  const [saving, setSaving] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [success, setSuccess] = React.useState<string | null>(null);
-
-  // Payout info state — mobile money or bank transfer.
-  const [payout, setPayout] = React.useState({
-    method: (profile.payoutInfo?.method === "bank" ? "bank" : "mobile_money") as "mobile_money" | "bank",
-    mobileMoneyNetwork: profile.payoutInfo?.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value,
-    mobileMoneyNumber: profile.payoutInfo?.mobileMoneyNumber ?? "",
-    bankCode: profile.payoutInfo?.bankCode ?? "",
-    bankName: profile.payoutInfo?.bankName ?? "",
-    accountNumber: profile.payoutInfo?.accountNumber ?? "",
-    currency: "GHS",
-    accountName: profile.payoutInfo?.accountName ?? profile.name ?? "",
+  const [editing, setEditing] = React.useState<Record<ProfileSection, boolean>>({
+    personal: false,
+    shipping: false,
+    payment: false,
   });
+  const exitEditOnSettle = (section: ProfileSection) =>
+    setEditing((e) => ({ ...e, [section]: false }));
+  // onSettle (not the save itself) closes edit mode, so the section stays
+  // open long enough for the user to actually see the button's "Saved ✓"
+  // state — closing immediately on success would unmount the button (and
+  // the confirmation with it) in the same tick it appears.
+  const personalSave = useSaveState({ onSettle: () => exitEditOnSettle("personal") });
+  const shippingSave = useSaveState({ onSettle: () => exitEditOnSettle("shipping") });
+  const paymentSave = useSaveState({ onSettle: () => exitEditOnSettle("payment") });
+
+  // Payout info state — mobile money or bank transfer. Same draft/saved
+  // split as `profile`/`savedProfile` above.
+  const [payout, setPayout] = React.useState(emptyPayout(initialProfile));
+  const [savedPayout, setSavedPayout] = React.useState(emptyPayout(initialProfile));
+  const [editingPayout, setEditingPayout] = React.useState(false);
+  const payoutSave = useSaveState({ onSettle: () => setEditingPayout(false) });
   const [banks, setBanks] = React.useState<Array<{ id: number; name: string; code: string }>>([]);
   const [paymentNameVerified, setPaymentNameVerified] = React.useState(
     profile.paymentInfo?.momoNameVerified ?? false,
@@ -83,9 +154,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
   const [payoutNameVerified, setPayoutNameVerified] = React.useState(false);
   const [paymentFieldErrors, setPaymentFieldErrors] = React.useState<Record<string, string>>({});
   const [payoutFieldErrors, setPayoutFieldErrors] = React.useState<Record<string, string>>({});
-  const [savingPayout, setSavingPayout] = React.useState(false);
-  const [payoutError, setPayoutError] = React.useState<string | null>(null);
-  const [payoutSuccess, setPayoutSuccess] = React.useState<string | null>(null);
 
   // Fetch bank list once on mount
   React.useEffect(() => {
@@ -188,39 +256,61 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
       }));
     };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
+  const startEdit = (section: ProfileSection) => setEditing((e) => ({ ...e, [section]: true }));
 
-    try {
-      const updatedProfile = await api.updateProfile({
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
-        shippingAddress: profile.shippingAddress,
-        paymentInfo: profile.paymentInfo,
-      });
+  // Sends the whole UpdateProfilePayload (the backend expects it in full)
+  // but only `section`'s slice comes from the live draft — every other
+  // section's slice comes from `savedProfile`, so a section mid-edit
+  // elsewhere can never be saved accidentally by this call.
+  const saveProfileSection = async (section: ProfileSection) => {
+    const updated = await api.updateProfile({
+      name: section === "personal" ? profile.name : savedProfile.name,
+      email: section === "personal" ? profile.email : savedProfile.email,
+      phone: section === "personal" ? profile.phone : savedProfile.phone,
+      shippingAddress: section === "shipping" ? profile.shippingAddress : savedProfile.shippingAddress,
+      paymentInfo: section === "payment" ? profile.paymentInfo : savedProfile.paymentInfo,
+    });
 
-      setProfile(updatedProfile);
-      await update({
-        id: updatedProfile.id,
-        name: updatedProfile.name,
-        email: updatedProfile.email,
-        role: updatedProfile.role,
-      });
-      router.refresh();
-      setSuccess("Your profile was updated.");
-    } catch (profileError) {
-      setError(
-        profileError instanceof ApiClientError
-          ? profileError.message
-          : "We couldn't save your profile right now."
-      );
-    } finally {
-      setSaving(false);
+    const slice: Partial<UserProfile> =
+      section === "personal"
+        ? { name: updated.name, email: updated.email, phone: updated.phone }
+        : section === "shipping"
+        ? { shippingAddress: updated.shippingAddress }
+        : { paymentInfo: updated.paymentInfo };
+
+    setProfile((p) => ({ ...p, ...slice }));
+    setSavedProfile((p) => ({ ...p, ...slice }));
+
+    if (section === "personal") {
+      await update({ id: updated.id, name: updated.name, email: updated.email, role: updated.role });
     }
+    router.refresh();
+  };
+
+  const handleSavePersonal = () => personalSave.run(() => saveProfileSection("personal"));
+
+  const handleCancelPersonal = () => {
+    setProfile((p) => ({ ...p, name: savedProfile.name, email: savedProfile.email, phone: savedProfile.phone }));
+    personalSave.reset();
+    setEditing((e) => ({ ...e, personal: false }));
+  };
+
+  const handleSaveShipping = () => shippingSave.run(() => saveProfileSection("shipping"));
+
+  const handleCancelShipping = () => {
+    setProfile((p) => ({ ...p, shippingAddress: savedProfile.shippingAddress }));
+    shippingSave.reset();
+    setEditing((e) => ({ ...e, shipping: false }));
+  };
+
+  const handleSavePayment = () => paymentSave.run(() => saveProfileSection("payment"));
+
+  const handleCancelPayment = () => {
+    setProfile((p) => ({ ...p, paymentInfo: savedProfile.paymentInfo }));
+    setPaymentNameVerified(savedProfile.paymentInfo?.momoNameVerified ?? false);
+    setPaymentFieldErrors({});
+    paymentSave.reset();
+    setEditing((e) => ({ ...e, payment: false }));
   };
 
   const handleSavePayout = async () => {
@@ -240,10 +330,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
     setPayoutFieldErrors(fieldErrs);
     if (Object.keys(fieldErrs).length > 0) return;
 
-    setPayoutError(null);
-    setPayoutSuccess(null);
-    setSavingPayout(true);
-    try {
+    await payoutSave.run(async () => {
       const res = await fetch("/api/auth/payout-info", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -253,13 +340,17 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
         const d = (await res.json()) as { detail?: string };
         throw new Error(d.detail ?? "Could not save payout info");
       }
-      setPayoutSuccess("Payout account saved. Funds will be sent here after delivery confirmation.");
       setPayoutFieldErrors({});
-    } catch (err) {
-      setPayoutError(err instanceof Error ? err.message : "Save failed");
-    } finally {
-      setSavingPayout(false);
-    }
+      setSavedPayout(payout);
+    });
+  };
+
+  const handleCancelPayout = () => {
+    setPayout(savedPayout);
+    setPayoutNameVerified(false);
+    setPayoutFieldErrors({});
+    payoutSave.reset();
+    setEditingPayout(false);
   };
 
   const canUploadDocs = profile.role === "vendor" && !isAdmin;
@@ -354,7 +445,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
             alignItems: "start",
           }}
         >
-          <Stack component="form" spacing={2.5} onSubmit={handleSubmit}>
+          <Stack spacing={2.5}>
             <Paper
               elevation={0}
               sx={{
@@ -365,12 +456,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               }}
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <AccountCircleRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Personal details
-                  </Typography>
-                </Stack>
+                <SectionHeader
+                  icon={<AccountCircleRounded color="primary" />}
+                  title="Personal details"
+                  isEditing={editing.personal}
+                  onEdit={() => startEdit("personal")}
+                />
                 <Box
                   sx={{
                     display: "grid",
@@ -382,6 +473,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     label="Display name"
                     value={profile.name}
                     onChange={updateProfileField("name")}
+                    disabled={!editing.personal}
                     required
                   />
                   <TextField
@@ -389,6 +481,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     type="email"
                     value={profile.email}
                     onChange={updateProfileField("email")}
+                    disabled={!editing.personal}
                     required
                   />
                   <PhoneInput
@@ -396,13 +489,34 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     value={profile.phone}
                     onChange={(val) => setProfile((c) => ({ ...c, phone: val }))}
                     autoComplete="tel"
+                    disabled={!editing.personal}
                   />
                   <TextField
                     label="Account type"
                     value={profile.role}
                     InputProps={{ readOnly: true }}
+                    disabled
                   />
                 </Box>
+                {editing.personal && (
+                  <Stack direction="row" spacing={1.5}>
+                    <SaveButton status={personalSave.status} onClick={handleSavePersonal} />
+                    <Button
+                      variant="outlined"
+                      disabled={personalSave.status === "saving"}
+                      onClick={handleCancelPersonal}
+                      sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                    >
+                      Cancel
+                    </Button>
+                  </Stack>
+                )}
+                {personalSave.status === "error" && personalSave.errorMessage && (
+                  <Alert severity="error">{personalSave.errorMessage}</Alert>
+                )}
+                {personalSave.status === "saved" && (
+                  <Alert severity="success">Your profile was updated.</Alert>
+                )}
               </Stack>
             </Paper>
 
@@ -451,12 +565,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               }}
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <LocalShippingRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Shipping information
-                  </Typography>
-                </Stack>
+                <SectionHeader
+                  icon={<LocalShippingRounded color="primary" />}
+                  title="Shipping information"
+                  isEditing={editing.shipping}
+                  onEdit={() => startEdit("shipping")}
+                />
                 <Box
                   sx={{
                     display: "grid",
@@ -468,28 +582,32 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     label="Full name"
                     value={profile.shippingAddress.fullName}
                     onChange={updateShippingField("fullName")}
+                    disabled={!editing.shipping}
                   />
                   <TextField
                     label="Address line 1"
                     value={profile.shippingAddress.addressLine1}
                     onChange={updateShippingField("addressLine1")}
+                    disabled={!editing.shipping}
                   />
                   <TextField
                     label="Address line 2"
                     value={profile.shippingAddress.addressLine2}
                     onChange={updateShippingField("addressLine2")}
+                    disabled={!editing.shipping}
                   />
                   <TextField
                     label="City"
                     value={profile.shippingAddress.city}
                     onChange={updateShippingField("city")}
+                    disabled={!editing.shipping}
                   />
                   {(() => {
                     const country = profile.shippingAddress.country || "Ghana";
                     const regions = getRegionsForCountry(country);
                     const label = getRegionLabel(country);
                     return regions ? (
-                      <FormControl>
+                      <FormControl disabled={!editing.shipping}>
                         <InputLabel>{label}</InputLabel>
                         <Select
                           label={label}
@@ -507,6 +625,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                         label={label}
                         value={profile.shippingAddress.state}
                         onChange={updateShippingField("state")}
+                        disabled={!editing.shipping}
                       />
                     );
                   })()}
@@ -514,8 +633,9 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     label="Postal code"
                     value={profile.shippingAddress.postalCode}
                     onChange={updateShippingField("postalCode")}
+                    disabled={!editing.shipping}
                   />
-                  <FormControl>
+                  <FormControl disabled={!editing.shipping}>
                     <InputLabel>Country</InputLabel>
                     <Select
                       label="Country"
@@ -529,6 +649,25 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     </Select>
                   </FormControl>
                 </Box>
+                {editing.shipping && (
+                  <Stack direction="row" spacing={1.5}>
+                    <SaveButton status={shippingSave.status} onClick={handleSaveShipping} />
+                    <Button
+                      variant="outlined"
+                      disabled={shippingSave.status === "saving"}
+                      onClick={handleCancelShipping}
+                      sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                    >
+                      Cancel
+                    </Button>
+                  </Stack>
+                )}
+                {shippingSave.status === "error" && shippingSave.errorMessage && (
+                  <Alert severity="error">{shippingSave.errorMessage}</Alert>
+                )}
+                {shippingSave.status === "saved" && (
+                  <Alert severity="success">Your profile was updated.</Alert>
+                )}
               </Stack>
             </Paper>
 
@@ -542,12 +681,12 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
               }}
             >
               <Stack spacing={2}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <PaymentRounded color="primary" />
-                  <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                    Payment information
-                  </Typography>
-                </Stack>
+                <SectionHeader
+                  icon={<PaymentRounded color="primary" />}
+                  title="Payment information"
+                  isEditing={editing.payment}
+                  onEdit={() => startEdit("payment")}
+                />
                 <Alert severity="info">
                   Save reference details here, not full card numbers or sensitive payment secrets.
                 </Alert>
@@ -559,6 +698,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     updatePaymentField("method")(e as React.ChangeEvent<HTMLInputElement>);
                     setPaymentFieldErrors({});
                   }}
+                  disabled={!editing.payment}
                 >
                   <MenuItem value="mobile_money">
                     <Stack direction="row" alignItems="center" spacing={1}>
@@ -576,6 +716,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       label="MoMo network"
                       value={profile.paymentInfo.mobileMoneyNetwork ?? MOMO_NETWORKS[0].value}
                       onChange={updatePaymentField("mobileMoneyNetwork")}
+                      disabled={!editing.payment}
                       fullWidth
                     >
                       {MOMO_NETWORKS.map((n) => (
@@ -601,11 +742,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       helperText={paymentFieldErrors.mobileMoneyNumber || "10-digit Ghana number, e.g. 0241234567"}
                       slotProps={{ htmlInput: { inputMode: "tel" as const, maxLength: 13 } }}
                       placeholder="0241234567"
+                      disabled={!editing.payment}
                       fullWidth
                     />
                     <TextField
                       label="Account name"
                       value={profile.paymentInfo.accountName ?? ""}
+                      disabled={!editing.payment}
                       slotProps={{
                         input: {
                           readOnly: paymentNameVerified,
@@ -647,45 +790,60 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       label="Cardholder / account name"
                       value={profile.paymentInfo.cardholderName}
                       onChange={updatePaymentField("cardholderName")}
+                      disabled={!editing.payment}
                     />
                     <TextField
                       label="Card last 4"
                       value={profile.paymentInfo.cardLast4}
                       onChange={updatePaymentField("cardLast4")}
                       slotProps={{ htmlInput: { maxLength: 4 } }}
+                      disabled={!editing.payment}
                     />
                     <TextField
                       label="Expiry month"
                       value={profile.paymentInfo.expiryMonth}
                       onChange={updatePaymentField("expiryMonth")}
                       slotProps={{ htmlInput: { maxLength: 2 } }}
+                      disabled={!editing.payment}
                     />
                     <TextField
                       label="Expiry year"
                       value={profile.paymentInfo.expiryYear}
                       onChange={updatePaymentField("expiryYear")}
                       slotProps={{ htmlInput: { maxLength: 4 } }}
+                      disabled={!editing.payment}
                     />
                     <TextField
                       label="Billing postal code"
                       value={profile.paymentInfo.billingPostalCode}
                       onChange={updatePaymentField("billingPostalCode")}
+                      disabled={!editing.payment}
                     />
                   </Box>
+                )}
+                {editing.payment && (
+                  <Stack direction="row" spacing={1.5}>
+                    <SaveButton status={paymentSave.status} onClick={handleSavePayment} />
+                    <Button
+                      variant="outlined"
+                      disabled={paymentSave.status === "saving"}
+                      onClick={handleCancelPayment}
+                      sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                    >
+                      Cancel
+                    </Button>
+                  </Stack>
+                )}
+                {paymentSave.status === "error" && paymentSave.errorMessage && (
+                  <Alert severity="error">{paymentSave.errorMessage}</Alert>
+                )}
+                {paymentSave.status === "saved" && (
+                  <Alert severity="success">Your profile was updated.</Alert>
                 )}
               </Stack>
             </Paper>
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-              <Button
-                type="submit"
-                variant="contained"
-                startIcon={<SaveRounded />}
-                disabled={saving}
-                sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
-              >
-                {saving ? "Saving..." : "Save profile"}
-              </Button>
               <Button
                 type="button"
                 variant="outlined"
@@ -696,12 +854,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 Sign out
               </Button>
             </Stack>
-            {error && (
-              <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>
-            )}
-            {success && (
-              <Alert severity="success" onClose={() => setSuccess(null)}>{success}</Alert>
-            )}
           </Stack>
 
           <Stack spacing={2.5}>
@@ -854,15 +1006,13 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 sx={{ p: { xs: 2.5, md: 3.5 }, borderRadius: 2, border: "1px solid", borderColor: "divider" }}
               >
                 <Stack spacing={2.5}>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    <AccountBalanceRounded color="primary" />
-                    <Box>
-                      <Typography variant="h5" fontWeight={900}>Payout account</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        Where Spree sends your earnings after a buyer confirms delivery. Your original listing price is transferred in full.
-                      </Typography>
-                    </Box>
-                  </Stack>
+                  <SectionHeader
+                    icon={<AccountBalanceRounded color="primary" />}
+                    title="Payout account"
+                    subtitle="Where Spree sends your earnings after a buyer confirms delivery. Your original listing price is transferred in full."
+                    isEditing={editingPayout}
+                    onEdit={() => setEditingPayout(true)}
+                  />
 
                   {/* Method toggle */}
                   <Stack direction="row" spacing={1}>
@@ -873,6 +1023,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                         size="small"
                         startIcon={m === "mobile_money" ? <PhoneAndroidRounded fontSize="small" /> : <AccountBalanceRounded fontSize="small" />}
                         onClick={() => { setPayout((p) => ({ ...p, method: m })); setPayoutNameVerified(false); }}
+                        disabled={!editingPayout}
                         sx={{ borderRadius: 2, textTransform: "none", fontWeight: 700 }}
                       >
                         {m === "mobile_money" ? "Mobile money" : "Bank account"}
@@ -890,6 +1041,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                           label="Network"
                           value={payout.mobileMoneyNetwork}
                           onChange={(e) => { setPayout((p) => ({ ...p, mobileMoneyNetwork: e.target.value })); setPayoutNameVerified(false); }}
+                          disabled={!editingPayout}
                           size="small"
                           sx={{ minWidth: 180 }}
                         >
@@ -909,6 +1061,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                           }}
                           error={!!payoutFieldErrors.mobileMoneyNumber}
                           helperText={payoutFieldErrors.mobileMoneyNumber || "10-digit Ghana number, e.g. 0241234567"}
+                          disabled={!editingPayout}
                           size="small"
                           fullWidth
                           placeholder="0241234567"
@@ -928,6 +1081,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                           setPayout((p) => ({ ...p, bankCode: code, bankName: found?.name ?? code }));
                           setPayoutNameVerified(false);
                         }}
+                        disabled={!editingPayout}
                         size="small"
                         fullWidth
                         error={!!payoutFieldErrors.bankCode}
@@ -941,6 +1095,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                         label="Account number"
                         value={payout.accountNumber}
                         onChange={(e) => { setPayout((p) => ({ ...p, accountNumber: e.target.value.replace(/\D/g, "") })); setPayoutNameVerified(false); }}
+                        disabled={!editingPayout}
                         size="small"
                         fullWidth
                         placeholder="0123456789"
@@ -965,6 +1120,7 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                       <TextField
                         label="Account name"
                         value={payout.accountName}
+                        disabled={!editingPayout}
                         slotProps={{
                           input: {
                             readOnly: payoutNameVerified,
@@ -996,20 +1152,26 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                     );
                   })()}
 
-                  <Button
-                    variant="contained"
-                    onClick={handleSavePayout}
-                    disabled={savingPayout}
-                    startIcon={savingPayout ? <CircularProgress size={16} color="inherit" /> : <SaveRounded />}
-                    sx={{ alignSelf: "flex-start", borderRadius: 2.5, fontWeight: 700, textTransform: "none" }}
-                  >
-                    {savingPayout ? "Saving…" : "Save payout account"}
-                  </Button>
-                  {payoutError && (
-                    <Alert severity="error" onClose={() => setPayoutError(null)}>{payoutError}</Alert>
+                  {editingPayout && (
+                    <Stack direction="row" spacing={1.5}>
+                      <SaveButton status={payoutSave.status} onClick={handleSavePayout} idleLabel="Save payout account" />
+                      <Button
+                        variant="outlined"
+                        disabled={payoutSave.status === "saving"}
+                        onClick={handleCancelPayout}
+                        sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                      >
+                        Cancel
+                      </Button>
+                    </Stack>
                   )}
-                  {payoutSuccess && (
-                    <Alert severity="success" onClose={() => setPayoutSuccess(null)}>{payoutSuccess}</Alert>
+                  {payoutSave.status === "error" && payoutSave.errorMessage && (
+                    <Alert severity="error">{payoutSave.errorMessage}</Alert>
+                  )}
+                  {payoutSave.status === "saved" && (
+                    <Alert severity="success">
+                      Payout account saved. Funds will be sent here after delivery confirmation.
+                    </Alert>
                   )}
                 </Stack>
               </Paper>
