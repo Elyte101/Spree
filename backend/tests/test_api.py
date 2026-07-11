@@ -1541,6 +1541,130 @@ def test_webhook_retry_does_not_double_notify_order_placed():
     )
 
 
+def _make_pending_order_for_webhook(db, order_id: str, reference: str) -> None:
+    from decimal import Decimal
+    from app.db.models import Order, OrderItem
+
+    db.add(Order(
+        id=order_id, user_id="user-admin", status="pending", full_name="Webhook Buyer",
+        email=f"webhook-{uuid4().hex[:6]}@test.com",
+        address_line1="1 Test St", city="Accra", state="Greater Accra",
+        postal_code="00233", country="Ghana", shipping_method="standard",
+        payment_method="card", subtotal=Decimal("100.00"), shipping_cost=Decimal("10.00"),
+        tax=Decimal("1.50"), total=Decimal("111.50"), currency="GHS",
+        paystack_reference=reference,
+    ))
+    db.add(OrderItem(
+        id=f"{order_id}-item1", order_id=order_id, name="Test Item",
+        image="/img/t.jpg", price=Decimal("100.00"), quantity=1,
+    ))
+    db.commit()
+
+
+def test_paystack_webhook_route_accepts_valid_hmac_and_marks_order_paid():
+    """Full HTTP round trip through POST /api/v1/webhooks/paystack — unlike
+    test_webhook_retry_does_not_double_notify_order_placed above (which calls
+    handle_paystack_webhook directly, bypassing the route entirely), this
+    goes through the real FastAPI route so the HMAC-SHA512 signature check
+    in verify_webhook_signature is actually exercised, not just the
+    order-status guard. Fills the "needs TEST mode round-trip verification"
+    gap noted for this endpoint."""
+    import hashlib
+    import hmac
+    import json
+    from app.db.session import SessionLocal
+    from app.db.models import Order
+    from app.core.config import settings as svc_settings
+
+    order_id = f"order-webhook-hmac-{uuid4().hex[:8]}"
+    reference = f"ref-webhook-hmac-{uuid4().hex[:8]}"
+
+    body_bytes = json.dumps({
+        "event": "charge.success",
+        "data": {"reference": reference, "id": "tx-hmac-1"},
+    }).encode()
+
+    original_mock = svc_settings.payments_mock
+    original_key = svc_settings.paystack_secret_key
+    svc_settings.payments_mock = False
+    svc_settings.paystack_secret_key = "sk_test_webhook_hmac_key"
+    try:
+        signature = hmac.new(
+            svc_settings.paystack_secret_key.encode(), body_bytes, hashlib.sha512
+        ).hexdigest()
+
+        with TestClient(app) as client:
+            with SessionLocal() as db:
+                _make_pending_order_for_webhook(db, order_id, reference)
+
+            resp = client.post(
+                "/api/v1/webhooks/paystack",
+                content=body_bytes,
+                headers={
+                    **INTERNAL_HEADERS,
+                    "Content-Type": "application/json",
+                    "X-Paystack-Signature": signature,
+                },
+            )
+    finally:
+        svc_settings.payments_mock = original_mock
+        svc_settings.paystack_secret_key = original_key
+
+    assert resp.status_code == 200, resp.text
+    with SessionLocal() as db:
+        order = db.get(Order, order_id)
+        assert order.status == "paid", f"Expected order to be marked paid, got {order.status!r}"
+
+
+def test_paystack_webhook_route_rejects_invalid_hmac_signature():
+    """The negative case for the round trip above — a webhook call with a
+    signature that doesn't match the payload must be rejected with 401
+    before touching the order at all, proving the security gate is live on
+    the actual HTTP route (not just correct in verify_webhook_signature's
+    own unit-level logic)."""
+    import json
+    from app.db.session import SessionLocal
+    from app.db.models import Order
+    from app.core.config import settings as svc_settings
+
+    order_id = f"order-webhook-badsig-{uuid4().hex[:8]}"
+    reference = f"ref-webhook-badsig-{uuid4().hex[:8]}"
+
+    body_bytes = json.dumps({
+        "event": "charge.success",
+        "data": {"reference": reference, "id": "tx-badsig-1"},
+    }).encode()
+
+    original_mock = svc_settings.payments_mock
+    original_key = svc_settings.paystack_secret_key
+    svc_settings.payments_mock = False
+    svc_settings.paystack_secret_key = "sk_test_webhook_hmac_key"
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as db:
+                _make_pending_order_for_webhook(db, order_id, reference)
+
+            resp = client.post(
+                "/api/v1/webhooks/paystack",
+                content=body_bytes,
+                headers={
+                    **INTERNAL_HEADERS,
+                    "Content-Type": "application/json",
+                    "X-Paystack-Signature": "0" * 128,
+                },
+            )
+    finally:
+        svc_settings.payments_mock = original_mock
+        svc_settings.paystack_secret_key = original_key
+
+    assert resp.status_code == 401, resp.text
+    with SessionLocal() as db:
+        order = db.get(Order, order_id)
+        assert order.status == "pending", (
+            f"Order status must be untouched on a rejected webhook, got {order.status!r}"
+        )
+
+
 def test_add_tracking_retry_does_not_double_notify_order_shipped():
     """2026-07-10 email flow assessment, STEP 3: a retried add_tracking call
     (e.g. a seller double-submitting the tracking form) must not double-send
