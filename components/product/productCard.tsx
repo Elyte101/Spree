@@ -29,7 +29,15 @@ import { formatPrice } from "@/lib/ghana";
 
 interface ProductCardProps {
   product: Product;
-  size?: "default" | "compact";
+  /**
+   * "micro" is a further ~2/3 scale-down of "compact" (padding, badges,
+   * favorite button, Add button, title/price typography) for denser grids
+   * like the /products listing — it shares all of "compact"'s layout
+   * choices (short "Add" label, no full image sizes hint change) via
+   * `isCompact`, and only overrides the specific dimensions that need to
+   * shrink further via `isMicro`.
+   */
+  size?: "default" | "compact" | "micro";
 }
 
 export function ProductCard({ product, size = "compact" }: ProductCardProps) {
@@ -41,7 +49,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const [imgError, setImgError] = React.useState(false);
   const liked = isFavorite(product.id);
   const recentlyAdded = lastAddedAt > 0;
-  const isCompact = size === "compact";
+  const isCompact = size !== "default";
+  const isMicro = size === "micro";
   const priceNum = parseFloat(String(product.price));
   const origPriceNum = product.originalPrice ? parseFloat(String(product.originalPrice)) : 0;
   const discount = origPriceNum
@@ -225,12 +234,12 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 sx={(theme) => ({
                   pointerEvents: "auto",
                   borderRadius: 1.5,
-                  height: 22,
+                  height: isMicro ? 16 : 22,
                   fontWeight: 800,
-                  fontSize: "0.7rem",
+                  fontSize: isMicro ? "0.62rem" : "0.7rem",
                   backgroundColor: theme.palette.error.main,
                   color: "#fff",
-                  "& .MuiChip-label": { px: 0.75 },
+                  "& .MuiChip-label": { px: isMicro ? 0.5 : 0.75 },
                 })}
               />
             )}
@@ -241,13 +250,13 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 sx={(theme) => ({
                   pointerEvents: "auto",
                   borderRadius: 1.5,
-                  height: 22,
+                  height: isMicro ? 16 : 22,
                   fontWeight: 700,
-                  fontSize: "0.7rem",
+                  fontSize: isMicro ? "0.62rem" : "0.7rem",
                   backgroundColor: alpha(theme.palette.warning.main, 0.9),
                   color: "#fff",
                   backdropFilter: "blur(8px)",
-                  "& .MuiChip-label": { px: 0.75 },
+                  "& .MuiChip-label": { px: isMicro ? 0.5 : 0.75 },
                 })}
               />
             )}
@@ -259,8 +268,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             onClick={(e) => { e.preventDefault(); toggleFavorite(product.id); }}
             sx={(theme) => ({
               pointerEvents: "auto",
-              width: 44,
-              height: 44,
+              width: isMicro ? 30 : 44,
+              height: isMicro ? 30 : 44,
               color: liked ? "#EF4444" : theme.palette.text.primary,
               backgroundColor: alpha(
                 theme.palette.background.paper,
@@ -278,15 +287,19 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               },
             })}
           >
-            {liked ? <Favorite sx={{ fontSize: 15 }} /> : <FavoriteBorder sx={{ fontSize: 15 }} />}
+            {liked ? (
+              <Favorite sx={{ fontSize: isMicro ? 10 : 15 }} />
+            ) : (
+              <FavoriteBorder sx={{ fontSize: isMicro ? 10 : 15 }} />
+            )}
           </IconButton>
         </Stack>
       </Box>
 
       {/* Content */}
       <Stack
-        spacing={isCompact ? 0.75 : 1}
-        sx={{ p: isCompact ? 1.5 : 2, flexGrow: 1, pt: isCompact ? 1.25 : 1.5 }}
+        spacing={isMicro ? 0.5 : isCompact ? 0.75 : 1}
+        sx={{ p: isMicro ? 1 : isCompact ? 1.5 : 2, flexGrow: 1, pt: isMicro ? 0.75 : isCompact ? 1.25 : 1.5 }}
       >
         {/* Brand + stock status */}
         <Stack
@@ -302,7 +315,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               letterSpacing: "0.08em",
               fontWeight: 700,
               textTransform: "uppercase",
-              fontSize: "0.65rem",
+              fontSize: isMicro ? "0.6rem" : "0.65rem",
               minWidth: 0,
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -316,11 +329,11 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             size="small"
             color={product.inStock ? "success" : "warning"}
             sx={{
-              height: 18,
-              fontSize: "0.62rem",
+              height: isMicro ? 14 : 18,
+              fontSize: isMicro ? "0.58rem" : "0.62rem",
               fontWeight: 700,
               flexShrink: 0,
-              "& .MuiChip-label": { px: 0.75 },
+              "& .MuiChip-label": { px: isMicro ? 0.5 : 0.75 },
             }}
           />
         </Stack>
@@ -329,7 +342,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         <Typography
           component={Link}
           href={`/products/${product.slug}`}
-          variant={isCompact ? "subtitle1" : "h6"}
+          variant={isMicro ? "body2" : isCompact ? "subtitle1" : "h6"}
           sx={{
             lineHeight: 1.3,
             fontWeight: 700,
@@ -362,7 +375,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         {/* Rating — hidden when no reviews exist */}
         {product.reviewsCount > 0 ? (
           <Stack direction="row" alignItems="center" spacing={0.5}>
-            <StarRounded sx={{ fontSize: 15, color: "#F59E0B" }} />
+            <StarRounded sx={{ fontSize: isMicro ? 12 : 15, color: "#F59E0B" }} />
             <Typography variant="caption" fontWeight={700} color="text.primary">
               {product.rating.toFixed(1)}
             </Typography>
@@ -381,11 +394,11 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           direction="row"
           alignItems="center"
           justifyContent="space-between"
-          sx={{ mt: "auto", pt: isCompact ? 0.75 : 1, gap: 1 }}
+          sx={{ mt: "auto", pt: isMicro ? 0.5 : isCompact ? 0.75 : 1, gap: 1 }}
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography
-              variant={isCompact ? "subtitle1" : "h6"}
+              variant={isMicro ? "body2" : isCompact ? "subtitle1" : "h6"}
               fontWeight={800}
               color="primary.main"
               lineHeight={1}
@@ -419,7 +432,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 disableElevation
                 startIcon={
                   !recentlyAdded ? (
-                    <ShoppingBagOutlined sx={{ fontSize: "14px !important" }} />
+                    <ShoppingBagOutlined sx={{ fontSize: isMicro ? "10px !important" : "14px !important" }} />
                   ) : undefined
                 }
                 onClick={(e) => {
@@ -434,10 +447,10 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 }}
                 sx={{
                   borderRadius: 999,
-                  px: isCompact ? 1.25 : 2,
-                  py: 0.6,
+                  px: isMicro ? 0.75 : isCompact ? 1.25 : 2,
+                  py: isMicro ? 0.4 : 0.6,
                   fontWeight: 700,
-                  fontSize: "0.75rem",
+                  fontSize: isMicro ? "0.68rem" : "0.75rem",
                   whiteSpace: "nowrap",
                   flexShrink: 0,
                 }}

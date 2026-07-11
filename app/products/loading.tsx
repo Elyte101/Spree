@@ -19,7 +19,7 @@ export default function ProductsLoading() {
             Loading products...
           </Typography>
         </Paper>
-        <ProductGridSkeleton count={12} />
+        <ProductGridSkeleton count={12} dense />
       </Stack>
     </Box>
   );

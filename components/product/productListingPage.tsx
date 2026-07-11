@@ -587,7 +587,7 @@ export function ProductListingPage({
                 ) : null}
 
                 {loading ? (
-                  <ProductGridSkeleton count={PRODUCTS_PER_PAGE} />
+                  <ProductGridSkeleton count={PRODUCTS_PER_PAGE} dense />
                 ) : catalog.items.length === 0 ? (
                   <Paper
                     elevation={0}
@@ -626,16 +626,11 @@ export function ProductListingPage({
                     sx={{
                       display: "grid",
                       gap: 1.5,
-                      gridTemplateColumns: {
-                        xs: "1fr",
-                        sm: "repeat(2, 1fr)",
-                        md: "repeat(3, 1fr)",
-                        xl: "repeat(4, 1fr)",
-                      },
+                      gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
                     }}
                   >
                     {catalog.items.map((product) => (
-                      <ProductCard key={product.id} product={product} size="compact" />
+                      <ProductCard key={product.id} product={product} size="micro" />
                     ))}
                   </Box>
                 )}
