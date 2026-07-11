@@ -31,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.logging import safe_extra
 from app.db.models import User, WebAuthnChallenge, WebAuthnCredential
 
 logger = logging.getLogger(__name__)
@@ -39,10 +40,15 @@ _CHALLENGE_TTL_SECONDS = 5 * 60
 
 
 def _rp_id() -> str:
-    return settings.webauthn_rp_id
+    if settings.webauthn_rp_id:
+        return settings.webauthn_rp_id
+    from urllib.parse import urlparse
+    return urlparse(settings.frontend_url).hostname or "localhost"
 
 
 def _expected_origin() -> str:
+    if settings.webauthn_rp_origin:
+        return settings.webauthn_rp_origin.rstrip("/")
     return settings.frontend_url.rstrip("/")
 
 
@@ -129,7 +135,11 @@ def verify_registration(
             expected_origin=_expected_origin(),
         )
     except Exception as exc:
-        logger.warning("webauthn registration verify failed for user %s: %s", user_id, exc)
+        logger.warning(
+            "webauthn registration verify failed for user %s: %s",
+            user_id, exc,
+            extra=safe_extra({"webauthn_event": "register_verify_failed", "user_id": user_id}),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Could not verify passkey. Please try again.",
@@ -153,6 +163,11 @@ def verify_registration(
     db.add(row)
     db.commit()
     db.refresh(row)
+    logger.info(
+        "webauthn passkey registered for user %s",
+        user_id,
+        extra=safe_extra({"webauthn_event": "register_verify_ok", "user_id": user_id, "credential_id": row.id}),
+    )
     return {"id": row.id, "deviceName": row.device_name or "Passkey", "createdAt": row.created_at, "lastUsedAt": None}
 
 
@@ -200,7 +215,11 @@ def verify_authentication(db: Session, challenge_id: str, credential: dict) -> d
             credential_current_sign_count=cred_row.sign_count,
         )
     except Exception as exc:
-        logger.warning("webauthn authentication verify failed: %s", exc)
+        logger.warning(
+            "webauthn authentication verify failed: %s",
+            exc,
+            extra=safe_extra({"webauthn_event": "authenticate_verify_failed", "credential_id": cred_row.id}),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Passkey verification failed.",
@@ -212,6 +231,10 @@ def verify_authentication(db: Session, challenge_id: str, credential: dict) -> d
 
     user = db.get(User, cred_row.user_id)
     if user is None or user.deleted_at is not None or user.is_blacklisted:
+        logger.warning(
+            "webauthn authentication succeeded but account is inactive",
+            extra=safe_extra({"webauthn_event": "authenticate_verify_inactive_account", "user_id": cred_row.user_id}),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="This account is no longer active.",
@@ -219,6 +242,11 @@ def verify_authentication(db: Session, challenge_id: str, credential: dict) -> d
 
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
+    logger.info(
+        "webauthn passkey sign-in succeeded for user %s",
+        user.id,
+        extra=safe_extra({"webauthn_event": "authenticate_verify_ok", "user_id": user.id, "sign_count": cred_row.sign_count}),
+    )
     return _serialize_user(user)
 
 

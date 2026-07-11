@@ -104,21 +104,23 @@ class Settings(BaseSettings):
     email_from: str = "Spree <onboarding@resend.dev>"
     frontend_url: str = "http://localhost:3000"
 
-    # Passkeys (WebAuthn). RP ID must be the frontend's own hostname (no
-    # scheme/port) — it's the origin the browser's navigator.credentials
-    # call actually runs on, not the backend's. Derived from frontend_url so
-    # there's one source of truth; override WEBAUTHN_RP_ID directly only if
-    # the frontend is ever served from a different host than frontend_url.
-    webauthn_rp_id_override: str = ""
+    # Passkeys (WebAuthn). A wrong RP ID/origin is the most common WebAuthn
+    # failure mode, so both are independently configurable rather than always
+    # derived — see app/services/webauthn_svc.py's _rp_id()/_expected_origin()
+    # for the fallback-to-frontend_url behavior when these are left unset
+    # (convenient for local dev, where frontend_url already defaults to
+    # http://localhost:3000).
+    #
+    # WEBAUTHN_RP_ID: the Relying Party ID — the frontend's own hostname,
+    #   with NO scheme and NO port (e.g. "spreecommerce.vercel.app", or
+    #   "localhost" for local dev). This must be the exact host the browser's
+    #   navigator.credentials call runs on, not the backend's host.
+    # WEBAUTHN_RP_ORIGIN: the full origin the frontend runs on, WITH scheme,
+    #   no trailing slash (e.g. "https://spreecommerce.vercel.app").
+    # WEBAUTHN_RP_NAME: display name shown by the browser's passkey UI.
+    webauthn_rp_id: str = ""
+    webauthn_rp_origin: str = ""
     webauthn_rp_name: str = "Spree"
-
-    @computed_field
-    @property
-    def webauthn_rp_id(self) -> str:
-        if self.webauthn_rp_id_override:
-            return self.webauthn_rp_id_override
-        from urllib.parse import urlparse
-        return urlparse(self.frontend_url).hostname or "localhost"
 
     # Developer alert email (sent by dev_notifier on critical events)
     # Requires resend_api_key to be configured.
