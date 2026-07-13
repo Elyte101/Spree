@@ -108,13 +108,20 @@ export function AdminChatPage() {
 
     void connect();
 
-    // CH8e: disconnect on unmount — null the ref immediately so a retry sees a clean slate
+    // CH8e: disconnect on unmount — null the ref immediately so a retry sees a clean slate.
+    // Update state first so React unmounts the Stream components (Chat/Channel/
+    // MessageComposer) that reference this client. Their cleanup effects
+    // (messageComposer.clear(), which reads channel.getConfig()) must run while
+    // the client is still connected, otherwise Stream throws "can't use channel
+    // after client.disconnect()" — deferring disconnectUser() to the next
+    // macrotask (after React's passive effect cleanups have fired) prevents
+    // that error. Same pattern as chatProvider.tsx's user-switch effect.
     return () => {
       cancelled = true;
       const clientToDisconnect = _adminClient;
       _adminClient = null;
       setClient(null);
-      if (clientToDisconnect) void clientToDisconnect.disconnectUser();
+      if (clientToDisconnect) setTimeout(() => void clientToDisconnect.disconnectUser(), 0);
     };
   }, [retryCount]);
 

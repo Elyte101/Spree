@@ -214,7 +214,7 @@ export const isBackendUnavailableError = (
 async function fetchBackend(
   path: string,
   init?: RequestInit,
-  options?: { internal?: boolean }
+  options?: { internal?: boolean; revalidate?: number }
 ) {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
@@ -265,7 +265,14 @@ async function fetchBackend(
     return await fetch(buildBackendUrl(path), {
       ...init,
       headers,
-      cache: "no-store",
+      // Public, non-personalized GETs (catalog/product/home-feed reads) pass
+      // `revalidate` to opt into Next's fetch cache (ISR-style) — this is
+      // the one place that decides cacheability for every backend call, so
+      // it stays opt-in and defaults to the original uncached behavior for
+      // the ~40 other (mutating, authenticated, or actor-scoped) call sites.
+      ...(options?.revalidate !== undefined
+        ? { next: { revalidate: options.revalidate } }
+        : { cache: "no-store" as const }),
       signal: AbortSignal.timeout(15000),
     });
   } catch (error) {
@@ -281,7 +288,7 @@ async function fetchBackend(
 async function getJson<T>(
   path: string,
   init?: RequestInit,
-  options?: { internal?: boolean; fallback?: () => T }
+  options?: { internal?: boolean; fallback?: () => T; revalidate?: number }
 ): Promise<T> {
   try {
     const response = await fetchBackend(path, init, options);
@@ -343,10 +350,30 @@ export async function proxyBackend(
   }
 }
 
-export const getHomeFeed = () =>
-  getJson<HomeFeed>("/home", undefined, { fallback: createFallbackHomeFeed });
+// Cold-start mitigation: these are all public, non-personalized catalog
+// reads, so their responses are safe to share across every visitor. A short
+// revalidate window lets Next serve them from its fetch cache instead of a
+// fresh backend round-trip on every request, without meaningfully staling
+// stock/price data.
+export const CATALOG_REVALIDATE_SECONDS = 60;
 
-export const getProducts = (params?: ProductQueryParams, actorId?: string) => {
+export const getHomeFeed = () =>
+  getJson<HomeFeed>("/home", undefined, {
+    fallback: createFallbackHomeFeed,
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
+
+// `getProducts` is also used for personalized/role-scoped queries (a
+// vendor's own dashboard filtered by `vendor` id, admin's blacklisted-items
+// view) where caching is either unsafe (role-gated) or just not worth the
+// staleness (a seller's own catalog). Caching is therefore opt-in per call
+// site via `revalidateSeconds`, rather than inferred — only the public
+// storefront pages (home, /products) pass it.
+export const getProducts = (
+  params?: ProductQueryParams,
+  actorId?: string,
+  options?: { revalidateSeconds?: number }
+) => {
   const { includeBlacklisted, ...rest } = params ?? {};
   const useInternal = Boolean(includeBlacklisted);
   const queryParams = includeBlacklisted ? { ...rest, includeBlacklisted: true } : rest;
@@ -355,12 +382,21 @@ export const getProducts = (params?: ProductQueryParams, actorId?: string) => {
     useInternal
       ? { headers: { "X-Actor-Role": "admin", ...(actorId ? { "X-Actor-User-Id": actorId } : {}) } }
       : undefined,
-    { internal: useInternal, fallback: () => createFallbackCatalog(params) }
+    {
+      internal: useInternal,
+      fallback: () => createFallbackCatalog(params),
+      // Never cache the role-gated admin view even if a caller passes revalidateSeconds.
+      ...(!useInternal && options?.revalidateSeconds !== undefined
+        ? { revalidate: options.revalidateSeconds }
+        : {}),
+    }
   );
 };
 
 export const getProductByIdOrSlug = async (identifier: string) => {
-  const response = await fetchBackend(`/products/${identifier}`);
+  const response = await fetchBackend(`/products/${identifier}`, undefined, {
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
 
   if (response.status === 404) {
     return undefined;
@@ -376,16 +412,26 @@ export const getProductByIdOrSlug = async (identifier: string) => {
 export const getRelatedProducts = (identifier: string, limit = 4) =>
   getJson<Product[]>(`/products/${identifier}/related${buildQueryString({ limit })}`, undefined, {
     fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
   });
 
 export const getCategories = () =>
-  getJson<Category[]>("/categories", undefined, { fallback: () => [] });
+  getJson<Category[]>("/categories", undefined, {
+    fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
 
 export const getBrands = () =>
-  getJson<Brand[]>("/brands", undefined, { fallback: () => [] });
+  getJson<Brand[]>("/brands", undefined, {
+    fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
 
 export const getCollections = () =>
-  getJson<Collection[]>("/collections", undefined, { fallback: () => [] });
+  getJson<Collection[]>("/collections", undefined, {
+    fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
 
 export const getNotifications = (userId?: string) =>
   getJson<NotificationItem[]>(

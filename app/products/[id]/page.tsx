@@ -13,6 +13,14 @@ interface ProductDetailsRouteProps {
   params: Promise<{ id: string }>;
 }
 
+// Cold-start mitigation: no cookies/headers here — `params.id` is a route
+// param, not a Request-time API — so with the underlying fetches now
+// cacheable (see lib/serverApi.ts, CATALOG_REVALIDATE_SECONDS), each product
+// page can be served from Next's cache (ISR) instead of a fresh render +
+// backend round trip on every request. Must be a literal (Next statically
+// analyzes this export at build time).
+export const revalidate = 60;
+
 const PRODUCT_DETAILS_FALLBACK_TITLE = "This product is unavailable right now.";
 const PRODUCT_DETAILS_FALLBACK_DESCRIPTION =
   "We couldn't load this page, but you can keep browsing the catalog without losing your place.";
