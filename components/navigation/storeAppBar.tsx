@@ -13,6 +13,7 @@ import {
   CloseRounded,
   DashboardRounded,
   FavoriteBorderOutlined,
+  GridViewOutlined,
   LoginRounded,
   LogoutRounded,
   MenuRounded,
@@ -67,6 +68,7 @@ export function StoreAppBar() {
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isAuthenticated = status === "authenticated";
+  const isProductsRoute = pathname === "/products" || pathname.startsWith("/products/");
   const isCartRoute = pathname === "/cart" || pathname === "/checkout" || pathname.startsWith("/checkout/");
   const isNotificationsRoute = pathname === "/notifications";
   const isFavoritesRoute = pathname === "/favorites";
@@ -98,6 +100,7 @@ export function StoreAppBar() {
   });
 
   const navItems = [
+    { label: "Products", href: "/products", active: isProductsRoute, icon: <GridViewOutlined />, ariaLabel: "products" },
     ...(isAuthenticated
       ? [{ label: "Dashboard", href: "/dashboard", active: isDashboardRoute, icon: <DashboardRounded />, ariaLabel: "dashboard" }]
       : []),
