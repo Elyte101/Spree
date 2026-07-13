@@ -6,7 +6,9 @@ import { ThemedPageShell } from "@/components/ui/themedPageShell";
 import type { Product } from "@/types/types";
 import {
   getProductByIdOrSlug,
+  getProductComments,
   getRelatedProducts,
+  getSellerSummary,
 } from "@/lib/serverApi";
 
 interface ProductDetailsRouteProps {
@@ -125,18 +127,20 @@ export default async function ProductDetailsRoute({
     notFound();
   }
 
-  let relatedProducts: Product[] = [];
-
-  try {
-    relatedProducts = await getRelatedProducts(id, 4);
-  } catch {
-    relatedProducts = [];
-  }
+  const [relatedProducts, comments, seller] = await Promise.all([
+    getRelatedProducts(id, 4).catch(() => []),
+    getProductComments(product.id).catch(() => []),
+    product.storeSlug || product.sellerId
+      ? getSellerSummary(product.storeSlug || product.sellerId!).catch(() => undefined)
+      : Promise.resolve(undefined),
+  ]);
 
   return (
     <ProductDetailsPage
       product={product}
       relatedProducts={relatedProducts}
+      initialComments={comments}
+      seller={seller}
     />
   );
 }

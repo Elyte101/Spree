@@ -3,6 +3,7 @@ import "server-only";
 import {
   AdminOverview,
   AdminSellerDetail,
+  AdminSellerSummary,
   Brand,
   CatalogResponse,
   Category,
@@ -10,6 +11,7 @@ import {
   HomeFeed,
   NotificationItem,
   Product,
+  ProductComment,
   SellerDetail,
   SellerSummary,
   SearchResponse,
@@ -322,7 +324,6 @@ export async function proxyBackend(
 ): Promise<Response> {
   try {
     const response = await fetchBackend(path, init, options);
-    const body = await response.text();
     const proxyHeaders = new Headers();
     const contentType = response.headers.get("content-type");
 
@@ -330,6 +331,14 @@ export async function proxyBackend(
       proxyHeaders.set("Content-Type", contentType);
     }
 
+    // Null-body-status responses (204/205/304) must be constructed with a
+    // null body — the Response constructor throws "Invalid response status
+    // code" if given even an empty string for one of these statuses.
+    if (response.status === 204 || response.status === 205 || response.status === 304) {
+      return new Response(null, { status: response.status, headers: proxyHeaders });
+    }
+
+    const body = await response.text();
     return new Response(body, {
       status: response.status,
       headers: proxyHeaders,
@@ -415,6 +424,12 @@ export const getRelatedProducts = (identifier: string, limit = 4) =>
     revalidate: CATALOG_REVALIDATE_SECONDS,
   });
 
+export const getProductComments = (productId: string) =>
+  getJson<ProductComment[]>(`/products/${productId}/comments`, undefined, {
+    fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
+
 export const getCategories = () =>
   getJson<Category[]>("/categories", undefined, {
     fallback: () => [],
@@ -450,6 +465,15 @@ export const getAdminOverview = (actorId: string) =>
 export const getSellers = () =>
   getJson<SellerSummary[]>("/sellers", undefined, { fallback: () => [] });
 
+// Lightweight lookup (no product list) — for surfacing a seller's rating/
+// verified badge from a product detail page without paying the cost of the
+// full seller-profile fetch (which loads and serializes up to 24 products).
+export const getSellerSummary = (identifier: string) =>
+  getJson<SellerSummary | undefined>(`/sellers/${identifier}/summary`, undefined, {
+    fallback: () => undefined,
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
+
 export const getSeller = async (identifier: string) => {
   const response = await fetchBackend(`/sellers/${identifier}`);
 
@@ -465,7 +489,7 @@ export const getSeller = async (identifier: string) => {
 };
 
 export const getAdminSellers = (actorId: string, filter?: "all" | "blacklisted" | "inactive") =>
-  getJson<SellerSummary[]>(
+  getJson<AdminSellerSummary[]>(
     `/admin/sellers${buildQueryString(filter && filter !== "all" ? { filter } : {})}`,
     { headers: { "X-Actor-Role": "admin", "X-Actor-User-Id": actorId } },
     { internal: true, fallback: () => [] }

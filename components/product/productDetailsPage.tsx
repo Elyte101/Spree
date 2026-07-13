@@ -10,10 +10,12 @@ import {
   ReplayOutlined,
   StarRounded,
   StorefrontRounded,
+  VerifiedRounded,
   WorkspacePremiumRounded,
 } from "@mui/icons-material";
 import {
   alpha,
+  Avatar,
   Breadcrumbs,
   Box,
   Button,
@@ -25,13 +27,17 @@ import {
   Typography,
 } from "@mui/material";
 import { useCart } from "@/components/providers/cartProvider";
-import { Product } from "@/types/types";
+import { Product, ProductComment, SellerSummary } from "@/types/types";
 import { ProductCard } from "@/components/product/productCard";
+import { ProductReviews } from "@/components/product/productReviews";
+import { StarRating } from "@/components/ui/starRating";
 import { formatPrice } from "@/lib/ghana";
 
 interface ProductDetailsPageProps {
   product: Product;
   relatedProducts: Product[];
+  initialComments: ProductComment[];
+  seller?: SellerSummary;
 }
 
 const formatLabel = (value: string) =>
@@ -49,6 +55,8 @@ const sellerTypeLabels: Record<NonNullable<Product["sellerType"]>, string> = {
 export function ProductDetailsPage({
   product,
   relatedProducts,
+  initialComments,
+  seller,
 }: ProductDetailsPageProps) {
   const { addToCart } = useCart();
   const [selectedImage, setSelectedImage] = React.useState(
@@ -62,6 +70,8 @@ export function ProductDetailsPage({
   );
   const [lastAddedAt, setLastAddedAt] = React.useState(0);
   const recentlyAdded = lastAddedAt > 0;
+  const sellerIdentifier = product.storeSlug || product.sellerId;
+  const sellerHref = sellerIdentifier ? `/stores/${sellerIdentifier}` : null;
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -290,7 +300,7 @@ export function ProductDetailsPage({
                   {product.rating.toFixed(1)}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  based on {product.reviewsCount} reviews
+                  based on {product.reviewsCount} review{product.reviewsCount === 1 ? "" : "s"}
                 </Typography>
               </Stack>
 
@@ -451,13 +461,44 @@ export function ProductDetailsPage({
                   <Typography variant="caption" color="text.secondary">
                     Sold by
                   </Typography>
-                  <Typography variant="body1" fontWeight={700}>
-                    {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
-                  </Typography>
-                  {product.sellerType ? (
-                    <Typography variant="body2" color="text.secondary">
-                      {sellerTypeLabels[product.sellerType]}
+                  {sellerHref ? (
+                    <Link
+                      component={NextLink}
+                      href={sellerHref}
+                      color="primary.main"
+                      sx={{ textDecoration: "none", "&:hover": { textDecoration: "underline" } }}
+                    >
+                      <Typography variant="body1" fontWeight={700} component="span">
+                        {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
+                      </Typography>
+                    </Link>
+                  ) : (
+                    <Typography variant="body1" fontWeight={700}>
+                      {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
                     </Typography>
+                  )}
+                  <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
+                    {product.sellerType ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {sellerTypeLabels[product.sellerType]}
+                      </Typography>
+                    ) : null}
+                    {product.sellerVerified ? (
+                      <Stack direction="row" spacing={0.25} alignItems="center">
+                        <VerifiedRounded sx={{ fontSize: 15, color: "success.main" }} />
+                        <Typography variant="body2" color="success.main" fontWeight={700}>
+                          Verified
+                        </Typography>
+                      </Stack>
+                    ) : null}
+                  </Stack>
+                  {seller && seller.sellerReviewsCount > 0 ? (
+                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
+                      <StarRating value={seller.sellerRating} size={14} />
+                      <Typography variant="body2" color="text.secondary">
+                        {seller.sellerRating.toFixed(1)} ({seller.sellerReviewsCount})
+                      </Typography>
+                    </Stack>
                   ) : null}
                   {product.sellerLocation ? (
                     <Typography variant="body2" color="text.secondary">
@@ -478,7 +519,7 @@ export function ProductDetailsPage({
               </Stack>
             </Paper>
 
-            {product.storeSlug ? (
+            {sellerHref ? (
               <Paper
                 elevation={0}
                 sx={{
@@ -493,30 +534,54 @@ export function ProductDetailsPage({
                   justifyContent="space-between"
                   spacing={2}
                 >
-                  <Box>
-                    <Typography variant="overline" color="text.secondary">
-                      Store
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      {product.storeName ?? product.sellerName}
-                    </Typography>
-                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ my: 1 }}>
-                      {product.sellerType ? (
-                        <Chip label={sellerTypeLabels[product.sellerType]} size="small" variant="outlined" />
+                  <Stack direction="row" spacing={1.5}>
+                    <Avatar sx={{ width: 44, height: 44, fontWeight: 800 }}>
+                      {(product.storeName ?? product.sellerName ?? "?").charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="overline" color="text.secondary">
+                        Store
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                        {product.storeName ?? product.sellerName}
+                      </Typography>
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ my: 1 }}>
+                        {product.sellerType ? (
+                          <Chip label={sellerTypeLabels[product.sellerType]} size="small" variant="outlined" />
+                        ) : null}
+                        {product.sellerBadge ? (
+                          <Chip label={product.sellerBadge} size="small" color="success" variant="outlined" />
+                        ) : null}
+                        {product.sellerVerified ? (
+                          <Chip
+                            icon={<VerifiedRounded sx={{ fontSize: "15px !important" }} />}
+                            label="Verified"
+                            size="small"
+                            color="success"
+                          />
+                        ) : null}
+                      </Stack>
+                      {seller && seller.sellerReviewsCount > 0 ? (
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 1 }}>
+                          <StarRating value={seller.sellerRating} size={15} />
+                          <Typography variant="body2" fontWeight={700}>
+                            {seller.sellerRating.toFixed(1)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            ({seller.sellerReviewsCount} review{seller.sellerReviewsCount === 1 ? "" : "s"})
+                          </Typography>
+                        </Stack>
                       ) : null}
-                      {product.sellerBadge ? (
-                        <Chip label={product.sellerBadge} size="small" color="success" variant="outlined" />
-                      ) : null}
-                    </Stack>
-                    <Typography variant="body2" color="text.secondary">
-                      {product.sellerLocation
-                        ? `Located in ${product.sellerLocation}. Explore the vendor's storefront, follow their shop, or report them if something feels off.`
-                        : "Explore the vendor's storefront, follow their shop, or report them if something feels off."}
-                    </Typography>
-                  </Box>
+                      <Typography variant="body2" color="text.secondary">
+                        {product.sellerLocation
+                          ? `Located in ${product.sellerLocation}. Explore the vendor's storefront, follow their shop, or report them if something feels off.`
+                          : "Explore the vendor's storefront, follow their shop, or report them if something feels off."}
+                      </Typography>
+                    </Box>
+                  </Stack>
                   <Button
                     component={NextLink}
-                    href={`/stores/${product.storeSlug}`}
+                    href={sellerHref}
                     startIcon={<StorefrontRounded />}
                     variant="outlined"
                     sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900, alignSelf: "flex-start" }}
@@ -559,6 +624,8 @@ export function ProductDetailsPage({
             </Box>
           </Stack>
         </Box>
+
+        <ProductReviews productId={product.id} initialComments={initialComments} />
 
         <Stack spacing={2}>
           <Typography variant="h4" sx={{ fontWeight: 900, color: "text.primary" }}>

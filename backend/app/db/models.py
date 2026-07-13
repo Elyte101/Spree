@@ -499,6 +499,9 @@ class Comment(Base):
     Comments hold the free-text review body.
     """
     __tablename__ = "comments"
+    __table_args__ = (
+        UniqueConstraint("product_id", "user_id", name="uq_comment_product_user"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     product_id: Mapped[str] = mapped_column(ForeignKey("products.id"), index=True)

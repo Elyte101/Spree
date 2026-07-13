@@ -56,6 +56,21 @@ _COLUMN_TYPE_UPGRADES: list[tuple[str, str, str]] = [
      "ALTER TABLE order_items ALTER COLUMN commission_rate TYPE NUMERIC(12,8)"),
 ]
 
+# Constraints added after the initial schema, for tables that may already
+# exist (without the constraint) on a deployed database. Postgres-only —
+# SQLite can't ADD CONSTRAINT on an existing table, and local/dev databases
+# are disposable, so a fresh create_all() there already bakes the constraint
+# in via __table_args__.
+_CONSTRAINT_MIGRATIONS: list[str] = [
+    # One review per buyer per product (G21 follow-up).
+    """
+    DO $$ BEGIN
+        ALTER TABLE comments ADD CONSTRAINT uq_comment_product_user UNIQUE (product_id, user_id);
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+    """,
+]
+
 # RLS migrations — PostgreSQL / Supabase only.
 # Executed once per table; idempotent (ENABLE ROW LEVEL SECURITY is a no-op
 # when already enabled; DROP POLICY IF EXISTS + CREATE POLICY replaces safely).
@@ -68,10 +83,15 @@ _COLUMN_TYPE_UPGRADES: list[tuple[str, str, str]] = [
 #                      full name, and a secret session_id.  No PostgREST policy
 #                      at all = complete lockdown; service_role bypasses RLS for
 #                      backend reads/writes.
+#   comments         — product reviews (G21). Anyone may SELECT non-flagged
+#                      rows; writes only via FastAPI's service_role, which
+#                      enforces auth, email verification, rate limiting, and
+#                      verified-purchaser checks that PostgREST can't express.
 _RLS_STATEMENTS: list[str] = [
     # ── Enable RLS ────────────────────────────────────────────────────────────
     "ALTER TABLE public.promo_banners ENABLE ROW LEVEL SECURITY",
     "ALTER TABLE public.identity_sessions ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY",
     # ── promo_banners: public read ────────────────────────────────────────────
     "DROP POLICY IF EXISTS promo_banners_public_select ON public.promo_banners",
     (
@@ -79,6 +99,14 @@ _RLS_STATEMENTS: list[str] = [
         " ON public.promo_banners"
         " FOR SELECT TO anon, authenticated"
         " USING (true)"
+    ),
+    # ── comments: public read of non-flagged rows only; no direct writes ─────
+    "DROP POLICY IF EXISTS comments_public_select ON public.comments",
+    (
+        "CREATE POLICY comments_public_select"
+        " ON public.comments"
+        " FOR SELECT TO anon, authenticated"
+        " USING (is_flagged = false)"
     ),
     # identity_sessions: zero policies → PostgREST returns 0 rows for every role.
     # service_role (used by FastAPI) bypasses RLS entirely.
@@ -105,6 +133,9 @@ def _run_column_migrations(eng) -> None:
                 for table, column, alter_sql in _COLUMN_TYPE_UPGRADES:
                     conn.execute(text(alter_sql))
                     logger.debug("Upgraded column type %s.%s", table, column)
+                for stmt in _CONSTRAINT_MIGRATIONS:
+                    conn.execute(text(stmt))
+                    logger.debug("Ensured constraint: %s", stmt.strip()[:72])
             else:
                 inspector = inspect(eng)
                 for table, column, _, sqlite_type in _COLUMN_MIGRATIONS:

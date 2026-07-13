@@ -9,7 +9,19 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
-from app.db.models import Brand, Category, Collection, Comment, Product, ProductLike, PromoBanner, SellerReport, User
+from app.db.models import (
+    Brand,
+    Category,
+    Collection,
+    Comment,
+    Order,
+    OrderItem,
+    Product,
+    ProductLike,
+    PromoBanner,
+    SellerReport,
+    User,
+)
 from app.schemas.catalog import ProductCreateIn, ProductUpdateIn
 
 
@@ -141,6 +153,7 @@ def _product_to_dict(product: Product) -> dict:
         "storeName": product.vendor.store_name if product.vendor else None,
         "storeSlug": product.vendor.store_slug if product.vendor else None,
         "sellerType": product.vendor.seller_type if product.vendor else None,
+        "sellerVerified": bool(product.vendor.government_id_verified) if product.vendor else False,
         "sellerBadge": _seller_badge_label(product.vendor, product.purchase_count),
         "sellerLocation": _seller_location_label(product.vendor),
         "collection": product.collection.slug if product.collection else None,
@@ -1044,7 +1057,44 @@ def _comment_to_dict(comment: Comment, user: User | None = None) -> dict:
         "rating": comment.rating,
         "isFlagged": comment.is_flagged,
         "createdAt": comment.created_at.isoformat() if comment.created_at else None,
+        "updatedAt": comment.updated_at.isoformat() if comment.updated_at else None,
     }
+
+
+def _recompute_product_rating(db: Session, product_id: str) -> None:
+    """Recompute the denormalised Product.rating/reviews_count from live,
+    non-flagged, rated comments. A single aggregate query — not a client-side
+    scan over every comment — called after any comment create/update/delete/flag.
+    """
+    avg_rating, count = db.execute(
+        select(func.avg(Comment.rating), func.count(Comment.rating)).where(
+            Comment.product_id == product_id,
+            Comment.is_flagged.is_(False),
+            Comment.rating.isnot(None),
+        )
+    ).one()
+
+    product = db.get(Product, product_id)
+    if product is None:
+        return
+    product.rating = float(avg_rating) if avg_rating is not None else 0.0
+    product.reviews_count = count or 0
+    db.add(product)
+    db.commit()
+
+
+def _has_verified_purchase(db: Session, product_id: str, user_id: str) -> bool:
+    """A buyer may review a product only if they have a paid order containing it."""
+    return db.scalar(
+        select(OrderItem.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .where(
+            OrderItem.product_id == product_id,
+            Order.user_id == user_id,
+            Order.paid_at.isnot(None),
+        )
+        .limit(1)
+    ) is not None
 
 
 def list_comments(db: Session, product_id: str) -> list[dict]:
@@ -1069,7 +1119,10 @@ def create_comment(
     body: str,
     rating: int | None,
 ) -> dict:
-    """G21: Create a comment/review on a product. One per buyer per product (enforced by UQ or check)."""
+    """G21: Create a comment/review on a product. One per buyer per product
+    (enforced by the uq_comment_product_user constraint; also checked here
+    up front for a clean 409 instead of a raw DB integrity error).
+    """
     # A4: a verified email is required before posting a comment/review.
     from app.services.auth import require_email_verified  # noqa: PLC0415 — avoid import cycle at module load
     require_email_verified(db, user_id, "post a comment")
@@ -1086,6 +1139,18 @@ def create_comment(
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    if not _has_verified_purchase(db, product_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only review products you've purchased",
+        )
+
+    existing = db.scalar(
+        select(Comment).where(Comment.product_id == product_id, Comment.user_id == user_id)
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="You've already reviewed this product")
+
     comment = Comment(
         id=str(uuid4()),
         product_id=product_id,
@@ -1096,8 +1161,41 @@ def create_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+    _recompute_product_rating(db, product_id)
 
     user = db.get(User, user_id)
+    return _comment_to_dict(comment, user)
+
+
+def update_comment(
+    db: Session,
+    comment_id: str,
+    actor_id: str,
+    body: str,
+    rating: int | None,
+) -> dict:
+    """Owner-only: edit their own review's body/rating."""
+    comment = db.get(Comment, comment_id)
+    if comment is None:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.user_id != actor_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    import re as _re  # noqa: PLC0415
+    clean_body = _re.sub(r"<[^>]+>", "", body).strip()
+    if not clean_body:
+        raise HTTPException(status_code=422, detail="Comment body cannot be empty")
+    if rating is not None and not (1 <= rating <= 5):
+        raise HTTPException(status_code=422, detail="Rating must be between 1 and 5")
+
+    comment.body = clean_body
+    comment.rating = rating
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    _recompute_product_rating(db, comment.product_id)
+
+    user = db.get(User, comment.user_id)
     return _comment_to_dict(comment, user)
 
 
@@ -1108,8 +1206,10 @@ def delete_comment(db: Session, comment_id: str, actor_id: str, actor_role: str)
         raise HTTPException(status_code=404, detail="Comment not found")
     if actor_role != "admin" and comment.user_id != actor_id:
         raise HTTPException(status_code=403, detail="Access denied")
+    product_id = comment.product_id
     db.delete(comment)
     db.commit()
+    _recompute_product_rating(db, product_id)
 
 
 def flag_comment(db: Session, comment_id: str, actor_role: str) -> dict:
@@ -1122,6 +1222,7 @@ def flag_comment(db: Session, comment_id: str, actor_role: str) -> dict:
     comment.is_flagged = True
     db.commit()
     db.refresh(comment)
+    _recompute_product_rating(db, comment.product_id)
     user = db.get(User, comment.user_id)
     return _comment_to_dict(comment, user)
 

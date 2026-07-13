@@ -24,6 +24,7 @@ import { alpha } from "@mui/material/styles";
 import { useSession } from "next-auth/react";
 
 import { ProductCard } from "@/components/product/productCard";
+import { StarRating } from "@/components/ui/starRating";
 import { api, ApiClientError } from "@/lib/api";
 import { SellerDetail } from "@/types/types";
 
@@ -164,6 +165,21 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
               <Typography variant="body1" color="text.secondary">
                 {vendor.storeDescription}
               </Typography>
+              {vendor.sellerReviewsCount > 0 ? (
+                <Stack direction="row" spacing={0.75} alignItems="center">
+                  <StarRating value={vendor.sellerRating} size={20} />
+                  <Typography variant="body1" fontWeight={800}>
+                    {vendor.sellerRating.toFixed(1)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    ({vendor.sellerReviewsCount} review{vendor.sellerReviewsCount === 1 ? "" : "s"})
+                  </Typography>
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
+                  No reviews yet
+                </Typography>
+              )}
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                 <Chip label={sellerTypeLabels[vendor.sellerType]} variant="outlined" />
                 {vendor.governmentIdVerified && (
@@ -222,49 +238,92 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
             alignItems: "start",
           }}
         >
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 3, md: 4 },
-              borderRadius: 2,
-              border: "1px solid",
-              borderColor: "divider",
-            }}
-          >
-            <Stack spacing={2}>
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                Products from this store
-              </Typography>
-              <Box
-                sx={{
-                  display: "grid",
-                  gap: 1.5,
-                  gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
-                }}
-              >
-                {vendor.products.length ? (
-                  vendor.products.map((product) => (
-                    <ProductCard key={product.id} product={product} size="compact" />
+          <Stack spacing={3}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 3, md: 4 },
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Stack spacing={2}>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                  Products from this store
+                </Typography>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 1.5,
+                    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 220px), 1fr))",
+                  }}
+                >
+                  {vendor.products.length ? (
+                    vendor.products.map((product) => (
+                      <ProductCard key={product.id} product={product} size="compact" />
+                    ))
+                  ) : (
+                    <Paper
+                      elevation={0}
+                      sx={{
+                        gridColumn: "1 / -1",
+                        p: 3,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: "divider",
+                      }}
+                    >
+                      <Typography variant="body2" color="text.secondary">
+                        This vendor has not published products yet.
+                      </Typography>
+                    </Paper>
+                  )}
+                </Box>
+              </Stack>
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 3, md: 4 },
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "divider",
+              }}
+            >
+              <Stack spacing={2}>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                  Recent reviews
+                </Typography>
+                {vendor.recentReviews.length ? (
+                  vendor.recentReviews.map((review) => (
+                    <Box
+                      key={review.id}
+                      sx={{ pb: 2, borderBottom: "1px solid", borderColor: "divider", "&:last-of-type": { border: 0, pb: 0 } }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography variant="body2" fontWeight={700}>
+                          {review.authorName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          on {review.productName}
+                        </Typography>
+                      </Stack>
+                      {review.rating ? <StarRating value={review.rating} size={14} /> : null}
+                      <Typography variant="body2" color="text.secondary">
+                        {review.body}
+                      </Typography>
+                    </Box>
                   ))
                 ) : (
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      gridColumn: "1 / -1",
-                      p: 3,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: "divider",
-                    }}
-                  >
-                    <Typography variant="body2" color="text.secondary">
-                      This vendor has not published products yet.
-                    </Typography>
-                  </Paper>
+                  <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
+                    No reviews yet
+                  </Typography>
                 )}
-              </Box>
-            </Stack>
-          </Paper>
+              </Stack>
+            </Paper>
+          </Stack>
 
           <Stack spacing={3}>
             <Paper
@@ -345,9 +404,21 @@ export function StoreProfilePage({ initialSeller }: StoreProfilePageProps) {
                 <Typography variant="body2" color="text.secondary">
                   Location: {formatStoreLocation(vendor)}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Contact: {vendor.sellerContact.businessPhone || vendor.sellerContact.businessEmail || "Not provided"}
-                </Typography>
+                {vendor.sellerReviewsCount > 0 ? (
+                  <Stack direction="row" spacing={0.75} alignItems="center">
+                    <StarRating value={vendor.sellerRating} size={16} />
+                    <Typography variant="body2" fontWeight={700}>
+                      {vendor.sellerRating.toFixed(1)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      ({vendor.sellerReviewsCount} review{vendor.sellerReviewsCount === 1 ? "" : "s"})
+                    </Typography>
+                  </Stack>
+                ) : (
+                  <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
+                    No reviews yet
+                  </Typography>
+                )}
                 <Typography variant="body2" color="text.secondary">
                   {formatDeliverySpeed(vendor.averageDeliveryDays)}
                 </Typography>

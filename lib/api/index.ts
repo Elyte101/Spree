@@ -1,6 +1,7 @@
 import {
   AdminOverview,
   AdminSellerDetail,
+  AdminSellerSummary,
   AuthUser,
   Brand,
   CartSummary,
@@ -12,6 +13,7 @@ import {
   NotificationPrefMatrix,
   OnboardingState,
   Product,
+  ProductComment,
   PushSubscriptionData,
   SellerDetail,
   SellerSummary,
@@ -23,6 +25,7 @@ import {
 
 import { buildQueryString } from "@/lib/api/queryString";
 import {
+  CommentPayload,
   CreateProductPayload,
   ProductQueryParams,
   ReportSellerPayload,
@@ -34,6 +37,7 @@ import {
 } from "@/lib/api/types";
 
 export type {
+  CommentPayload,
   CreateProductPayload,
   OnboardingStep1Payload,
   OnboardingStep2Payload,
@@ -161,6 +165,26 @@ export const api = {
       `/api/products/${id}/related${buildQueryString({ limit })}`
     ),
 
+  /* ---------- REVIEWS ---------- */
+
+  getProductComments: (productId: string) =>
+    requestJson<ProductComment[]>(`/api/products/${productId}/comments`),
+
+  postComment: (productId: string, payload: CommentPayload) =>
+    requestJson<ProductComment>(`/api/products/${productId}/comments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateComment: (commentId: string, payload: CommentPayload) =>
+    requestJson<ProductComment>(`/api/comments/${commentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteComment: (commentId: string) =>
+    requestJson<void>(`/api/comments/${commentId}`, { method: "DELETE" }),
+
   /* ---------- CATALOG ---------- */
 
   getCategories: () =>
@@ -235,7 +259,7 @@ export const api = {
     requestJson<AdminOverview>("/api/admin/overview"),
 
   getAdminSellers: (filter?: "all" | "blacklisted" | "inactive") =>
-    requestJson<SellerSummary[]>(
+    requestJson<AdminSellerSummary[]>(
       `/api/admin/vendors${buildQueryString(filter && filter !== "all" ? { filter } : {})}`
     ),
 

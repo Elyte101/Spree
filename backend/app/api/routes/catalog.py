@@ -40,6 +40,7 @@ from app.services.catalog import (
     toggle_product_blacklist,
     toggle_product_featured,
     toggle_product_like,
+    update_comment,
     update_product,
 )
 
@@ -233,6 +234,20 @@ def post_comment(
     if not actor_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return create_comment(db, product_id, actor_id, payload.body, payload.rating)
+
+
+@router.patch("/comments/{comment_id}")
+def patch_comment(
+    comment_id: str,
+    payload: CommentIn,
+    db: DBSession,
+    _: InternalAPIKey,
+    actor_id: ActorUserId,
+):
+    """Owner can edit their own review's body/rating."""
+    if not actor_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+    return update_comment(db, comment_id, actor_id, payload.body, payload.rating)
 
 
 @router.delete("/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)

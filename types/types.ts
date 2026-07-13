@@ -143,6 +143,7 @@ export interface Product {
   storeSlug?: string | null;
   sellerType?: SellerType | null;
   sellerBadge?: string | null;
+  sellerVerified?: boolean;
   sellerLocation?: string | null;
   collection?: string | null;
   collectionId?: string | null;
@@ -159,6 +160,29 @@ export interface Product {
   colors: string[];
   sizes: string[];
   tags: string[];
+}
+
+export interface ProductComment {
+  id: string;
+  productId: string;
+  userId: string;
+  authorName: string;
+  body: string;
+  rating: number | null;
+  isFlagged: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SellerReview {
+  id: string;
+  productId: string;
+  productName: string;
+  productSlug: string;
+  authorName: string;
+  rating: number | null;
+  body: string;
+  createdAt: string;
 }
 
 export interface Category {
@@ -420,25 +444,24 @@ export interface UserProfile extends AuthUser {
   payoutInfo: Partial<PayoutInfo>;
 }
 
+// Public seller shape — no email/phone/sellerContact/adminNote. Matches the
+// unauthenticated GET /sellers, /sellers/{id} backend response (G17): every
+// field here is safe to show to anyone.
 export interface SellerSummary {
   id: string;
   name: string;
-  email: string;
   role: UserRole;
-  phone: string;
   storeName: string;
   storeSlug: string;
   storeTagline: string;
   storeDescription: string;
   storeLocation: StoreLocation;
-  sellerContact: SellerContact;
   sellerType: SellerType;
   sellerStatus: SellerStatus;
   sellerBadge: string;
   completedDeliveries: number;
   averageDeliveryDays?: number | null;
   sellerNotice: string;
-  adminNote: string;
   governmentIdType: GovernmentIdType;
   governmentIdVerified: boolean;
   isBlacklisted?: boolean;
@@ -447,8 +470,18 @@ export interface SellerSummary {
   productCount: number;
   purchaseCount: number;
   reportCount: number;
+  sellerRating: number;
+  sellerReviewsCount: number;
   startedAt?: string | null;
   createdAt: string;
+}
+
+// Extended shape with PII — only ever returned by admin-authenticated endpoints.
+export interface AdminSellerSummary extends SellerSummary {
+  email: string;
+  phone: string;
+  sellerContact: SellerContact;
+  adminNote: string;
 }
 
 export interface SellerReport {
@@ -463,9 +496,10 @@ export interface SellerReport {
 
 export interface SellerDetail extends SellerSummary {
   products: Product[];
+  recentReviews: SellerReview[];
 }
 
-export interface AdminSellerDetail extends SellerSummary {
+export interface AdminSellerDetail extends AdminSellerSummary {
   governmentIdNumber: string;
   niaVerifiedAt?: string | null;
   niaMatchConfidence?: number | null;
@@ -476,10 +510,9 @@ export interface AdminSellerDetail extends SellerSummary {
   reports: SellerReport[];
 }
 
-export interface VerificationQueueItem extends SellerSummary {
+export interface VerificationQueueItem extends AdminSellerSummary {
   onboardingStep: number;
   rejectionReason?: string | null;
-  adminNote: string;
   governmentIdNumber?: string;
   niaVerifiedAt?: string | null;
   niaMatchConfidence?: number | null;

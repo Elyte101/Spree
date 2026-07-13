@@ -14,17 +14,19 @@ SellerStatus = Literal[
 
 
 class SellerSummaryOut(BaseModel):
+    """Public seller shape — no email/phone/sellerContact/adminNote (G17).
+
+    Served by the unauthenticated GET /sellers and /sellers/{id} endpoints,
+    so every field here must be safe to show to anyone.
+    """
     id: str
     name: str
-    email: str
     role: str
-    phone: str = ""
     storeName: str
     storeSlug: str
     storeTagline: str = ""
     storeDescription: str = ""
     storeLocation: StoreLocation
-    sellerContact: SellerContact
     sellerType: SellerType = "retail"
     sellerStatus: SellerStatus
     sellerBadge: str = ""
@@ -39,12 +41,17 @@ class SellerSummaryOut(BaseModel):
     productCount: int
     purchaseCount: int
     reportCount: int
+    sellerRating: float = 0
+    sellerReviewsCount: int = 0
     startedAt: datetime | None = None
     createdAt: datetime
 
 
 class AdminSellerSummaryOut(SellerSummaryOut):
-    """Extended summary that includes admin-only fields."""
+    """Extended summary with PII — admin-only endpoints (G17)."""
+    email: str
+    phone: str = ""
+    sellerContact: SellerContact
     adminNote: str = ""
 
 
@@ -58,8 +65,22 @@ class SellerReportOut(BaseModel):
     createdAt: datetime
 
 
+class SellerReviewOut(BaseModel):
+    """A recent review of one of this seller's products, for the public
+    seller profile page (Task 4.3)."""
+    id: str
+    productId: str
+    productName: str
+    productSlug: str
+    authorName: str
+    rating: int | None
+    body: str
+    createdAt: datetime
+
+
 class SellerDetailOut(SellerSummaryOut):
     products: list[ProductOut]
+    recentReviews: list[SellerReviewOut] = []
 
 
 class AdminSellerDetailOut(AdminSellerSummaryOut):

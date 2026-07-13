@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import Product, SellerFollow, SellerReport, User
+from app.db.models import Comment, Product, SellerFollow, SellerReport, User
 from app.services.auth import (
     _default_payment_info,
     _default_seller_contact,
@@ -75,8 +75,29 @@ def _batch_seller_metrics(db: Session, seller_ids: list[str]) -> dict[str, dict]
         .group_by(Product.seller_id)
     ).all()
 
+    # Seller rating = aggregate of the seller's own product reviews (no
+    # separate seller_reviews table). One join+group-by query, not a
+    # per-seller or client-side scan.
+    rating_rows = db.execute(
+        select(Product.seller_id, func.avg(Comment.rating), func.count(Comment.rating))
+        .join(Comment, Comment.product_id == Product.id)
+        .where(
+            Product.seller_id.in_(seller_ids),
+            Comment.is_flagged.is_(False),
+            Comment.rating.isnot(None),
+        )
+        .group_by(Product.seller_id)
+    ).all()
+
     metrics: dict[str, dict] = {
-        sid: {"followerCount": 0, "reportCount": 0, "productCount": 0, "purchaseCount": 0}
+        sid: {
+            "followerCount": 0,
+            "reportCount": 0,
+            "productCount": 0,
+            "purchaseCount": 0,
+            "sellerRating": 0.0,
+            "sellerReviewsCount": 0,
+        }
         for sid in seller_ids
     }
     for sid, count in follower_rows:
@@ -87,6 +108,9 @@ def _batch_seller_metrics(db: Session, seller_ids: list[str]) -> dict[str, dict]
         metrics[sid]["productCount"] = int(count)
     for sid, count in purchase_rows:
         metrics[sid]["purchaseCount"] = int(count)
+    for sid, avg_rating, count in rating_rows:
+        metrics[sid]["sellerRating"] = float(avg_rating) if avg_rating is not None else 0.0
+        metrics[sid]["sellerReviewsCount"] = int(count)
 
     return metrics
 
@@ -149,6 +173,8 @@ def _serialize_seller_summary(vendor: User, metrics: dict) -> dict:
         "productCount": metrics["productCount"],
         "purchaseCount": metrics["purchaseCount"],
         "reportCount": metrics["reportCount"],
+        "sellerRating": metrics["sellerRating"],
+        "sellerReviewsCount": metrics["sellerReviewsCount"],
         "startedAt": vendor.seller_started_at,
         "createdAt": vendor.created_at,
     }
@@ -181,6 +207,16 @@ def _serialize_admin_seller_summary(vendor: User, metrics: dict) -> dict:
     }
 
 
+def get_seller_summary(db: Session, identifier: str) -> dict:
+    """Lightweight seller lookup (no product list) — for surfacing a seller's
+    name/rating/verified badge from elsewhere (e.g. a product detail page)
+    without paying the cost of loading and serializing their product catalog.
+    """
+    vendor = _resolve_seller(db, identifier)
+    metrics = _batch_seller_metrics(db, [vendor.id])
+    return _serialize_seller_summary(vendor, metrics[vendor.id])
+
+
 def list_public_sellers(db: Session) -> list[dict]:
     sellers = db.scalars(
         _seller_query().order_by(User.seller_started_at.desc(), User.created_at.desc())
@@ -188,6 +224,35 @@ def list_public_sellers(db: Session) -> list[dict]:
     seller_ids = [s.id for s in sellers]
     metrics = _batch_seller_metrics(db, seller_ids)
     return [_serialize_seller_summary(vendor, metrics[vendor.id]) for vendor in sellers]
+
+
+def _recent_seller_reviews(db: Session, seller_id: str, limit: int = 10) -> list[dict]:
+    """Most recent non-flagged, rated reviews across all of a seller's products."""
+    rows = db.execute(
+        select(Comment, Product.name, Product.slug)
+        .join(Product, Product.id == Comment.product_id)
+        .where(
+            Product.seller_id == seller_id,
+            Comment.is_flagged.is_(False),
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(limit)
+    ).all()
+
+    result = []
+    for comment, product_name, product_slug in rows:
+        user = db.get(User, comment.user_id)
+        result.append({
+            "id": comment.id,
+            "productId": comment.product_id,
+            "productName": product_name,
+            "productSlug": product_slug,
+            "authorName": user.name if user else "User",
+            "rating": comment.rating,
+            "body": comment.body,
+            "createdAt": comment.created_at,
+        })
+    return result
 
 
 def get_seller_detail(db: Session, identifier: str) -> dict:
@@ -202,6 +267,7 @@ def get_seller_detail(db: Session, identifier: str) -> dict:
     return {
         **summary,
         "products": [_product_to_dict(product) for product in products],
+        "recentReviews": _recent_seller_reviews(db, vendor.id),
     }
 
 

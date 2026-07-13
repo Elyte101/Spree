@@ -108,6 +108,11 @@ export interface ReportSellerPayload {
   details: string;
 }
 
+export interface CommentPayload {
+  body: string;
+  rating: number | null;
+}
+
 export interface UpdateSellerStatusPayload {
   status: Extract<SellerStatus, "pending" | "active" | "suspended" | "removed">;
   sellerNotice: string;

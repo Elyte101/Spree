@@ -97,6 +97,7 @@ class ProductOut(BaseModel):
     storeSlug: str | None = None
     sellerType: Literal["retail", "wholesale"] | None = None
     sellerBadge: str | None = None
+    sellerVerified: bool = False
     sellerLocation: str | None = None
     collection: str | None = None
     collectionId: str | None = None

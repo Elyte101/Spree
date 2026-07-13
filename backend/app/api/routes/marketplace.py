@@ -22,6 +22,7 @@ from app.services.marketplace import (
     follow_seller,
     get_admin_seller_detail,
     get_seller_detail,
+    get_seller_summary,
     list_admin_sellers,
     list_public_sellers,
     list_top_products,
@@ -39,6 +40,11 @@ router = APIRouter()
 @router.get("/sellers", response_model=list[SellerSummaryOut])
 def sellers(db: DBSession):
     return list_public_sellers(db)
+
+
+@router.get("/sellers/{identifier}/summary", response_model=SellerSummaryOut)
+def seller_summary(identifier: str, db: DBSession):
+    return get_seller_summary(db, identifier)
 
 
 @router.get("/sellers/{identifier}", response_model=SellerDetailOut)

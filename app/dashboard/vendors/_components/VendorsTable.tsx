@@ -43,10 +43,10 @@ import {
 } from "@mui/icons-material";
 
 import { api, ApiClientError } from "@/lib/api";
-import { SellerSummary, SellerStatus, SellerType } from "@/types/types";
+import { AdminSellerSummary, SellerStatus, SellerType } from "@/types/types";
 
 interface VendorsTableProps {
-  sellers: SellerSummary[];
+  sellers: AdminSellerSummary[];
   filter: string;
 }
 
@@ -93,7 +93,7 @@ const formatDate = (value?: string | null) =>
       }).format(new Date(value))
     : "Not started";
 
-const formatLocation = (vendor: SellerSummary) =>
+const formatLocation = (vendor: AdminSellerSummary) =>
   [vendor.storeLocation.city, vendor.storeLocation.state, vendor.storeLocation.country]
     .filter(Boolean)
     .join(", ") || "Not provided";
@@ -123,11 +123,11 @@ export function VendorsTable({ sellers, filter }: VendorsTableProps) {
   const [activeSellerId, setActiveSellerId] = React.useState<string | null>(null);
   const [expandedCards, setExpandedCards] = React.useState<Set<string>>(new Set());
 
-  const [deleteTarget, setDeleteTarget] = React.useState<SellerSummary | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<AdminSellerSummary | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState("");
 
-  const [blacklistTarget, setBlacklistTarget] = React.useState<SellerSummary | null>(null);
+  const [blacklistTarget, setBlacklistTarget] = React.useState<AdminSellerSummary | null>(null);
   const [blacklisting, setBlacklisting] = React.useState(false);
   const [blacklistError, setBlacklistError] = React.useState("");
 
