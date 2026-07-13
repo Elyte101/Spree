@@ -13,19 +13,45 @@ const apiOrigin = process.env.NEXT_PUBLIC_API_URL ?? "";
 const cspValue = [
   "default-src 'self'",
   // MUI / Emotion require 'unsafe-inline' for injected <style> tags.
-  // In production, switch to a nonce-based approach once SSR-nonce support
-  // is added to the Emotion cache.
-  "style-src 'self' 'unsafe-inline'",
-  // 'unsafe-eval' is only allowed in dev (Next.js HMR uses eval).
+  // https://paystack.com is where Paystack Inline's own script injects its
+  // checkout-button stylesheet from (confirmed by inspecting js.paystack.co's
+  // source). In production, switch to a nonce-based approach once SSR-nonce
+  // support is added to the Emotion cache.
+  "style-src 'self' 'unsafe-inline' https://paystack.com",
+  // 'unsafe-eval'/'unsafe-inline' are only allowed in dev (Next.js HMR uses
+  // eval). js.paystack.co is Paystack Inline's checkout script
+  // (components/checkout/checkoutPage.tsx) — required in both envs so
+  // checkout can be exercised locally too. va.vercel-scripts.com is
+  // @vercel/analytics's <Analytics /> component (app/layout.tsx) — in
+  // production it loads from a same-origin path Vercel's edge rewrites
+  // (already covered by 'self'), but in dev it loads script.debug.js from
+  // this external host directly, confirmed via a live securitypolicyviolation
+  // check — without it, local dev always reports a violation.
   isDev
-    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
-    : "script-src 'self'",
-  // next/image serves optimised images from /_next; allow the CDN origin and
-  // any https: image host declared in remotePatterns.
-  "img-src 'self' data: blob: https:",
-  // Connect: our own origin + the backend API origin.
-  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
-  // Prevent framing / clickjacking.
+    ? "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://js.paystack.co https://va.vercel-scripts.com"
+    : "script-src 'self' https://js.paystack.co https://va.vercel-scripts.com",
+  // next/image serves optimised images from /_next (same-origin) for the
+  // common case; the remaining hosts cover ProductImage's unoptimized-retry
+  // fallback (components/ui/productImage.tsx), which loads the raw remote
+  // URL directly in the browser after two failed optimizer attempts:
+  //   - https://*.supabase.co: vendor-uploaded product images
+  //   - https://placehold.co: seed/category placeholder images (backend/app/seeds/catalog.py)
+  //   - blob:: local image previews before upload (productCreateForm.tsx's URL.createObjectURL)
+  "img-src 'self' data: blob: https://*.supabase.co https://placehold.co",
+  // Connect: our own origin (all backend calls are proxied through same-origin
+  // Next.js API routes — NEXT_PUBLIC_API_URL/apiOrigin is unset in practice,
+  // kept only in case a direct client-side backend call is ever added) +
+  // Stream Chat's REST/WebSocket API (components/providers/chatProvider.tsx,
+  // components/admin/AdminChatPage.tsx — this app's actual realtime feature;
+  // there is no Supabase Realtime usage anywhere in the codebase) + Paystack's
+  // API (called by the injected js.paystack.co script during checkout).
+  `connect-src 'self' https://chat.stream-io-api.com wss://chat.stream-io-api.com https://api.paystack.co${apiOrigin ? ` ${apiOrigin}` : ""}`,
+  // Paystack Inline renders its checkout form in an iframe (confirmed via
+  // .openIframe() in checkoutPage.tsx and by inspecting js.paystack.co's source).
+  "frame-src https://checkout.paystack.com https://paystack.com",
+  // Prevent framing / clickjacking (belt-and-suspenders with X-Frame-Options
+  // below — CSP frame-ancestors is the modern replacement, but this is still
+  // Report-Only, so X-Frame-Options is what actually enforces it today).
   "frame-ancestors 'none'",
   // Restrict base element and form submissions to same-origin.
   "base-uri 'self'",
@@ -33,9 +59,16 @@ const cspValue = [
 ].join("; ");
 
 const securityHeaders = [
-  // Keep CSP in report-only until the directive list is validated.
-  // Switch key to "Content-Security-Policy" for enforcement.
+  // Still Report-Only: Next.js's own RSC hydration payload is delivered via
+  // inline <script> tags with no nonce infrastructure set up yet (see the
+  // style-src comment above), so enforcing `script-src 'self'` as-is would
+  // break hydration in production. X-Frame-Options below is what actually
+  // closes the clickjacking gap today; switch this key to
+  // "Content-Security-Policy" once nonce-based script-src lands and the
+  // directive list has been validated against real traffic.
   { key: "Content-Security-Policy-Report-Only", value: cspValue },
+  // Real, enforcing clickjacking protection — independent of the CSP above.
+  { key: "X-Frame-Options", value: "DENY" },
   {
     key: "Strict-Transport-Security",
     value: "max-age=63072000; includeSubDomains; preload",
@@ -76,6 +109,14 @@ const nextConfig: NextConfig = {
         // Apply to every route.
         source: "/(.*)",
         headers: securityHeaders,
+      },
+      {
+        // Auth/session responses already send Cache-Control: private,
+        // no-cache, no-store — Vary: Cookie is additional caching hygiene so
+        // any intermediary that doesn't fully respect Cache-Control still
+        // keys on the session cookie rather than risking a cross-user hit.
+        source: "/api/auth/:path*",
+        headers: [{ key: "Vary", value: "Cookie" }],
       },
     ];
   },
