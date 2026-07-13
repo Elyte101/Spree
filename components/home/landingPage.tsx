@@ -140,7 +140,11 @@ export function LandingPage({
           position: "relative",
           pt: { xs: 6, md: 7 },
           pb: { xs: 4, md: 5 },
-          height: { xs: "auto", md: "calc(80vh - 64px)" },
+          // minHeight, not height: on shorter/narrower viewports the right
+          // column's stats card (logo + escrow chip + 2x2 stats grid) can be
+          // taller than 80vh, and a fixed `height` + `overflow: hidden` was
+          // silently clipping the stats grid off the bottom of the card.
+          minHeight: { xs: "auto", md: "calc(80vh - 64px)" },
           overflow: "hidden",
           background:
             theme.palette.mode === "dark"
