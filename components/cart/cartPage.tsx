@@ -23,9 +23,11 @@ import {
   Typography,
 } from "@mui/material";
 import { motion } from "motion/react";
+import * as React from "react";
 
 import { useCart } from "@/components/providers/cartProvider";
 import { ProductCard } from "@/components/product/productCard";
+import { useCartRecommendationsQuery } from "@/lib/hooks/useStorefrontQueries";
 import { PROCESSING_FEE_RATE } from "@/lib/pricing";
 import { Product } from "@/types/types";
 
@@ -38,9 +40,18 @@ const formatPrice = (price: number) =>
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
-export function CartPage({ recommendations }: CartPageProps) {
+export function CartPage({ recommendations: initialRecommendations }: CartPageProps) {
   const { cart, itemCount, updateQuantity, removeItem } = useCart();
   const { items, shipping, subtotal, tax, total } = cart;
+
+  const cartProductIds = React.useMemo(
+    () => [...new Set(items.map((item) => item.productId))],
+    [items]
+  );
+  const { products: recommendations } = useCartRecommendationsQuery(
+    cartProductIds,
+    initialRecommendations
+  );
 
   return (
     <Box
