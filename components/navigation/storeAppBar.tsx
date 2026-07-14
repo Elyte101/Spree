@@ -64,7 +64,6 @@ export function StoreAppBar() {
     notificationsQuery.data?.filter((item) => !item.isRead).length ?? 0;
   const chatUnreadCount = useChatUnread();
   const [profileAnchorEl, setProfileAnchorEl] = React.useState<HTMLElement | null>(null);
-  const [settingsAnchorEl, setSettingsAnchorEl] = React.useState<HTMLElement | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   const isAuthenticated = status === "authenticated";
@@ -72,11 +71,8 @@ export function StoreAppBar() {
   const isCartRoute = pathname === "/cart" || pathname === "/checkout" || pathname.startsWith("/checkout/");
   const isNotificationsRoute = pathname === "/notifications";
   const isFavoritesRoute = pathname === "/favorites";
-  const isDashboardRoute = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
   const isProfileRoute = pathname === "/profile";
-  const isSettingsRoute = pathname === "/settings";
   const profileMenuOpen = Boolean(profileAnchorEl);
-  const settingsMenuOpen = Boolean(settingsAnchorEl);
 
   const profileHref = isAuthenticated ? "/profile" : "/auth/sign-in?callbackUrl=%2Fprofile";
   const settingsHref = isAuthenticated ? "/settings" : "/auth/sign-in?callbackUrl=%2Fsettings";
@@ -101,9 +97,6 @@ export function StoreAppBar() {
 
   const navItems = [
     { label: "Products", href: "/products", active: isProductsRoute, icon: <GridViewOutlined />, ariaLabel: "products" },
-    ...(isAuthenticated
-      ? [{ label: "Dashboard", href: "/dashboard", active: isDashboardRoute, icon: <DashboardRounded />, ariaLabel: "dashboard" }]
-      : []),
     { label: "Favorites", href: "/favorites", active: isFavoritesRoute, badge: favoriteCount, icon: <FavoriteBorderOutlined />, ariaLabel: "favorites" },
     { label: "Notifications", href: "/notifications", active: isNotificationsRoute, badge: notificationCount, icon: <NotificationsOutlined />, ariaLabel: "notifications" },
     ...(isAuthenticated
@@ -113,7 +106,6 @@ export function StoreAppBar() {
   ];
 
   const closeProfileMenu = () => setProfileAnchorEl(null);
-  const closeSettingsMenu = () => setSettingsAnchorEl(null);
 
   return (
     <AppBar
@@ -265,18 +257,6 @@ export function StoreAppBar() {
             </IconButton>
           </Tooltip>
 
-          {/* Settings — desktop only */}
-          <Tooltip title="Settings">
-            <IconButton
-              aria-label="settings"
-              color="inherit"
-              onClick={(event) => setSettingsAnchorEl(event.currentTarget)}
-              sx={{ ...getNavButtonSx(isSettingsRoute || settingsMenuOpen), display: { xs: "none", lg: "inline-flex" } }}
-            >
-              <SettingsOutlined />
-            </IconButton>
-          </Tooltip>
-
           {/* Hamburger — mobile/tablet only (hidden at lg+) */}
           <Tooltip title="Menu">
             <IconButton
@@ -355,25 +335,6 @@ export function StoreAppBar() {
             );
           })}
           <Divider sx={{ my: 0.5 }} />
-          <ListItemButton
-            onClick={() => { setMobileMenuOpen(false); setSettingsAnchorEl(null); toggleMode(); }}
-            sx={{ py: 1.25, px: 2 }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              {theme.palette.mode === "dark" ? <Brightness7Rounded /> : <Brightness4Rounded />}
-            </ListItemIcon>
-            <ListItemText primary={theme.palette.mode === "dark" ? "Light mode" : "Dark mode"} primaryTypographyProps={{ fontWeight: 500 }} />
-          </ListItemButton>
-          <ListItemButton
-            component={Link}
-            href={settingsHref}
-            onClick={() => setMobileMenuOpen(false)}
-            sx={{ py: 1.25, px: 2 }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}><SettingsOutlined /></ListItemIcon>
-            <ListItemText primary="Settings" primaryTypographyProps={{ fontWeight: 500 }} />
-          </ListItemButton>
-          <Divider sx={{ my: 0.5 }} />
           {/* Guard the loading state so the button never shows the wrong label */}
           {status !== "loading" && (
             isAuthenticated ? (
@@ -435,6 +396,22 @@ export function StoreAppBar() {
                 <ListItemText primary="My orders" />
               </MenuItem>,
               <Divider key="d2" />,
+              <MenuItem key="appearance" onClick={() => toggleMode()}>
+                <ListItemIcon>
+                  {theme.palette.mode === "dark"
+                    ? <Brightness7Rounded fontSize="small" />
+                    : <Brightness4Rounded fontSize="small" />}
+                </ListItemIcon>
+                <ListItemText
+                  primary="Appearance"
+                  secondary={theme.palette.mode === "dark" ? "Dark mode on" : "Light mode on"}
+                />
+              </MenuItem>,
+              <MenuItem key="open-settings" component={Link} href={settingsHref} onClick={closeProfileMenu}>
+                <ListItemIcon><SettingsOutlined fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Settings" />
+              </MenuItem>,
+              <Divider key="d3" />,
               <MenuItem
                 key="sign-out"
                 onClick={() => { closeProfileMenu(); void signOut({ callbackUrl: "/" }); }}
@@ -443,50 +420,24 @@ export function StoreAppBar() {
                 <ListItemText primary="Sign out" />
               </MenuItem>,
             ]
-          : (
-            <MenuItem component={Link} href="/auth/sign-in?callbackUrl=%2Fprofile" onClick={closeProfileMenu}>
-              <ListItemIcon><LoginRounded fontSize="small" /></ListItemIcon>
-              <ListItemText primary="Sign in" />
-            </MenuItem>
-          )}
-      </Menu>
-
-      {/* Settings menu */}
-      <Menu
-        anchorEl={settingsAnchorEl}
-        open={settingsMenuOpen}
-        onClose={closeSettingsMenu}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-        slotProps={{
-          paper: {
-            sx: {
-              mt: 1,
-              minWidth: 240,
-              borderRadius: 3,
-              border: "1px solid",
-              borderColor: "divider",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
-            },
-          },
-        }}
-      >
-        <MenuItem onClick={() => { toggleMode(); }}>
-          <ListItemIcon>
-            {theme.palette.mode === "dark"
-              ? <Brightness7Rounded fontSize="small" />
-              : <Brightness4Rounded fontSize="small" />}
-          </ListItemIcon>
-          <ListItemText
-            primary="Appearance"
-            secondary={theme.palette.mode === "dark" ? "Dark mode on" : "Light mode on"}
-          />
-        </MenuItem>
-        <Divider />
-        <MenuItem component={Link} href={settingsHref} onClick={closeSettingsMenu}>
-          <ListItemIcon><SettingsOutlined fontSize="small" /></ListItemIcon>
-          <ListItemText primary={isAuthenticated ? "Settings" : "Sign in"} />
-        </MenuItem>
+          : [
+              <MenuItem key="appearance" onClick={() => toggleMode()}>
+                <ListItemIcon>
+                  {theme.palette.mode === "dark"
+                    ? <Brightness7Rounded fontSize="small" />
+                    : <Brightness4Rounded fontSize="small" />}
+                </ListItemIcon>
+                <ListItemText
+                  primary="Appearance"
+                  secondary={theme.palette.mode === "dark" ? "Dark mode on" : "Light mode on"}
+                />
+              </MenuItem>,
+              <Divider key="d1" />,
+              <MenuItem key="sign-in" component={Link} href="/auth/sign-in?callbackUrl=%2Fprofile" onClick={closeProfileMenu}>
+                <ListItemIcon><LoginRounded fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Sign in" />
+              </MenuItem>,
+            ]}
       </Menu>
     </AppBar>
   );
