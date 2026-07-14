@@ -478,10 +478,19 @@ export const getSeller = async (identifier: string) => {
   const response = await fetchBackend(`/sellers/${identifier}`);
 
   if (response.status === 404) {
+    // Genuinely no store for this identifier — distinct from a 5xx/network
+    // failure below, which throws instead of resolving to undefined, so a
+    // transient backend hiccup can't get misread as "this store 404s".
+    console.warn(
+      JSON.stringify({ event: "seller_not_found", identifier, status: response.status })
+    );
     return undefined;
   }
 
   if (!response.ok) {
+    console.warn(
+      JSON.stringify({ event: "seller_lookup_failed", identifier, status: response.status })
+    );
     throw new Error(`Backend request failed with status ${response.status}`);
   }
 

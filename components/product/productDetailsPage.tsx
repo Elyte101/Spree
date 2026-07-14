@@ -32,6 +32,7 @@ import { ProductCard } from "@/components/product/productCard";
 import { ProductReviews } from "@/components/product/productReviews";
 import { StarRating } from "@/components/ui/starRating";
 import { formatPrice } from "@/lib/ghana";
+import { getSellerStoreHref } from "@/lib/sellerLink";
 
 interface ProductDetailsPageProps {
   product: Product;
@@ -70,8 +71,7 @@ export function ProductDetailsPage({
   );
   const [lastAddedAt, setLastAddedAt] = React.useState(0);
   const recentlyAdded = lastAddedAt > 0;
-  const sellerIdentifier = product.storeSlug || product.sellerId;
-  const sellerHref = sellerIdentifier ? `/stores/${sellerIdentifier}` : null;
+  const sellerHref = getSellerStoreHref(product);
 
   React.useEffect(() => {
     const timeoutId = window.setTimeout(() => {
