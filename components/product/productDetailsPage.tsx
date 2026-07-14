@@ -222,7 +222,7 @@ export function ProductDetailsPage({
                   alt={product.name}
                   sizes="(max-width: 1024px) 100vw, 560px"
                   priority
-                  objectFit="contain"
+                  objectFit="cover"
                 />
                 <Box
                   className="zoom-affordance"
