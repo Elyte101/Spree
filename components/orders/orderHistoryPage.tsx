@@ -181,7 +181,7 @@ export function OrderHistoryPage({ orders }: { orders: OrderListItem[] }) {
           <Stack direction="row" alignItems="center" gap={1.5} mb={4}>
             <ReceiptLongOutlined color="primary" sx={{ fontSize: 32 }} />
             <Box>
-              <Typography variant="h4" fontWeight={800}>
+              <Typography variant="h4" fontWeight={800} color="text.primary">
                 My Orders
               </Typography>
               <Typography variant="body2" color="text.secondary">

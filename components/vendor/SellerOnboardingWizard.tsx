@@ -193,7 +193,7 @@ export function VendorOnboardingWizard() {
             startIcon={<ArrowBackRounded />}
             onClick={handleBack}
             disabled={submitting}
-            color="inherit"
+            color="primary"
           >
             Back
           </Button>

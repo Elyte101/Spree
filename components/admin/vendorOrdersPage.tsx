@@ -193,7 +193,7 @@ export function VendorOrdersPage({ orders }: { orders: OrderListItem[] }) {
         <Stack direction="row" alignItems="center" gap={1.5}>
           <ReceiptLongOutlined color="primary" />
           <Box>
-            <Typography variant="h5" fontWeight={800}>
+            <Typography variant="h5" fontWeight={800} color="text.primary">
               Orders
             </Typography>
             <Typography variant="body2" color="text.secondary">
