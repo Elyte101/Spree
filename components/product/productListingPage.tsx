@@ -46,6 +46,7 @@ import {
   CatalogSort,
   Collection,
   HomeFeed,
+  SellerLocation,
 } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -54,6 +55,7 @@ interface ProductListingPageProps {
   homeFeed: HomeFeed;
   brands: Brand[];
   collections: Collection[];
+  sellerLocations: SellerLocation[];
   initialSearch?: string;
 }
 
@@ -73,11 +75,14 @@ export function ProductListingPage({
   homeFeed,
   brands,
   collections,
+  sellerLocations,
   initialSearch,
 }: ProductListingPageProps) {
   const selectedCategory = useCatalogFiltersStore((state) => state.category);
   const selectedBrand = useCatalogFiltersStore((state) => state.brand);
   const selectedCollection = useCatalogFiltersStore((state) => state.collection);
+  const sellerCountry = useCatalogFiltersStore((state) => state.sellerCountry);
+  const sellerRegion = useCatalogFiltersStore((state) => state.sellerRegion);
   const sort = useCatalogFiltersStore((state) => state.sort);
   const page = useCatalogFiltersStore((state) => state.page);
   const inStockOnly = useCatalogFiltersStore((state) => state.inStockOnly);
@@ -87,6 +92,8 @@ export function ProductListingPage({
   const setSelectedCategory = useCatalogFiltersStore((state) => state.setCategory);
   const setSelectedBrand = useCatalogFiltersStore((state) => state.setBrand);
   const setSelectedCollection = useCatalogFiltersStore((state) => state.setCollection);
+  const setSellerCountry = useCatalogFiltersStore((state) => state.setSellerCountry);
+  const setSellerRegion = useCatalogFiltersStore((state) => state.setSellerRegion);
   const setSort = useCatalogFiltersStore((state) => state.setSort);
   const setPage = useCatalogFiltersStore((state) => state.setPage);
   const setInStockOnly = useCatalogFiltersStore((state) => state.setInStockOnly);
@@ -140,11 +147,16 @@ export function ProductListingPage({
       category: selectedCategory || undefined,
       brand: selectedBrand || undefined,
       collection: selectedCollection || undefined,
+      sellerCountry: sellerCountry || undefined,
+      sellerRegion: sellerRegion || undefined,
       inStock: inStockOnly ? true : undefined,
       minPrice,
       maxPrice,
     }),
-    [inStockOnly, maxPrice, minPrice, page, search, selectedBrand, selectedCategory, selectedCollection, sort]
+    [
+      inStockOnly, maxPrice, minPrice, page, search, selectedBrand, selectedCategory,
+      selectedCollection, sellerCountry, sellerRegion, sort,
+    ]
   );
 
   const useInitialCatalog =
@@ -152,6 +164,8 @@ export function ProductListingPage({
     !selectedCategory &&
     !selectedBrand &&
     !selectedCollection &&
+    !sellerCountry &&
+    !sellerRegion &&
     !inStockOnly &&
     minPrice === undefined &&
     maxPrice === undefined &&
@@ -231,7 +245,7 @@ export function ProductListingPage({
   const suggBlurTimer = React.useRef<number | null>(null);
   const hasActiveFilters = Boolean(
     selectedCategory || selectedBrand || selectedCollection || inStockOnly || sort !== "featured"
-    || minPrice !== undefined || maxPrice !== undefined
+    || minPrice !== undefined || maxPrice !== undefined || sellerCountry || sellerRegion
   );
   const activeFilterCount = [
     selectedCategory,
@@ -240,7 +254,20 @@ export function ProductListingPage({
     inStockOnly ? "stock" : "",
     sort !== "featured" ? "sort" : "",
     minPrice !== undefined || maxPrice !== undefined ? "price" : "",
+    sellerCountry || sellerRegion ? "location" : "",
   ].filter(Boolean).length;
+  const sellerCountries = React.useMemo(
+    () => Array.from(new Set(sellerLocations.map((loc) => loc.country))).sort(),
+    [sellerLocations]
+  );
+  const sellerRegionsForCountry = React.useMemo(
+    () =>
+      sellerLocations
+        .filter((loc) => loc.country === sellerCountry)
+        .map((loc) => loc.region)
+        .sort(),
+    [sellerLocations, sellerCountry]
+  );
 
   return (
     <Box
@@ -560,6 +587,13 @@ export function ProductListingPage({
                   ) : null}
                   {search ? <Chip label={`Search: ${search}`} color="primary" /> : null}
                   {inStockOnly ? <Chip label="In stock only" color="success" /> : null}
+                  {sellerCountry ? (
+                    <Chip
+                      label={`Location: ${sellerCountry}${sellerRegion ? `, ${sellerRegion}` : ""}`}
+                      color="primary"
+                      onDelete={() => setSellerCountry("")}
+                    />
+                  ) : null}
                 </Stack>
               </Stack>
             </Paper>
@@ -763,6 +797,52 @@ export function ProductListingPage({
                 </Stack>
               ) : (
                 <Typography variant="body2" color="text.secondary">No brands are available yet.</Typography>
+              )}
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1.25 }}>Seller location</Typography>
+              {sellerCountries.length ? (
+                <Stack spacing={1.5}>
+                  <FormControl size="small" fullWidth>
+                    <InputLabel id="filter-country-label">Country</InputLabel>
+                    <Select
+                      labelId="filter-country-label"
+                      value={sellerCountry}
+                      label="Country"
+                      displayEmpty
+                      onChange={(event) => setSellerCountry(event.target.value)}
+                    >
+                      <MenuItem value="">All countries</MenuItem>
+                      {sellerCountries.map((country) => (
+                        <MenuItem key={country} value={country}>{country}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {sellerCountry && sellerRegionsForCountry.length ? (
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      <Chip
+                        label="All regions"
+                        clickable
+                        color={sellerRegion === ALL_FILTER_VALUE ? "primary" : "default"}
+                        variant={sellerRegion === ALL_FILTER_VALUE ? "filled" : "outlined"}
+                        onClick={() => setSellerRegion(ALL_FILTER_VALUE)}
+                      />
+                      {sellerRegionsForCountry.map((region) => (
+                        <Chip
+                          key={region}
+                          label={region}
+                          clickable
+                          color={sellerRegion === region ? "primary" : "default"}
+                          variant={sellerRegion === region ? "filled" : "outlined"}
+                          onClick={() => setSellerRegion(region)}
+                        />
+                      ))}
+                    </Stack>
+                  ) : null}
+                </Stack>
+              ) : (
+                <Typography variant="body2" color="text.secondary">No seller locations are available yet.</Typography>
               )}
             </Box>
 

@@ -12,6 +12,7 @@ import {
   NotificationItem,
   Product,
   ProductComment,
+  SellerLocation,
   SellerSummary,
   SearchResponse,
   TopProductsResponse,
@@ -443,6 +444,12 @@ export const getBrands = () =>
 
 export const getCollections = () =>
   getJson<Collection[]>("/collections", undefined, {
+    fallback: () => [],
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
+
+export const getSellerLocations = () =>
+  getJson<SellerLocation[]>("/locations", undefined, {
     fallback: () => [],
     revalidate: CATALOG_REVALIDATE_SECONDS,
   });

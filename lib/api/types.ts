@@ -16,6 +16,8 @@ export interface ProductQueryParams {
   vendor?: string;
   tag?: string;
   search?: string;
+  sellerCountry?: string;
+  sellerRegion?: string;
   sort?: CatalogSort;
   page?: number;
   limit?: number;

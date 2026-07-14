@@ -17,6 +17,7 @@ from app.schemas.catalog import (
     ProductOut,
     ProductUpdateIn,
     SearchResponseOut,
+    SellerLocationOut,
 )
 from app.services.catalog import (
     ProductListParams,
@@ -35,6 +36,7 @@ from app.services.catalog import (
     list_collections,
     list_comments,
     list_products,
+    list_seller_locations,
     list_user_liked_products,
     search_storefront,
     toggle_product_blacklist,
@@ -76,6 +78,8 @@ def products(
     collection: str | None = Query(default=None),
     tag: str | None = Query(default=None),
     search: str | None = Query(default=None),
+    seller_country: str | None = Query(default=None, alias="sellerCountry"),
+    seller_region: str | None = Query(default=None, alias="sellerRegion"),
     sort: str = Query(default="featured"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=12, ge=1, le=48),
@@ -94,6 +98,8 @@ def products(
             collection=collection,
             tag=tag,
             search=search,
+            seller_country=seller_country,
+            seller_region=seller_region,
             sort=sort,
             page=page,
             limit=limit,
@@ -199,6 +205,11 @@ def brands(db: DBSession):
 @router.get("/collections", response_model=list[CollectionOut])
 def collections(db: DBSession):
     return list_collections(db)
+
+
+@router.get("/locations", response_model=list[SellerLocationOut])
+def locations(db: DBSession):
+    return list_seller_locations(db)
 
 
 @router.get("/search", response_model=SearchResponseOut)

@@ -34,6 +34,8 @@ class ProductListParams:
     collection: str | None = None
     tag: str | None = None
     search: str | None = None
+    seller_country: str | None = None
+    seller_region: str | None = None
     sort: str = "featured"
     page: int = 1
     limit: int = 12
@@ -298,6 +300,22 @@ def _apply_product_filters(statement, params: ProductListParams):
                 func.lower(Category.name).like(query),
                 func.lower(func.coalesce(Collection.name, "")).like(query),
             )
+        )
+
+    if params.seller_country:
+        # store_location is a JSON blob (SQLite/Postgres-compatible column) —
+        # matched via cast-to-text + LIKE, same cross-dialect approach the
+        # "tag" filter above uses for its JSON array. Anchored to the key so
+        # a country name can never match a region/city's value instead.
+        normalized_country = params.seller_country.strip().lower()
+        statement = statement.where(
+            func.lower(cast(User.store_location, String)).like(f'%"country":%"{normalized_country}"%')
+        )
+
+    if params.seller_region:
+        normalized_region = params.seller_region.strip().lower()
+        statement = statement.where(
+            func.lower(cast(User.store_location, String)).like(f'%"state":%"{normalized_region}"%')
         )
 
     if params.in_stock is not None:
@@ -757,6 +775,43 @@ def list_collections(db: Session) -> list[dict]:
         .order_by(Collection.name.asc())
     ).all()
     return [_collection_to_dict(collection, count) for collection, count in rows]
+
+
+def list_seller_locations(db: Session) -> list[dict]:
+    """Distinct (country, region) pairs among active sellers who have at
+    least one non-blacklisted product — powers the storefront's location
+    filter so a user can never pick a region that shows zero results.
+
+    Small dataset (one row per active seller) — dedup/parse in Python rather
+    than fighting cross-dialect JSON grouping in SQL.
+    """
+    sellers_with_products = select(distinct(Product.seller_id)).where(
+        Product.seller_id.isnot(None),
+        Product.is_blacklisted == False,  # noqa: E712
+    )
+    sellers = db.scalars(
+        select(User).where(
+            User.id.in_(sellers_with_products),
+            or_(User.role == "admin", User.seller_status == "active"),
+        )
+    ).all()
+
+    seen: set[tuple[str, str]] = set()
+    result: list[dict] = []
+    for seller in sellers:
+        location = seller.store_location or {}
+        country = (location.get("country") or "").strip()
+        region = (location.get("state") or "").strip()
+        if not country or not region:
+            continue
+        key = (country, region)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({"country": country, "region": region})
+
+    result.sort(key=lambda item: (item["country"], item["region"]))
+    return result
 
 
 def search_storefront(db: Session, query: str) -> dict:

@@ -10,6 +10,8 @@ interface CatalogFiltersStoreState {
   category: string;
   brand: string;
   collection: string;
+  sellerCountry: string;
+  sellerRegion: string;
   sort: CatalogSort;
   page: number;
   inStockOnly: boolean;
@@ -19,6 +21,8 @@ interface CatalogFiltersStoreState {
   setCategory: (value: string) => void;
   setBrand: (value: string) => void;
   setCollection: (value: string) => void;
+  setSellerCountry: (value: string) => void;
+  setSellerRegion: (value: string) => void;
   setSort: (value: CatalogSort) => void;
   setPage: (value: number) => void;
   setInStockOnly: (value: boolean) => void;
@@ -32,6 +36,8 @@ const defaultFilters = {
   category: "",
   brand: "",
   collection: "",
+  sellerCountry: "",
+  sellerRegion: "",
   sort: "featured" as CatalogSort,
   page: 1,
   inStockOnly: false,
@@ -47,6 +53,11 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
       setCategory: (value) => set({ category: value, page: 1 }),
       setBrand: (value) => set({ brand: value, page: 1 }),
       setCollection: (value) => set({ collection: value, page: 1 }),
+      // Changing country invalidates any region picked under the previous
+      // country, so it's reset alongside — never leave a stale region from
+      // a different country silently applied.
+      setSellerCountry: (value) => set({ sellerCountry: value, sellerRegion: "", page: 1 }),
+      setSellerRegion: (value) => set({ sellerRegion: value, page: 1 }),
       setSort: (value) => set({ sort: value, page: 1 }),
       setPage: (value) => set({ page: value }),
       setInStockOnly: (value) => set({ inStockOnly: value, page: 1 }),
@@ -56,8 +67,9 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
     }),
     {
       // localStorage safety: persists only UI filter/sort state (search text,
-      // category, brand, collection, sort order, page, inStockOnly toggle).
-      // No auth tokens, user IDs, addresses, or payment data are stored here.
+      // category, brand, collection, seller country/region, sort order, page,
+      // inStockOnly toggle). No auth tokens, user IDs, addresses, or payment
+      // data are stored here.
       name: "spree-catalog-filters",
       storage: createJSONStorage(() =>
         typeof window !== "undefined"

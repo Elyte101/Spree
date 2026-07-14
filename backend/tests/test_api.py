@@ -2546,3 +2546,101 @@ def test_bank_recipient_uses_ghipss_type():
     assert captured["body"].get("type") == "ghipss", (
         f"Bank transfer must use 'ghipss' for GHS, got '{captured['body'].get('type')}'"
     )
+
+
+def test_products_filter_by_seller_country_and_region():
+    """Storefront location filter: sellerCountry/sellerRegion narrow results
+    to products from sellers in that country/region, and /locations only
+    lists (country, region) pairs that actually have active sellers.
+    """
+    from app.db.session import SessionLocal
+    from app.db.models import Product, User
+
+    suffix = uuid4().hex[:8]
+    accra_id = f"loc-test-accra-{suffix}"
+    kumasi_id = f"loc-test-kumasi-{suffix}"
+    lagos_id = f"loc-test-lagos-{suffix}"
+    product_ids: dict[str, str] = {}
+
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as db:
+                db.add_all([
+                    User(
+                        id=accra_id, name="Accra Seller", email=f"accra-{suffix}@test.com", password_hash="x",
+                        role="vendor", store_name=f"Accra Store {suffix}", store_slug=f"accra-store-{suffix}",
+                        seller_status="active",
+                        store_location={"addressLine1": "1 Test Rd", "city": "Accra", "state": "Greater Accra", "postalCode": "00233", "country": "Ghana"},
+                    ),
+                    User(
+                        id=kumasi_id, name="Kumasi Seller", email=f"kumasi-{suffix}@test.com", password_hash="x",
+                        role="vendor", store_name=f"Kumasi Store {suffix}", store_slug=f"kumasi-store-{suffix}",
+                        seller_status="active",
+                        store_location={"addressLine1": "2 Test Rd", "city": "Kumasi", "state": "Ashanti", "postalCode": "00233", "country": "Ghana"},
+                    ),
+                    User(
+                        id=lagos_id, name="Lagos Seller", email=f"lagos-{suffix}@test.com", password_hash="x",
+                        role="vendor", store_name=f"Lagos Store {suffix}", store_slug=f"lagos-store-{suffix}",
+                        seller_status="active",
+                        store_location={"addressLine1": "3 Test Rd", "city": "Lagos", "state": "Lagos", "postalCode": "100001", "country": "Nigeria"},
+                    ),
+                ])
+                db.commit()
+
+            # Create products via the real HTTP endpoint (auto-creates a
+            # category/brand from the payload's name, since the test DB
+            # starts empty), then reassign each to its seller directly — the
+            # public creation endpoint attributes seller_id to the actor, not
+            # an arbitrary target.
+            for label, seller_id in (("accra", accra_id), ("kumasi", kumasi_id), ("lagos", lagos_id)):
+                payload = _create_product_payload()
+                payload["name"] = f"{label.capitalize()} Product {suffix}"
+                resp = client.post(
+                    "/api/v1/products",
+                    json=payload,
+                    headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+                )
+                assert resp.status_code == 201, resp.text
+                product_ids[label] = resp.json()["id"]
+
+            with SessionLocal() as db:
+                for label, seller_id in (("accra", accra_id), ("kumasi", kumasi_id), ("lagos", lagos_id)):
+                    product = db.get(Product, product_ids[label])
+                    product.seller_id = seller_id
+                    db.add(product)
+                db.commit()
+
+            locations_resp = client.get("/api/v1/locations")
+            assert locations_resp.status_code == 200
+            pairs = {(loc["country"], loc["region"]) for loc in locations_resp.json()}
+            assert ("Ghana", "Greater Accra") in pairs
+            assert ("Ghana", "Ashanti") in pairs
+            assert ("Nigeria", "Lagos") in pairs
+
+            ghana_resp = client.get("/api/v1/products", params={"sellerCountry": "Ghana", "limit": 48})
+            ghana_names = {p["name"] for p in ghana_resp.json()["items"]}
+            assert f"Accra Product {suffix}" in ghana_names
+            assert f"Kumasi Product {suffix}" in ghana_names
+            assert f"Lagos Product {suffix}" not in ghana_names
+
+            ashanti_resp = client.get(
+                "/api/v1/products",
+                params={"sellerCountry": "Ghana", "sellerRegion": "Ashanti", "limit": 48},
+            )
+            ashanti_names = {p["name"] for p in ashanti_resp.json()["items"]}
+            assert ashanti_names == {f"Kumasi Product {suffix}"}
+
+            nigeria_resp = client.get("/api/v1/products", params={"sellerCountry": "Nigeria", "limit": 48})
+            nigeria_names = {p["name"] for p in nigeria_resp.json()["items"]}
+            assert nigeria_names == {f"Lagos Product {suffix}"}
+    finally:
+        with SessionLocal() as db:
+            for pid in product_ids.values():
+                p = db.get(Product, pid)
+                if p:
+                    db.delete(p)
+            for uid in (accra_id, kumasi_id, lagos_id):
+                u = db.get(User, uid)
+                if u:
+                    db.delete(u)
+            db.commit()

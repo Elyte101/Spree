@@ -200,6 +200,11 @@ export interface Collection {
   productCount: number;
 }
 
+export interface SellerLocation {
+  country: string;
+  region: string;
+}
+
 export interface CartItem {
   id: string;
   productId: string;

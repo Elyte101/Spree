@@ -141,6 +141,14 @@ class CollectionOut(BaseModel):
     productCount: int
 
 
+class SellerLocationOut(BaseModel):
+    """A (country, region) pair with at least one active seller who has a
+    product — powers the storefront's location filter so users never pick a
+    region that would show zero results."""
+    country: str
+    region: str
+
+
 class PromoBannerOut(BaseModel):
     id: str
     title: str

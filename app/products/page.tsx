@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { ProductListingPage } from "@/components/product/productListingPage";
-import { CATALOG_REVALIDATE_SECONDS, getBrands, getCollections, getHomeFeed, getProducts } from "@/lib/serverApi";
+import { CATALOG_REVALIDATE_SECONDS, getBrands, getCollections, getHomeFeed, getProducts, getSellerLocations } from "@/lib/serverApi";
 
 export const metadata: Metadata = {
   title: "Products | Spree",
@@ -24,10 +24,11 @@ interface PageProps {
 export default async function ProductsPage({ searchParams }: PageProps) {
   const { search = "" } = await searchParams;
 
-  const [homeFeed, brands, collections, initialCatalog] = await Promise.all([
+  const [homeFeed, brands, collections, sellerLocations, initialCatalog] = await Promise.all([
     getHomeFeed(),
     getBrands(),
     getCollections(),
+    getSellerLocations(),
     getProducts(
       { limit: PRODUCTS_PER_PAGE, ...(search ? { search } : {}) },
       undefined,
@@ -41,6 +42,7 @@ export default async function ProductsPage({ searchParams }: PageProps) {
       homeFeed={homeFeed}
       brands={brands}
       collections={collections}
+      sellerLocations={sellerLocations}
       initialSearch={search}
     />
   );
