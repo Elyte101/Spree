@@ -7,64 +7,30 @@ from app.schemas.marketplace import (
     AdminSellerDetailOut,
     AdminSellerStatusUpdateRequest,
     AdminSellerSummaryOut,
-    FollowSellerRequest,
-    ReportSellerRequest,
     SellerBlacklistIn,
-    SellerDetailOut,
     SellerRejectRequest,
     SellerSummaryOut,
     TopProductsResponseOut,
-    UnfollowSellerRequest,
 )
 from app.services.marketplace import (
     approve_seller,
     delete_seller,
-    follow_seller,
     get_admin_seller_detail,
-    get_seller_detail,
     get_seller_summary,
     list_admin_sellers,
-    list_public_sellers,
     list_top_products,
     list_verification_queue,
     reject_seller,
-    report_seller,
     toggle_seller_blacklist,
-    unfollow_seller,
     update_admin_seller_status,
 )
 
 router = APIRouter()
 
 
-@router.get("/sellers", response_model=list[SellerSummaryOut])
-def sellers(db: DBSession):
-    return list_public_sellers(db)
-
-
 @router.get("/sellers/{identifier}/summary", response_model=SellerSummaryOut)
 def seller_summary(identifier: str, db: DBSession):
     return get_seller_summary(db, identifier)
-
-
-@router.get("/sellers/{identifier}", response_model=SellerDetailOut)
-def seller_details(identifier: str, db: DBSession):
-    return get_seller_detail(db, identifier)
-
-
-@router.post("/sellers/{seller_id}/follow", response_model=SellerSummaryOut)
-def seller_follow(seller_id: str, payload: FollowSellerRequest, db: DBSession, _: InternalAPIKey):
-    return follow_seller(db, seller_id, payload.followerId)
-
-
-@router.delete("/sellers/{seller_id}/follow", response_model=SellerSummaryOut)
-def seller_unfollow(seller_id: str, payload: UnfollowSellerRequest, db: DBSession, _: InternalAPIKey):
-    return unfollow_seller(db, seller_id, payload.followerId)
-
-
-@router.post("/sellers/{seller_id}/report", response_model=SellerSummaryOut)
-def seller_report(seller_id: str, payload: ReportSellerRequest, db: DBSession, _: InternalAPIKey):
-    return report_seller(db, seller_id, payload.reporterId, payload.reason, payload.details)
 
 
 @router.get("/admin/verification", response_model=list[AdminSellerSummaryOut])

@@ -523,6 +523,7 @@ def _order_to_dict(order: Order) -> dict:
                 "quantity": item.quantity,
                 "color": item.color,
                 "size": item.size,
+                "trackingId": item.tracking_id,
             }
             for item in order.items
         ],
@@ -602,9 +603,22 @@ def _build_pending_order(
                 color=item.color,
                 size=item.size,
                 commission_rate=rate,
+                tracking_id=_generate_item_tracking_id(item.productId),
             )
         )
     return order
+
+
+def _generate_item_tracking_id(product_id: str | None) -> str:
+    """App-generated tracking ID for an order item, created at checkout.
+
+    Distinct from Order.tracking_number (the real courier code a seller
+    enters after shipping) — this exists immediately, before anything ships,
+    and embeds product_id so it's traceable to the specific item even within
+    a multi-product order.
+    """
+    suffix = uuid4().hex[:8]
+    return f"TRK-{product_id}-{suffix}" if product_id else f"TRK-{uuid4().hex[:12]}"
 
 
 def initialize_payment(db: Session, payload: OrderCreateIn, callback_url: str) -> dict:

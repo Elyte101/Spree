@@ -696,6 +696,11 @@ export function OrderDetailPage({
                         <Typography variant="caption" color="text.secondary" display="block">
                           Qty: {item.quantity}
                         </Typography>
+                        {item.trackingId && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Tracking ID: {item.trackingId}
+                          </Typography>
+                        )}
                       </Box>
                       <Typography variant="body2" fontWeight={700}>
                         {formatPrice(item.price * item.quantity)}

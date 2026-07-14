@@ -114,7 +114,7 @@ export function ProductReviews({ productId, initialComments }: ProductReviewsPro
         >
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} justifyContent="space-between">
             <Typography variant="body1" color="text.secondary">
-              Sign in to write a review — reviews are limited to buyers who&apos;ve purchased this product.
+              Sign in to write a review — reviews are limited to buyers who&apos;ve purchased and received this product.
             </Typography>
             <Button
               component={NextLink}

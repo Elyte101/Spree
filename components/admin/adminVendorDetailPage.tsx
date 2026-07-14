@@ -153,14 +153,6 @@ export function AdminVendorDetailPage({
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
             <Button
               component={Link}
-              href={`/stores/${vendor.storeSlug}`}
-              variant="outlined"
-              sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
-            >
-              Open public store
-            </Button>
-            <Button
-              component={Link}
               href="/dashboard/vendors"
               variant="text"
               sx={{ textTransform: "none", fontWeight: 900 }}

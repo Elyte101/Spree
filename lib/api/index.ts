@@ -15,8 +15,6 @@ import {
   Product,
   ProductComment,
   PushSubscriptionData,
-  SellerDetail,
-  SellerSummary,
   SearchResponse,
   TopProductsResponse,
   UserProfile,
@@ -28,7 +26,6 @@ import {
   CommentPayload,
   CreateProductPayload,
   ProductQueryParams,
-  ReportSellerPayload,
   SellerRejectPayload,
   SignUpPayload,
   UpdateProductPayload,
@@ -47,7 +44,6 @@ export type {
   ProductQueryParams,
   ProductVariantPayload,
   PushSubscribePayload,
-  ReportSellerPayload,
   SellerRejectPayload,
   SignUpPayload,
   UpdateProductPayload,
@@ -231,26 +227,6 @@ export const api = {
     requestJson<NotificationItem[]>("/api/notifications", {}, {
       safe: true,
       fallback: [],
-    }),
-
-  /* ---------- SELLERS ---------- */
-
-  getSellers: () =>
-    requestJson<SellerSummary[]>("/api/vendors"),
-
-  getSeller: (id: string) =>
-    requestJson<SellerDetail>(`/api/vendors/${id}`),
-
-  followSeller: (id: string) =>
-    requestJson<SellerSummary>(`/api/vendors/${id}/follow`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    }),
-
-  reportSeller: (id: string, payload: ReportSellerPayload) =>
-    requestJson<SellerSummary>(`/api/vendors/${id}/report`, {
-      method: "POST",
-      body: JSON.stringify(payload),
     }),
 
   /* ---------- ADMIN ---------- */

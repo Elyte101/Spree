@@ -97,17 +97,6 @@ export interface UpdateProductPayload {
   tags?: string[];
 }
 
-export interface ReportSellerPayload {
-  reason:
-    | "counterfeit"
-    | "fraud"
-    | "abuse"
-    | "delivery-issue"
-    | "misleading-listing"
-    | "other";
-  details: string;
-}
-
 export interface CommentPayload {
   body: string;
   rating: number | null;

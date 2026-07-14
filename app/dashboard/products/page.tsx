@@ -117,13 +117,6 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
             >
               Create product
             </Button>
-            <Button
-              href={sellerProfile?.storeSlug ? `/stores/${sellerProfile.storeSlug}` : "/products"}
-              variant="outlined"
-              sx={{ borderRadius: 999, px: 2, textTransform: "none", fontWeight: 900, whiteSpace: "nowrap" }}
-            >
-              Open storefront
-            </Button>
           </Stack>
         </Stack>
       </Paper>

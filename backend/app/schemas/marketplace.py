@@ -65,24 +65,6 @@ class SellerReportOut(BaseModel):
     createdAt: datetime
 
 
-class SellerReviewOut(BaseModel):
-    """A recent review of one of this seller's products, for the public
-    seller profile page (Task 4.3)."""
-    id: str
-    productId: str
-    productName: str
-    productSlug: str
-    authorName: str
-    rating: int | None
-    body: str
-    createdAt: datetime
-
-
-class SellerDetailOut(SellerSummaryOut):
-    products: list[ProductOut]
-    recentReviews: list[SellerReviewOut] = []
-
-
 class AdminSellerDetailOut(AdminSellerSummaryOut):
     governmentIdNumber: str = ""
     idFrontUrl: str = ""
@@ -97,27 +79,6 @@ class AdminSellerDetailOut(AdminSellerSummaryOut):
 
 class SellerRejectRequest(BaseModel):
     reason: str = Field(min_length=10, max_length=600)
-
-
-class FollowSellerRequest(BaseModel):
-    followerId: str = Field(min_length=3, max_length=64)
-
-
-class UnfollowSellerRequest(BaseModel):
-    followerId: str = Field(min_length=3, max_length=64)
-
-
-class ReportSellerRequest(BaseModel):
-    reporterId: str = Field(min_length=3, max_length=64)
-    reason: Literal[
-        "counterfeit",
-        "fraud",
-        "abuse",
-        "delivery-issue",
-        "misleading-listing",
-        "other",
-    ]
-    details: str = Field(default="", max_length=600)
 
 
 class AdminSellerStatusUpdateRequest(BaseModel):

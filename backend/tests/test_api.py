@@ -1396,6 +1396,100 @@ def test_comment_rejects_unverified_email():
         assert "verify your email" in resp.json()["detail"].lower()
 
 
+def _make_verified_buyer_and_product(client) -> tuple[str, str]:
+    """Sign up a buyer with a verified email and create a product. Returns (user_id, product_id)."""
+    from app.db.session import SessionLocal
+    from app.db.models import User
+
+    email = f"buyer-{uuid4().hex[:8]}@test.com"
+    signup = client.post(
+        "/api/v1/auth/signup",
+        headers=INTERNAL_HEADERS,
+        json={"name": "Test Buyer", "email": email, "password": "CommentPass123!"},
+    )
+    assert signup.status_code == 201
+    uid = signup.json()["id"]
+
+    with SessionLocal() as db:
+        user = db.get(User, uid)
+        user.email_verified = True
+        db.add(user)
+        db.commit()
+
+    prod_resp = client.post(
+        "/api/v1/products",
+        json=_create_product_payload(),
+        headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+    )
+    assert prod_resp.status_code == 201
+    return uid, prod_resp.json()["id"]
+
+
+def _create_order_for(user_id: str, product_id: str, status_value: str) -> None:
+    from datetime import datetime, timezone
+    from app.db.session import SessionLocal
+    from app.db.models import Order, OrderItem
+
+    with SessionLocal() as db:
+        order = Order(
+            id=f"order-{uuid4().hex[:12]}",
+            user_id=user_id,
+            status=status_value,
+            full_name="Test Buyer",
+            email="buyer@test.com",
+            address_line1="1 Test St",
+            city="Accra",
+            state="Greater Accra",
+            postal_code="00233",
+            country="Ghana",
+            subtotal=100,
+            shipping_cost=0,
+            tax=0,
+            total=100,
+            paid_at=datetime.now(timezone.utc),
+        )
+        db.add(order)
+        db.add(OrderItem(
+            id=f"orderitem-{uuid4().hex[:12]}",
+            order_id=order.id,
+            product_id=product_id,
+            name="Test product",
+            image="",
+            price=100,
+            quantity=1,
+        ))
+        db.commit()
+
+
+def test_comment_rejects_paid_but_not_delivered_order():
+    """A buyer who has paid but not yet received the order cannot review it."""
+    with TestClient(app) as client:
+        uid, product_id = _make_verified_buyer_and_product(client)
+        _create_order_for(uid, product_id, "paid")
+
+        resp = client.post(
+            f"/api/v1/products/{product_id}/comments",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+            json={"body": "Great product!", "rating": 5},
+        )
+        assert resp.status_code == 403
+        assert "purchased and received" in resp.json()["detail"].lower()
+
+
+def test_comment_allowed_after_delivered_order():
+    """A buyer whose order has reached 'delivered' can review the product."""
+    with TestClient(app) as client:
+        uid, product_id = _make_verified_buyer_and_product(client)
+        _create_order_for(uid, product_id, "delivered")
+
+        resp = client.post(
+            f"/api/v1/products/{product_id}/comments",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+            json={"body": "Great product!", "rating": 5},
+        )
+        assert resp.status_code == 201
+
+
 def test_stream_webhook_accepts_non_message_events():
     """POST /webhooks/stream should return 200 for non-message events."""
     with TestClient(app) as client:
@@ -1822,6 +1916,69 @@ def test_admin_create_order_recomputes_totals_and_writes_ledger():
             assert "PAYMENT_RECEIVED" in entry_types, (
                 f"Expected PAYMENT_RECEIVED ledger entry, got: {entry_types}"
             )
+
+
+def test_order_items_get_a_tracking_id_embedding_product_id_at_checkout():
+    """Each order item gets its own app-generated tracking ID at checkout,
+    distinct per item and traceable to its specific product_id — even when
+    a single order contains multiple different products.
+    """
+    with TestClient(app) as client:
+        product_ids = []
+        for _ in range(2):
+            payload = _create_product_payload()
+            resp = client.post(
+                "/api/v1/products",
+                json=payload,
+                headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+            )
+            assert resp.status_code == 201, resp.text
+            product_ids.append(resp.json()["id"])
+
+        order_payload = {
+            "userId": None,
+            "fullName": "Tracking Test Buyer",
+            "email": "tracking-test@test.com",
+            "phone": "0240000000",
+            "addressLine1": "1 Tracking Street",
+            "city": "Accra",
+            "state": "Greater Accra",
+            "postalCode": "00233",
+            "country": "Ghana",
+            "shippingMethod": "standard",
+            "paymentMethod": "card",
+            "subtotal": 1.00,
+            "shippingCost": 0.00,
+            "tax": 0.00,
+            "total": 1.00,
+            "currency": "GHS",
+            "items": [
+                {
+                    "productId": pid,
+                    "name": f"Item for {pid}",
+                    "image": "/img/test.jpg",
+                    "price": 1.00,
+                    "quantity": 1,
+                }
+                for pid in product_ids
+            ],
+        }
+
+        resp = client.post("/api/v1/orders", json=order_payload, headers=ADMIN_HEADERS)
+        assert resp.status_code == 201, resp.text
+        items = resp.json()["items"]
+        assert len(items) == 2
+
+        for item, expected_product_id in zip(items, product_ids):
+            assert item["productId"] == expected_product_id
+            assert item["trackingId"] is not None
+            assert expected_product_id in item["trackingId"], (
+                f"Expected trackingId to embed product_id {expected_product_id!r}, got {item['trackingId']!r}"
+            )
+
+        # Distinct tracking IDs per item, even within the same order.
+        tracking_ids = [item["trackingId"] for item in items]
+        assert len(set(tracking_ids)) == 2
 
 
 def test_add_business_days_skips_weekends():

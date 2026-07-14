@@ -918,15 +918,6 @@ export function ProfilePage({ initialProfile }: ProfilePageProps) {
                 </Button>
                 <Button
                   component={Link}
-                  href={profile.storeSlug ? `/stores/${profile.storeSlug}` : "/products"}
-                  variant="outlined"
-                  disabled={!savedSellerAccess}
-                  sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}
-                >
-                  View storefront
-                </Button>
-                <Button
-                  component={Link}
                   href="/settings"
                   variant="outlined"
                   sx={{ borderRadius: 999, textTransform: "none", fontWeight: 900 }}

@@ -111,23 +111,7 @@ export default async function TopProductsPage({ searchParams }: TopProductsPageP
                   </Stack>
                 </TableCell>
                 <TableCell>
-                  {product.storeSlug ? (
-                    <Typography
-                      component="a"
-                      href={`/stores/${product.storeSlug}`}
-                      sx={{
-                        color: "text.primary",
-                        textDecoration: "none",
-                        "&:hover": {
-                          color: "primary.main",
-                        },
-                      }}
-                    >
-                      {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
-                    </Typography>
-                  ) : (
-                    product.storeName ?? product.sellerName ?? "Marketplace vendor"
-                  )}
+                  {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
                 </TableCell>
                 <TableCell>{product.purchaseCount}</TableCell>
                 <TableCell>{formatPrice(product.price)}</TableCell>

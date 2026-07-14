@@ -311,6 +311,35 @@ export function OrderTrackingPage({ order }: { order: OrderDetail }) {
                     </Typography>
                   </Box>
                 )}
+
+                {/* Per-item tracking IDs — assigned by Spree at checkout, available
+                    immediately (before the seller's courier tracking number exists). */}
+                {order.items.some((item) => item.trackingId) && (
+                  <Box
+                    sx={(theme) => ({
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: alpha(theme.palette.info.main, 0.07),
+                      border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                    })}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      Spree tracking ID{order.items.length > 1 ? "s" : ""}
+                    </Typography>
+                    <Stack spacing={0.5} sx={{ mt: 0.25 }}>
+                      {order.items
+                        .filter((item) => item.trackingId)
+                        .map((item) => (
+                          <Typography key={item.id} variant="body2" fontFamily="monospace">
+                            {item.trackingId}
+                            <Typography component="span" variant="caption" color="text.secondary">
+                              {" "}— {item.name}
+                            </Typography>
+                          </Typography>
+                        ))}
+                    </Stack>
+                  </Box>
+                )}
               </Stack>
             </Paper>
           </motion.div>

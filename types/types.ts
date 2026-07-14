@@ -73,6 +73,7 @@ export interface OrderDetailItem {
   quantity: number;
   color?: string | null;
   size?: string | null;
+  trackingId?: string | null;
 }
 
 export interface OrderDetail {
@@ -172,17 +173,6 @@ export interface ProductComment {
   isFlagged: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface SellerReview {
-  id: string;
-  productId: string;
-  productName: string;
-  productSlug: string;
-  authorName: string;
-  rating: number | null;
-  body: string;
-  createdAt: string;
 }
 
 export interface Category {
@@ -492,11 +482,6 @@ export interface SellerReport {
   details: string;
   status: string;
   createdAt: string;
-}
-
-export interface SellerDetail extends SellerSummary {
-  products: Product[];
-  recentReviews: SellerReview[];
 }
 
 export interface AdminSellerDetail extends AdminSellerSummary {

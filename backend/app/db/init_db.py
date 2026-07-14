@@ -47,6 +47,9 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     # A6: password-reset token type marker; A6/A10: session-invalidation stamp
     ("verification_tokens", "purpose", "VARCHAR(32) NOT NULL DEFAULT 'email_verification'", "TEXT NOT NULL DEFAULT 'email_verification'"),
     ("users", "password_changed_at", "TIMESTAMP WITH TIME ZONE", "TEXT"),
+    # App-generated tracking ID per order item, embedding product_id — set at
+    # checkout, distinct from the seller-entered courier tracking_number.
+    ("order_items", "tracking_id", "VARCHAR(80)", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.

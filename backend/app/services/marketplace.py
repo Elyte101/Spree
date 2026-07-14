@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from math import ceil
-from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
@@ -13,7 +12,7 @@ from app.services.auth import (
     _default_shipping_address,
     _default_store_location,
 )
-from app.services.catalog import ProductListParams, _load_products, _product_to_dict
+from app.services.catalog import _product_to_dict
 
 
 def _seller_query(include_inactive: bool = False):
@@ -213,156 +212,6 @@ def get_seller_summary(db: Session, identifier: str) -> dict:
     without paying the cost of loading and serializing their product catalog.
     """
     vendor = _resolve_seller(db, identifier)
-    metrics = _batch_seller_metrics(db, [vendor.id])
-    return _serialize_seller_summary(vendor, metrics[vendor.id])
-
-
-def list_public_sellers(db: Session) -> list[dict]:
-    sellers = db.scalars(
-        _seller_query().order_by(User.seller_started_at.desc(), User.created_at.desc())
-    ).all()
-    seller_ids = [s.id for s in sellers]
-    metrics = _batch_seller_metrics(db, seller_ids)
-    return [_serialize_seller_summary(vendor, metrics[vendor.id]) for vendor in sellers]
-
-
-def _recent_seller_reviews(db: Session, seller_id: str, limit: int = 10) -> list[dict]:
-    """Most recent non-flagged, rated reviews across all of a seller's products."""
-    rows = db.execute(
-        select(Comment, Product.name, Product.slug)
-        .join(Product, Product.id == Comment.product_id)
-        .where(
-            Product.seller_id == seller_id,
-            Comment.is_flagged.is_(False),
-        )
-        .order_by(Comment.created_at.desc())
-        .limit(limit)
-    ).all()
-
-    result = []
-    for comment, product_name, product_slug in rows:
-        user = db.get(User, comment.user_id)
-        result.append({
-            "id": comment.id,
-            "productId": comment.product_id,
-            "productName": product_name,
-            "productSlug": product_slug,
-            "authorName": user.name if user else "User",
-            "rating": comment.rating,
-            "body": comment.body,
-            "createdAt": comment.created_at,
-        })
-    return result
-
-
-def get_seller_detail(db: Session, identifier: str) -> dict:
-    vendor = _resolve_seller(db, identifier)
-    metrics = _batch_seller_metrics(db, [vendor.id])
-    summary = _serialize_seller_summary(vendor, metrics[vendor.id])
-    products = _load_products(
-        db,
-        ProductListParams(vendor=vendor.id, limit=24, sort="featured"),
-    )
-
-    return {
-        **summary,
-        "products": [_product_to_dict(product) for product in products],
-        "recentReviews": _recent_seller_reviews(db, vendor.id),
-    }
-
-
-def follow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
-    vendor = _resolve_seller(db, seller_id)
-    follower = db.get(User, follower_id)
-
-    if follower is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
-
-    if follower.id == vendor.id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="You cannot follow your own store",
-        )
-
-    existing_follow = db.scalar(
-        select(SellerFollow).where(
-            SellerFollow.seller_id == vendor.id,
-            SellerFollow.follower_id == follower.id,
-        )
-    )
-    if existing_follow is None:
-        db.add(
-            SellerFollow(
-                id=f"follow-{uuid4().hex[:12]}",
-                seller_id=vendor.id,
-                follower_id=follower.id,
-            )
-        )
-        db.commit()
-
-    metrics = _batch_seller_metrics(db, [vendor.id])
-    return _serialize_seller_summary(vendor, metrics[vendor.id])
-
-
-def unfollow_seller(db: Session, seller_id: str, follower_id: str) -> dict:
-    vendor = _resolve_seller(db, seller_id)
-    follower = db.get(User, follower_id)
-
-    if follower is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
-
-    existing_follow = db.scalar(
-        select(SellerFollow).where(
-            SellerFollow.seller_id == vendor.id,
-            SellerFollow.follower_id == follower.id,
-        )
-    )
-    if existing_follow is not None:
-        db.delete(existing_follow)
-        db.commit()
-
-    metrics = _batch_seller_metrics(db, [vendor.id])
-    return _serialize_seller_summary(vendor, metrics[vendor.id])
-
-
-def report_seller(db: Session, seller_id: str, reporter_id: str, reason: str, details: str) -> dict:
-    vendor = _resolve_seller(db, seller_id, include_inactive=True)
-    reporter = db.get(User, reporter_id)
-
-    if reporter is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Buyer account not found")
-
-    if reporter.id == vendor.id:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="You cannot report your own store",
-        )
-
-    # One open report per reporter per vendor
-    existing_report = db.scalar(
-        select(SellerReport).where(
-            SellerReport.seller_id == vendor.id,
-            SellerReport.reporter_id == reporter.id,
-            SellerReport.status == "open",
-        )
-    )
-    if existing_report is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You already have an open report against this vendor",
-        )
-
-    db.add(
-        SellerReport(
-            id=f"report-{uuid4().hex[:12]}",
-            seller_id=vendor.id,
-            reporter_id=reporter.id,
-            reason=reason,
-            details=details.strip() or None,
-        )
-    )
-    db.commit()
-
     metrics = _batch_seller_metrics(db, [vendor.id])
     return _serialize_seller_summary(vendor, metrics[vendor.id])
 

@@ -373,6 +373,12 @@ class OrderItem(Base):
     color: Mapped[str | None] = mapped_column(String(120), nullable=True)
     size: Mapped[str | None] = mapped_column(String(64), nullable=True)
     commission_rate: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
+    # App-generated at checkout (distinct from tracking_number/tracking_carrier
+    # on Order, which are the real courier code the seller enters later, after
+    # shipping). Embeds product_id so it's traceable to the specific item even
+    # within a multi-product order. Nullable only for rows created before this
+    # column existed — always set for new order items.
+    tracking_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
 
     order: Mapped[Order] = relationship(back_populates="items")
 

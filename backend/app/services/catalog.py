@@ -1084,14 +1084,17 @@ def _recompute_product_rating(db: Session, product_id: str) -> None:
 
 
 def _has_verified_purchase(db: Session, product_id: str, user_id: str) -> bool:
-    """A buyer may review a product only if they have a paid order containing it."""
+    """A buyer may review a product only after they've actually received it —
+    order status must have reached 'delivered' or later (confirmed/paid_out),
+    not merely paid/in_transit.
+    """
     return db.scalar(
         select(OrderItem.id)
         .join(Order, Order.id == OrderItem.order_id)
         .where(
             OrderItem.product_id == product_id,
             Order.user_id == user_id,
-            Order.paid_at.isnot(None),
+            Order.status.in_(["delivered", "confirmed", "paid_out"]),
         )
         .limit(1)
     ) is not None
@@ -1142,7 +1145,7 @@ def create_comment(
     if not _has_verified_purchase(db, product_id, user_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only review products you've purchased",
+            detail="You can only review products you've purchased and received",
         )
 
     existing = db.scalar(

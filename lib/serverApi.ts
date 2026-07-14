@@ -12,7 +12,6 @@ import {
   NotificationItem,
   Product,
   ProductComment,
-  SellerDetail,
   SellerSummary,
   SearchResponse,
   TopProductsResponse,
@@ -462,9 +461,6 @@ export const getAdminOverview = (actorId: string) =>
     { internal: true, fallback: () => null }
   );
 
-export const getSellers = () =>
-  getJson<SellerSummary[]>("/sellers", undefined, { fallback: () => [] });
-
 // Lightweight lookup (no product list) — for surfacing a seller's rating/
 // verified badge from a product detail page without paying the cost of the
 // full seller-profile fetch (which loads and serializes up to 24 products).
@@ -473,29 +469,6 @@ export const getSellerSummary = (identifier: string) =>
     fallback: () => undefined,
     revalidate: CATALOG_REVALIDATE_SECONDS,
   });
-
-export const getSeller = async (identifier: string) => {
-  const response = await fetchBackend(`/sellers/${identifier}`);
-
-  if (response.status === 404) {
-    // Genuinely no store for this identifier — distinct from a 5xx/network
-    // failure below, which throws instead of resolving to undefined, so a
-    // transient backend hiccup can't get misread as "this store 404s".
-    console.warn(
-      JSON.stringify({ event: "seller_not_found", identifier, status: response.status })
-    );
-    return undefined;
-  }
-
-  if (!response.ok) {
-    console.warn(
-      JSON.stringify({ event: "seller_lookup_failed", identifier, status: response.status })
-    );
-    throw new Error(`Backend request failed with status ${response.status}`);
-  }
-
-  return response.json() as Promise<SellerDetail>;
-};
 
 export const getAdminSellers = (actorId: string, filter?: "all" | "blacklisted" | "inactive") =>
   getJson<AdminSellerSummary[]>(

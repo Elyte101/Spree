@@ -359,15 +359,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           {product.name}
         </Typography>
 
-        {/* Store link */}
-        {product.storeName && product.storeSlug && (
-          <Typography
-            component={Link}
-            href={`/stores/${product.storeSlug}`}
-            variant="caption"
-            color="text.secondary"
-            sx={{ textDecoration: "none", "&:hover": { color: "primary.main" } }}
-          >
+        {/* Store attribution */}
+        {product.storeName && (
+          <Typography variant="caption" color="text.secondary">
             by {product.storeName}
           </Typography>
         )}

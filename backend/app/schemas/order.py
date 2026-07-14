@@ -86,6 +86,7 @@ class OrderItemOut(BaseModel):
     quantity: int
     color: str | None
     size: str | None
+    trackingId: str | None = None
 
 
 class OrderOut(BaseModel):
