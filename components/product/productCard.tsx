@@ -47,6 +47,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   const [hovered, setHovered] = React.useState(false);
   const [imgLoaded, setImgLoaded] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
+  const [secondImgError, setSecondImgError] = React.useState(false);
   const liked = isFavorite(product.id);
   const recentlyAdded = lastAddedAt > 0;
   const isCompact = size !== "default";
@@ -58,7 +59,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
     : 0;
 
   const allImages = product.images?.length ? product.images : [product.image];
-  const heroImage = hovered && allImages.length > 1 ? allImages[1] : allImages[0];
+  const primaryImage = allImages[0];
+  const secondaryImage = allImages.length > 1 ? allImages[1] : null;
   // Show "Limited" overlay only when the badge explicitly signals scarcity
   const isLimited = Boolean(product.badge?.toLowerCase().includes("limited"));
 
@@ -68,11 +70,18 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
     return () => window.clearTimeout(id);
   }, [recentlyAdded, lastAddedAt]);
 
-  // Reset both image states when the displayed src changes (e.g. hover to second image)
+  // Reset load/error state only when the underlying product image actually
+  // changes (e.g. this card gets recycled for a different product) — NOT on
+  // hover. The hover preview is a separate, always-mounted overlay (see
+  // below), so nothing here ever needs to re-fade the primary image.
   React.useEffect(() => {
     setImgLoaded(false);
     setImgError(false);
-  }, [heroImage]);
+  }, [primaryImage]);
+
+  React.useEffect(() => {
+    setSecondImgError(false);
+  }, [secondaryImage]);
 
   return (
     <Card
@@ -102,6 +111,12 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             theme.palette.mode === "dark" ? 0.22 : 0.14
           )}`,
         },
+        // Pure CSS hover — the browser's real-time pointer state, not React
+        // state, drives this, so a fast enter+leave can never get "stuck":
+        // there's no intermediate render where this can be left at 1.
+        "&:hover .product-card-hover-preview": {
+          opacity: 1,
+        },
       })}
     >
       {/* Image zone — no padding; Card overflow:hidden clips corners */}
@@ -122,67 +137,93 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                   : alpha(theme.palette.primary.main, 0.04),
             })}
           >
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={heroImage}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                style={{ position: "absolute", inset: 0 }}
-              >
-                {!imgError ? (
-                  <>
-                    {!imgLoaded && (
-                      <Skeleton
-                        variant="rounded"
-                        sx={{ position: "absolute", inset: 0, transform: "none" }}
-                      />
-                    )}
-                    <Image
-                      src={heroImage}
-                      alt={product.name}
-                      fill
-                      sizes={
-                        isCompact
-                          ? "(max-width: 600px) 100vw, 33vw"
-                          : "(max-width: 900px) 100vw, 420px"
-                      }
-                      style={{
-                        objectFit: "cover",
-                        opacity: imgLoaded ? 1 : 0,
-                        transition: "opacity 0.2s ease",
-                      }}
-                      onLoad={() => setImgLoaded(true)}
-                      onError={() => setImgError(true)}
-                    />
-                  </>
-                ) : (
-                  <Stack
-                    alignItems="center"
-                    justifyContent="center"
-                    spacing={0.75}
-                    sx={(theme) => ({
-                      position: "absolute",
-                      inset: 0,
-                      background: `linear-gradient(135deg, ${alpha(
-                        theme.palette.primary.main,
-                        0.07
-                      )}, ${alpha(theme.palette.secondary.main, 0.07)})`,
-                    })}
-                  >
-                    <BrokenImageRounded sx={{ fontSize: 36, color: "text.disabled" }} />
-                    <Typography
-                      variant="caption"
-                      color="text.disabled"
-                      sx={{ textAlign: "center", px: 1 }}
-                    >
-                      Image unavailable
-                    </Typography>
-                  </Stack>
+            {!imgError ? (
+              <>
+                {!imgLoaded && (
+                  <Skeleton
+                    variant="rounded"
+                    sx={{ position: "absolute", inset: 0, transform: "none" }}
+                  />
                 )}
-              </motion.div>
-            </AnimatePresence>
+                {/* Primary image — always mounted; opacity is driven only by
+                    its own load state, never by hover. This is the fix for
+                    "image disappears on fast hover-out": there is no
+                    key-based remount and no hover-triggered opacity reset,
+                    so nothing can ever leave this at opacity 0 once loaded. */}
+                <Image
+                  src={primaryImage}
+                  alt={product.name}
+                  fill
+                  sizes={
+                    isCompact
+                      ? "(max-width: 600px) 100vw, 33vw"
+                      : "(max-width: 900px) 100vw, 420px"
+                  }
+                  style={{
+                    objectFit: "cover",
+                    opacity: imgLoaded ? 1 : 0,
+                    transition: "opacity 0.2s ease",
+                  }}
+                  onLoad={() => setImgLoaded(true)}
+                  onError={() => setImgError(true)}
+                />
+              </>
+            ) : (
+              <Stack
+                alignItems="center"
+                justifyContent="center"
+                spacing={0.75}
+                sx={(theme) => ({
+                  position: "absolute",
+                  inset: 0,
+                  background: `linear-gradient(135deg, ${alpha(
+                    theme.palette.primary.main,
+                    0.07
+                  )}, ${alpha(theme.palette.secondary.main, 0.07)})`,
+                })}
+              >
+                <BrokenImageRounded sx={{ fontSize: 36, color: "text.disabled" }} />
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ textAlign: "center", px: 1 }}
+                >
+                  Image unavailable
+                </Typography>
+              </Stack>
+            )}
+
+            {/* Secondary hover-preview — layered on top of the (always
+                visible) primary, and faded in purely via CSS :hover on the
+                card below. Never key-based, never touches imgLoaded, so a
+                fast hover-in/out can at worst leave this overlay transparent
+                — the primary underneath is unaffected either way. */}
+            {secondaryImage && !secondImgError && (
+              <Box
+                className="product-card-hover-preview"
+                aria-hidden
+                sx={{
+                  position: "absolute",
+                  inset: 0,
+                  opacity: 0,
+                  transition: "opacity 0.25s ease",
+                  pointerEvents: "none",
+                }}
+              >
+                <Image
+                  src={secondaryImage}
+                  alt=""
+                  fill
+                  sizes={
+                    isCompact
+                      ? "(max-width: 600px) 100vw, 33vw"
+                      : "(max-width: 900px) 100vw, 420px"
+                  }
+                  style={{ objectFit: "cover" }}
+                  onError={() => setSecondImgError(true)}
+                />
+              </Box>
+            )}
 
             {/* Image dot indicators */}
             {allImages.length > 1 && (
