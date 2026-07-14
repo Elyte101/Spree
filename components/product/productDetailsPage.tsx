@@ -6,11 +6,13 @@ import { ProductImage } from "@/components/ui/productImage";
 import {
   ArrowBackRounded,
   CheckCircleRounded,
+  CloseRounded,
   LocalShippingOutlined,
   ReplayOutlined,
   StarRounded,
   VerifiedRounded,
   WorkspacePremiumRounded,
+  ZoomInRounded,
 } from "@mui/icons-material";
 import {
   alpha,
@@ -19,7 +21,10 @@ import {
   Button,
   Chip,
   Divider,
+  Fade,
+  IconButton,
   Link,
+  Modal,
   Paper,
   Stack,
   Typography,
@@ -60,6 +65,9 @@ export function ProductDetailsPage({
   const [selectedImage, setSelectedImage] = React.useState(
     product.images[0] ?? product.image
   );
+  const [lightboxOpen, setLightboxOpen] = React.useState(false);
+  const openLightbox = () => setLightboxOpen(true);
+  const closeLightbox = () => setLightboxOpen(false);
   const [selectedColor, setSelectedColor] = React.useState(
     product.colors[0] ?? null
   );
@@ -178,21 +186,66 @@ export function ProductDetailsPage({
               })}
             >
               <Box
-                sx={{
+                role="button"
+                tabIndex={0}
+                aria-label="View full-size image"
+                onClick={openLightbox}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openLightbox();
+                  }
+                }}
+                sx={(theme) => ({
                   position: "relative",
                   width: "100%",
                   // 4:3 gives compact landscape crop; maxHeight prevents
                   // dominating the viewport on very wide containers.
                   aspectRatio: "4 / 3",
                   maxHeight: { xs: "72vw", md: 500 },
-                }}
+                  // Product photos are roughly square — object-fit: contain
+                  // (via ProductImage's objectFit prop below) letterboxes
+                  // rather than cropping, so this background fills the gaps.
+                  bgcolor: theme.palette.mode === "dark" ? alpha("#fff", 0.03) : "action.hover",
+                  cursor: "pointer",
+                  "&:focus-visible": {
+                    outline: `2px solid ${theme.palette.primary.main}`,
+                    outlineOffset: "2px",
+                  },
+                  "&:hover .zoom-affordance": {
+                    opacity: 1,
+                  },
+                })}
               >
                 <ProductImage
                   src={selectedImage}
                   alt={product.name}
                   sizes="(max-width: 1024px) 100vw, 560px"
                   priority
+                  objectFit="contain"
                 />
+                <Box
+                  className="zoom-affordance"
+                  aria-hidden
+                  sx={{
+                    position: "absolute",
+                    bottom: 10,
+                    right: 10,
+                    width: 34,
+                    height: 34,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: alpha("#000", 0.55),
+                    color: "#fff",
+                    opacity: { xs: 1, md: 0 },
+                    transition: "opacity 0.18s ease",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <ZoomInRounded sx={{ fontSize: 19 }} />
+                </Box>
               </Box>
             </Paper>
 
@@ -622,6 +675,61 @@ export function ProductDetailsPage({
             : product.inStock ? "Add to Cart" : "Preorder Now"}
         </Button>
       </Box>
+
+      {/* Full-image lightbox — shows whichever image is currently selected */}
+      <Modal
+        open={lightboxOpen}
+        onClose={closeLightbox}
+        closeAfterTransition
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Full-size view of ${product.name}`}
+      >
+        <Fade in={lightboxOpen}>
+          <Box
+            onClick={closeLightbox}
+            sx={{
+              position: "fixed",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              p: { xs: 2, sm: 4 },
+              outline: "none",
+            }}
+          >
+            <IconButton
+              aria-label="Close image viewer"
+              onClick={closeLightbox}
+              sx={{
+                position: "fixed",
+                top: { xs: 12, sm: 20 },
+                right: { xs: 12, sm: 20 },
+                color: "#fff",
+                bgcolor: alpha("#000", 0.45),
+                "&:hover": { bgcolor: alpha("#000", 0.65) },
+              }}
+            >
+              <CloseRounded />
+            </IconButton>
+            <Box
+              onClick={(event) => event.stopPropagation()}
+              sx={{
+                position: "relative",
+                width: "min(92vw, 900px)",
+                height: "min(85vh, 900px)",
+              }}
+            >
+              <ProductImage
+                src={selectedImage}
+                alt={product.name}
+                sizes="92vw"
+                objectFit="contain"
+              />
+            </Box>
+          </Box>
+        </Fade>
+      </Modal>
     </Box>
   );
 }
