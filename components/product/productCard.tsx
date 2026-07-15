@@ -127,21 +127,22 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           sx={{ display: "block", textDecoration: "none" }}
         >
           <Box
-            sx={(theme) => ({
+            sx={{
               position: "relative",
               aspectRatio: "1 / 1",
               overflow: "hidden",
               // Padding here insets the absolutely-positioned `fill` images
               // below (their containing block is this box's padding edge),
-              // so the background tint shows as an even gutter around the
+              // so the background shows as an even gutter around the
               // fully-visible product photo — Amazon-style "floating" image.
               p: isMicro ? 1 : 1.5,
               boxSizing: "border-box",
-              backgroundColor:
-                theme.palette.mode === "dark"
-                  ? alpha(theme.palette.primary.main, 0.08)
-                  : alpha(theme.palette.primary.main, 0.04),
-            })}
+              // Product photos are shot on pure white — solid white here
+              // (not a theme-derived tint, and not background.paper, which
+              // is dark in dark mode) so the gutter blends invisibly with
+              // every photo in both themes instead of framing it.
+              backgroundColor: "#ffffff",
+            }}
           >
             {!imgError ? (
               <>
