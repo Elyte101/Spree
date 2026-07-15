@@ -114,8 +114,13 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         // Pure CSS hover — the browser's real-time pointer state, not React
         // state, drives this, so a fast enter+leave can never get "stuck":
         // there's no intermediate render where this can be left at 1.
+        // Both rules are driven together so exactly one image layer is ever
+        // fully opaque: the lead image fades out as the hover preview fades in.
         "&:hover .product-card-hover-preview": {
           opacity: 1,
+        },
+        "&:hover .product-card-primary-image": {
+          opacity: 0,
         },
       })}
     >
@@ -152,28 +157,45 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                     sx={{ position: "absolute", inset: 0, transform: "none" }}
                   />
                 )}
-                {/* Primary image — always mounted; opacity is driven only by
-                    its own load state, never by hover. This is the fix for
-                    "image disappears on fast hover-out": there is no
-                    key-based remount and no hover-triggered opacity reset,
-                    so nothing can ever leave this at opacity 0 once loaded. */}
-                <Image
-                  src={primaryImage}
-                  alt={product.name}
-                  fill
-                  sizes={
-                    isCompact
-                      ? "(max-width: 600px) 100vw, 33vw"
-                      : "(max-width: 900px) 100vw, 420px"
-                  }
-                  style={{
-                    objectFit: "contain",
+                {/* Primary image — always mounted; its load-fade (imgLoaded)
+                    is independent of hover. The hover fade-out itself is
+                    driven purely by the Card's `:hover` CSS rule targeting
+                    this wrapper's className (see Card sx above) — never by
+                    the `hovered` React state — so a fast hover-in/out can
+                    never leave this "stuck": there's no intermediate render
+                    where either state could disagree with the real pointer.
+                    Opacity/background live on this wrapper Box rather than
+                    Next Image's own inline style, because an inline style
+                    can't be overridden by an external CSS class (no
+                    !important) — the wrapper's class-based opacity can. */}
+                <Box
+                  className="product-card-primary-image"
+                  sx={{
+                    position: "absolute",
+                    inset: 0,
+                    zIndex: 1,
                     opacity: imgLoaded ? 1 : 0,
                     transition: "opacity 0.2s ease",
+                    // Opaque so the lead photo never bleeds through the
+                    // hover-preview's contain letterbox margins once both
+                    // layers briefly overlap during the cross-fade.
+                    backgroundColor: "#ffffff",
                   }}
-                  onLoad={() => setImgLoaded(true)}
-                  onError={() => setImgError(true)}
-                />
+                >
+                  <Image
+                    src={primaryImage}
+                    alt={product.name}
+                    fill
+                    sizes={
+                      isCompact
+                        ? "(max-width: 600px) 100vw, 33vw"
+                        : "(max-width: 900px) 100vw, 420px"
+                    }
+                    style={{ objectFit: "contain" }}
+                    onLoad={() => setImgLoaded(true)}
+                    onError={() => setImgError(true)}
+                  />
+                </Box>
               </>
             ) : (
               <Stack
@@ -200,11 +222,14 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               </Stack>
             )}
 
-            {/* Secondary hover-preview — layered on top of the (always
-                visible) primary, and faded in purely via CSS :hover on the
-                card below. Never key-based, never touches imgLoaded, so a
-                fast hover-in/out can at worst leave this overlay transparent
-                — the primary underneath is unaffected either way. */}
+            {/* Secondary hover-preview — layered on top of the primary via
+                z-index (not just DOM order) and faded in purely via CSS
+                :hover on the card below. Never key-based, never touches
+                imgLoaded, so a fast hover-in/out can at worst leave this
+                overlay transparent — the primary underneath is unaffected
+                either way. Opaque white background so it fully covers the
+                primary layer once on top, instead of the primary bleeding
+                through this image's own contain letterbox margins. */}
             {secondaryImage && !secondImgError && (
               <Box
                 className="product-card-hover-preview"
@@ -212,9 +237,11 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                 sx={{
                   position: "absolute",
                   inset: 0,
+                  zIndex: 2,
                   opacity: 0,
                   transition: "opacity 0.25s ease",
                   pointerEvents: "none",
+                  backgroundColor: "#ffffff",
                 }}
               >
                 <Image
@@ -232,7 +259,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               </Box>
             )}
 
-            {/* Image dot indicators */}
+            {/* Image dot indicators — zIndex above both image layers (1, 2)
+                so it stays visible whichever one is on top. */}
             {allImages.length > 1 && (
               <Stack
                 direction="row"
@@ -242,6 +270,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                   bottom: 8,
                   left: "50%",
                   transform: "translateX(-50%)",
+                  zIndex: 3,
                 }}
               >
                 {allImages.slice(0, 4).map((_, i) => (
