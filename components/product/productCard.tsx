@@ -290,7 +290,14 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           </Box>
         </Box>
 
-        {/* Overlaid badges — left: discount + limited; right: favorite */}
+        {/* Overlaid badges — left: discount + limited; right: favorite.
+            zIndex above both image layers (1, 2) and the dot indicators (3) —
+            none of the ancestor Boxes between here and the Card form their
+            own stacking context (no z-index/transform/opacity at rest), so
+            these z-index values all compete in the same flat context.
+            Without this, the auto-stacked overlay paints *underneath* any
+            positioned sibling that has an explicit z-index, regardless of
+            DOM order — which is exactly what hid it before. */}
         <Stack
           direction="row"
           justifyContent="space-between"
@@ -300,6 +307,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
             top: 8,
             left: 8,
             right: 8,
+            zIndex: 4,
             pointerEvents: "none",
           }}
         >
@@ -355,7 +363,8 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               backdropFilter: "blur(8px)",
               border: "1px solid",
               borderColor: liked ? alpha("#EF4444", 0.3) : theme.palette.divider,
-              transition: "all 0.18s ease",
+              transition:
+                "background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease",
               "&:hover": {
                 backgroundColor: alpha("#EF4444", 0.08),
                 borderColor: alpha("#EF4444", 0.4),
