@@ -131,6 +131,12 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
               position: "relative",
               aspectRatio: "1 / 1",
               overflow: "hidden",
+              // Padding here insets the absolutely-positioned `fill` images
+              // below (their containing block is this box's padding edge),
+              // so the background tint shows as an even gutter around the
+              // fully-visible product photo — Amazon-style "floating" image.
+              p: isMicro ? 1 : 1.5,
+              boxSizing: "border-box",
               backgroundColor:
                 theme.palette.mode === "dark"
                   ? alpha(theme.palette.primary.main, 0.08)
@@ -160,7 +166,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                       : "(max-width: 900px) 100vw, 420px"
                   }
                   style={{
-                    objectFit: "cover",
+                    objectFit: "contain",
                     opacity: imgLoaded ? 1 : 0,
                     transition: "opacity 0.2s ease",
                   }}
@@ -219,7 +225,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                       ? "(max-width: 600px) 100vw, 33vw"
                       : "(max-width: 900px) 100vw, 420px"
                   }
-                  style={{ objectFit: "cover" }}
+                  style={{ objectFit: "contain" }}
                   onError={() => setSecondImgError(true)}
                 />
               </Box>
