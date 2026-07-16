@@ -168,7 +168,11 @@ export function ProductDetailsPage({
           sx={{
             display: "grid",
             gap: 3,
-            gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.05fr) minmax(320px, 0.95fr)" },
+            // Two-column starting at `md` (900px) — matches the hero image's
+            // own cap reaching its max (500px, also set at `md` below), so
+            // there's never a single-column window with a capped-narrower
+            // image and nothing beside it to fill the rest of the row.
+            gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1.05fr) minmax(320px, 0.95fr)" },
             alignItems: "start",
           }}
         >
@@ -185,7 +189,11 @@ export function ProductDetailsPage({
                 // centered so the box itself is sized close to the photo
                 // rather than an oversized frame around a small image.
                 maxWidth: { xs: "100%", sm: 420, md: 500 },
-                mx: "auto",
+                // alignSelf (not mx: "auto" — that resolved to margin: 0 on
+                // this flex child, leaving it flush-left with the leftover
+                // column width as a blank gap) actually centers a capped
+                // flex item along the cross axis.
+                alignSelf: "center",
                 borderRadius: { xs: 2, md: 2.5 },
                 border: "1px solid",
                 borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.16),
@@ -265,13 +273,19 @@ export function ProductDetailsPage({
               </Box>
             </Paper>
 
-            {/* ── Thumbnails — square tiles, horizontal scroll row ── */}
+            {/* ── Thumbnails — square tiles, horizontal scroll row ──
+                Same maxWidth/alignSelf as the hero Paper so the strip stays
+                aligned under it instead of spanning the full (wider) column
+                once the hero is capped and centered. ── */}
             {product.images.length > 1 && (
               <Box
                 sx={{
                   display: "flex",
                   gap: 1,
                   overflowX: "auto",
+                  width: "100%",
+                  maxWidth: { xs: "100%", sm: 420, md: 500 },
+                  alignSelf: "center",
                   // Reserve bottom space for the thin scrollbar so it doesn't
                   // clip the bottom border of the last row.
                   pb: "3px",
