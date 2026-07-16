@@ -199,14 +199,16 @@ export function ProductDetailsPage({
                 sx={(theme) => ({
                   position: "relative",
                   width: "100%",
-                  // 4:3 gives compact landscape crop; maxHeight prevents
-                  // dominating the viewport on very wide containers.
-                  aspectRatio: "4 / 3",
-                  maxHeight: { xs: "72vw", md: 500 },
-                  // Product photos are roughly square — object-fit: contain
-                  // (via ProductImage's objectFit prop below) letterboxes
-                  // rather than cropping, so this background fills the gaps.
-                  bgcolor: theme.palette.mode === "dark" ? alpha("#fff", 0.03) : "action.hover",
+                  // Square container + object-fit: contain (below) fits both
+                  // portrait and landscape product photos without ever
+                  // cropping — no fixed pixel height, so it scales naturally
+                  // with the (responsive) grid column's own width.
+                  aspectRatio: "1 / 1",
+                  // Product photos are shot on white — solid white so
+                  // contain's letterboxing reads as intentional padding
+                  // rather than a mismatched frame (same treatment as the
+                  // product-listing cards).
+                  bgcolor: "#ffffff",
                   cursor: "pointer",
                   "&:focus-visible": {
                     outline: `2px solid ${theme.palette.primary.main}`,
@@ -220,9 +222,15 @@ export function ProductDetailsPage({
                 <ProductImage
                   src={selectedImage}
                   alt={product.name}
-                  sizes="(max-width: 1024px) 100vw, 560px"
+                  // Breakpoint matches the grid's actual column switch (MUI's
+                  // `lg`, 1200px) — the old 1024px cutoff under-claimed a
+                  // ~1076px-wide single-column render as "560px" in the
+                  // 1024-1199px gap, which is what caused the blur. 640px
+                  // approximates the two-column image slot at >=lg (grid
+                  // column ≈ 634px inside the page's 1280px max width).
+                  sizes="(max-width: 1199px) 100vw, 640px"
                   priority
-                  objectFit="cover"
+                  objectFit="contain"
                 />
                 <Box
                   className="zoom-affordance"
@@ -281,14 +289,21 @@ export function ProductDetailsPage({
                       flexShrink: 0,
                       width: { xs: 62, sm: 76, md: 88 },
                       height: { xs: 62, sm: 76, md: 88 },
-                      // No padding — image fills the tile completely.
-                      p: 0,
+                      // Small padding insets the contained image (its
+                      // containing block is this box's padding edge) so a
+                      // portrait photo doesn't touch the tile edges.
+                      p: 0.5,
+                      boxSizing: "border-box",
                       position: "relative",
                       borderRadius: { xs: 1.5, md: 2 },
                       overflow: "hidden",
                       cursor: "pointer",
                       scrollSnapAlign: "start",
-                      bgcolor: "background.paper",
+                      // Product photos are shot on white — solid white (not
+                      // background.paper, which is dark in dark mode) so the
+                      // gutter blends invisibly, same treatment as the hero
+                      // image and the /products listing cards.
+                      bgcolor: "#ffffff",
                       // Selected: accent border + outer ring.
                       border: "2px solid",
                       borderColor: selectedImage === image
@@ -309,10 +324,16 @@ export function ProductDetailsPage({
                       },
                     })}
                   >
+                    {/* Explicit objectFit="contain" (not the component's
+                        implicit "cover" default) — set once here, in the
+                        single place every thumbnail renders through, so
+                        every tile shows the full product uniformly instead
+                        of a per-tile-inconsistent crop. */}
                     <ProductImage
                       src={image}
                       alt={`${product.name} view ${i + 1}`}
                       sizes="88px"
+                      objectFit="contain"
                     />
                   </Box>
                 ))}
