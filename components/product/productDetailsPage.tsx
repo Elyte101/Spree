@@ -173,11 +173,19 @@ export function ProductDetailsPage({
           }}
         >
           <Stack spacing={1.5}>
-            {/* ── Main image — no padding, image fills edge-to-edge ── */}
+            {/* ── Main image — capped + centered, like the lightbox's own
+                min(92vw,900px) box, instead of stretching to the full grid
+                column edge-to-edge ── */}
             <Paper
               elevation={0}
               sx={(theme) => ({
                 p: 0,
+                width: "100%",
+                // Mobile: fills the column. Tablet/desktop: capped and
+                // centered so the box itself is sized close to the photo
+                // rather than an oversized frame around a small image.
+                maxWidth: { xs: "100%", sm: 420, md: 500 },
+                mx: "auto",
                 borderRadius: { xs: 2, md: 2.5 },
                 border: "1px solid",
                 borderColor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.22 : 0.16),
@@ -199,11 +207,13 @@ export function ProductDetailsPage({
                 sx={(theme) => ({
                   position: "relative",
                   width: "100%",
-                  // Square container + object-fit: contain (below) fits both
-                  // portrait and landscape product photos without ever
-                  // cropping — no fixed pixel height, so it scales naturally
-                  // with the (responsive) grid column's own width.
+                  // Square + object-fit: contain (below) fits both portrait
+                  // and landscape product photos without ever cropping —
+                  // no forced non-square ratio, and maxHeight keeps it from
+                  // dominating the viewport on short/wide windows, same as
+                  // the lightbox's own min(85vh, 900px) cap.
                   aspectRatio: "1 / 1",
+                  maxHeight: "70vh",
                   // Product photos are shot on white — solid white so
                   // contain's letterboxing reads as intentional padding
                   // rather than a mismatched frame (same treatment as the
@@ -222,13 +232,11 @@ export function ProductDetailsPage({
                 <ProductImage
                   src={selectedImage}
                   alt={product.name}
-                  // Breakpoint matches the grid's actual column switch (MUI's
-                  // `lg`, 1200px) — the old 1024px cutoff under-claimed a
-                  // ~1076px-wide single-column render as "560px" in the
-                  // 1024-1199px gap, which is what caused the blur. 640px
-                  // approximates the two-column image slot at >=lg (grid
-                  // column ≈ 634px inside the page's 1280px max width).
-                  sizes="(max-width: 1199px) 100vw, 640px"
+                  // The box now caps at 420px (sm, 600-899px) / 500px (md+,
+                  // 900px+) instead of stretching to the grid column, so
+                  // those caps — not the grid's own breakpoint — are the
+                  // real rendered width above 600px viewport width.
+                  sizes="(max-width: 599px) 100vw, (max-width: 899px) 420px, 500px"
                   priority
                   objectFit="contain"
                 />
