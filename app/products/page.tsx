@@ -18,23 +18,37 @@ export const revalidate = 60;
 const PRODUCTS_PER_PAGE = 12;
 
 interface PageProps {
-  searchParams: Promise<{ search?: string }>;
+  searchParams: Promise<{ search?: string; category?: string; collection?: string }>;
 }
 
 export default async function ProductsPage({ searchParams }: PageProps) {
-  const { search = "" } = await searchParams;
+  const { search = "", category: categoryParam = "", collection: collectionParam = "" } = await searchParams;
 
-  const [homeFeed, brands, collections, sellerLocations, initialCatalog] = await Promise.all([
+  // Fetched before getProducts (not in the same Promise.all) so an invalid or
+  // stale ?category=/?collection= value can be validated against the real
+  // list and dropped before it ever reaches the catalog fetch — avoids an
+  // SSR/client mismatch where the server renders a filtered-to-empty result
+  // for a bad param while the client falls back to "All".
+  const [homeFeed, brands, collections, sellerLocations] = await Promise.all([
     getHomeFeed(),
     getBrands(),
     getCollections(),
     getSellerLocations(),
-    getProducts(
-      { limit: PRODUCTS_PER_PAGE, ...(search ? { search } : {}) },
-      undefined,
-      { revalidateSeconds: CATALOG_REVALIDATE_SECONDS }
-    ),
   ]);
+
+  const category = categoryParam && homeFeed.categories.some((c) => c.name === categoryParam) ? categoryParam : "";
+  const collection = collectionParam && collections.some((c) => c.slug === collectionParam) ? collectionParam : "";
+
+  const initialCatalog = await getProducts(
+    {
+      limit: PRODUCTS_PER_PAGE,
+      ...(search ? { search } : {}),
+      ...(category ? { category } : {}),
+      ...(collection ? { collection } : {}),
+    },
+    undefined,
+    { revalidateSeconds: CATALOG_REVALIDATE_SECONDS }
+  );
 
   return (
     <ProductListingPage
@@ -44,6 +58,8 @@ export default async function ProductsPage({ searchParams }: PageProps) {
       collections={collections}
       sellerLocations={sellerLocations}
       initialSearch={search}
+      initialCategory={category}
+      initialCollection={collection}
     />
   );
 }

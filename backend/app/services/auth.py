@@ -492,8 +492,12 @@ def request_password_reset(db: Session, email: str) -> None:
         event_type="password_reset",
         recipient_id=user.id,
         title="Reset your Spree password",
+        # Channel-neutral wording — this body is shared verbatim between the
+        # email and the in-app notification (notify_safe has no per-channel
+        # body override); "ignore this email" read as a stray email fragment
+        # when surfaced as an in-app notification.
         body="We received a request to reset your password. This link expires in 1 hour. "
-        "If you didn't request this, you can safely ignore this email.",
+        "If you didn't request this, you can safely ignore this notification.",
         notif_type="account",
         email_subject="Reset your Spree password",
         cta_label="Reset password",

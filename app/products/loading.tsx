@@ -1,4 +1,4 @@
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Paper, Skeleton, Stack } from "@mui/material";
 
 import { ProductGridSkeleton } from "@/components/skeletons/productGridSkeleton";
 
@@ -15,9 +15,11 @@ export default function ProductsLoading() {
             borderColor: "divider",
           }}
         >
-          <Typography variant="h4" sx={{ fontWeight: 900 }}>
-            Loading products...
-          </Typography>
+          {/* Mirrors the loaded header's "Shop All Products" title +
+              subtitle shape — a skeleton, not literal text, since this can
+              be visible in the SSR'd HTML before the real page resolves. */}
+          <Skeleton variant="text" width={220} height={40} />
+          <Skeleton variant="text" width={160} height={24} />
         </Paper>
         <ProductGridSkeleton count={12} dense />
       </Stack>

@@ -96,7 +96,7 @@ const escrowSteps = [
   },
   {
     step: "02",
-    title: "vendor dispatches",
+    title: "Vendor dispatches",
     body: "The verified vendor packs and ships your item, uploads a tracking number, and you receive live delivery updates.",
     accent: "#0EA5E9",
     icon: <LocalShippingRounded sx={{ fontSize: 22 }} />,
@@ -868,7 +868,7 @@ export function LandingPage({
                 <motion.div key={collection.id} variants={scaleItem}>
                   <Paper
                     component={Link}
-                    href="/products"
+                    href={`/products?collection=${encodeURIComponent(collection.slug)}`}
                     sx={(theme) => ({
                       p: 3,
                       display: "block",

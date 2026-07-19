@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AutoAwesome,
   CategoryRounded,
@@ -57,6 +58,8 @@ interface ProductListingPageProps {
   collections: Collection[];
   sellerLocations: SellerLocation[];
   initialSearch?: string;
+  initialCategory?: string;
+  initialCollection?: string;
 }
 
 const sortOptions: Array<{ value: CatalogSort; label: string }> = [
@@ -77,6 +80,8 @@ export function ProductListingPage({
   collections,
   sellerLocations,
   initialSearch,
+  initialCategory,
+  initialCollection,
 }: ProductListingPageProps) {
   const selectedCategory = useCatalogFiltersStore((state) => state.category);
   const selectedBrand = useCatalogFiltersStore((state) => state.brand);
@@ -101,17 +106,53 @@ export function ProductListingPage({
   const setMaxPrice = useCatalogFiltersStore((state) => state.setMaxPrice);
   const setSearch = useCatalogFiltersStore((state) => state.setSearch);
   const resetCatalogFilters = useCatalogFiltersStore((state) => state.reset);
-  // Seed the store from a URL ?search= param on first render so the header
-  // search bar navigates correctly to /products?search=term.
+  // Seed the store from ?search=/?category=/?collection= on first render —
+  // so the header search bar, the homepage category tiles, and the homepage
+  // collection cards all land on a pre-filtered view instead of "All". The
+  // page.tsx server component already validated category/collection against
+  // the real lists, so any non-empty value here is trusted as-is.
   const initialSearchRef = React.useRef(initialSearch ?? "");
+  const initialCategoryRef = React.useRef(initialCategory ?? "");
+  const initialCollectionRef = React.useRef(initialCollection ?? "");
   React.useEffect(() => {
     if (initialSearchRef.current) {
       setSearch(initialSearchRef.current);
       setSearchInput(initialSearchRef.current);
     }
-  // setSearch is a stable Zustand action — running once on mount is intentional.
+    if (initialCategoryRef.current) {
+      setSelectedCategory(initialCategoryRef.current);
+    }
+    if (initialCollectionRef.current) {
+      setSelectedCollection(initialCollectionRef.current);
+    }
+  // These are stable Zustand actions — running once on mount is intentional.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the URL in sync with category/collection so filtered views are
+  // shareable and back/forward navigation works. Skips the very first run —
+  // that pass is the mount-time seed (URL -> store) above; syncing here too
+  // would race it, since both effects see the same pre-seed render.
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSearchParams = useSearchParams();
+  const hasSkippedInitialUrlSync = React.useRef(false);
+  React.useEffect(() => {
+    if (!hasSkippedInitialUrlSync.current) {
+      hasSkippedInitialUrlSync.current = true;
+      return;
+    }
+    const params = new URLSearchParams(urlSearchParams.toString());
+    if (selectedCategory) params.set("category", selectedCategory);
+    else params.delete("category");
+    if (selectedCollection) params.set("collection", selectedCollection);
+    else params.delete("collection");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  // Reading urlSearchParams fresh each run (not listing it) avoids a loop:
+  // our own router.replace() below would otherwise re-trigger this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, selectedCollection, pathname, router]);
 
   const [searchInput, setSearchInput] = React.useState(initialSearch ?? search);
   const deferredSearch = React.useDeferredValue(searchInput.trim());
