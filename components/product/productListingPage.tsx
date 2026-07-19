@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AutoAwesome,
   CategoryRounded,
@@ -129,30 +129,32 @@ export function ProductListingPage({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the URL in sync with category/collection so filtered views are
-  // shareable and back/forward navigation works. Skips the very first run —
-  // that pass is the mount-time seed (URL -> store) above; syncing here too
-  // would race it, since both effects see the same pre-seed render.
+  // Keep the URL in sync with search/category/collection so filtered views
+  // are shareable and back/forward navigation works. Skips the very first
+  // run — that pass is the mount-time seed (URL -> store) above; syncing
+  // here too would race it, since both effects see the same pre-seed render.
+  //
+  // Built entirely from the Zustand store (search/selectedCategory/
+  // selectedCollection), never from the router's own useSearchParams() —
+  // that value is a snapshot of the *previous* committed URL, and cloning
+  // it as the base for the *next* URL is exactly the stale-state-read bug
+  // that let a rapid second click apply on top of a not-yet-committed first
+  // one instead of the value that was actually just clicked.
   const router = useRouter();
   const pathname = usePathname();
-  const urlSearchParams = useSearchParams();
   const hasSkippedInitialUrlSync = React.useRef(false);
   React.useEffect(() => {
     if (!hasSkippedInitialUrlSync.current) {
       hasSkippedInitialUrlSync.current = true;
       return;
     }
-    const params = new URLSearchParams(urlSearchParams.toString());
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
     if (selectedCategory) params.set("category", selectedCategory);
-    else params.delete("category");
     if (selectedCollection) params.set("collection", selectedCollection);
-    else params.delete("collection");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  // Reading urlSearchParams fresh each run (not listing it) avoids a loop:
-  // our own router.replace() below would otherwise re-trigger this effect.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedCollection, pathname, router]);
+  }, [search, selectedCategory, selectedCollection, pathname, router]);
 
   const [searchInput, setSearchInput] = React.useState(initialSearch ?? search);
   const deferredSearch = React.useDeferredValue(searchInput.trim());
