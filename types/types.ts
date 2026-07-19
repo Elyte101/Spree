@@ -471,6 +471,13 @@ export interface SellerSummary {
   createdAt: string;
 }
 
+// A review left on one of a seller's products, surfaced on their public
+// profile page — same shape as ProductComment plus which product it's on.
+export interface SellerReview extends ProductComment {
+  productName: string;
+  productSlug: string;
+}
+
 // Extended shape with PII — only ever returned by admin-authenticated endpoints.
 export interface AdminSellerSummary extends SellerSummary {
   email: string;

@@ -18,6 +18,7 @@ from app.services.marketplace import (
     get_admin_seller_detail,
     get_seller_summary,
     list_admin_sellers,
+    list_seller_reviews,
     list_top_products,
     list_verification_queue,
     reject_seller,
@@ -31,6 +32,11 @@ router = APIRouter()
 @router.get("/sellers/{identifier}/summary", response_model=SellerSummaryOut)
 def seller_summary(identifier: str, db: DBSession):
     return get_seller_summary(db, identifier)
+
+
+@router.get("/sellers/{identifier}/reviews")
+def seller_reviews(identifier: str, db: DBSession, limit: int = Query(default=8, le=50)):
+    return list_seller_reviews(db, identifier, limit)
 
 
 @router.get("/admin/verification", response_model=list[AdminSellerSummaryOut])

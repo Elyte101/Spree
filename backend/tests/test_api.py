@@ -2644,3 +2644,119 @@ def test_products_filter_by_seller_country_and_region():
                 if u:
                     db.delete(u)
             db.commit()
+
+
+def test_seller_summary_rating_and_reviews_endpoints():
+    """Seller rating/review-count on GET /sellers/{id}/summary must be a live
+    aggregate of the seller's own product reviews (no separate seller_reviews
+    table), and GET /sellers/{id}/reviews must return them newest-first with
+    the product each was left on — powers the public seller profile page.
+    """
+    from app.db.session import SessionLocal
+    from app.db.models import Comment, Product, User
+
+    suffix = uuid4().hex[:8]
+    seller_id = f"seller-summary-test-{suffix}"
+    buyer_id = f"buyer-summary-test-{suffix}"
+    spammer_id = f"spammer-summary-test-{suffix}"
+    product_ids: dict[str, str] = {}
+    product_slugs: dict[str, str] = {}
+    comment_ids: list[str] = []
+
+    try:
+        with TestClient(app) as client:
+            with SessionLocal() as db:
+                db.add_all([
+                    User(
+                        id=seller_id, name="Summary Test Vendor", email=f"{seller_id}@test.com",
+                        password_hash="x", role="vendor", store_name=f"Summary Store {suffix}",
+                        store_slug=f"summary-store-{suffix}", seller_status="active",
+                        government_id_verified=True,
+                    ),
+                    User(
+                        id=buyer_id, name="Summary Test Buyer", email=f"{buyer_id}@test.com",
+                        password_hash="x", role="customer",
+                    ),
+                    User(
+                        id=spammer_id, name="Summary Test Spammer", email=f"{spammer_id}@test.com",
+                        password_hash="x", role="customer",
+                    ),
+                ])
+                db.commit()
+
+            for label in ("a", "b"):
+                payload = _create_product_payload()
+                payload["name"] = f"Summary Product {label} {suffix}"
+                resp = client.post(
+                    "/api/v1/products",
+                    json=payload,
+                    headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token("user-admin", "admin")},
+                )
+                assert resp.status_code == 201, resp.text
+                product_ids[label] = resp.json()["id"]
+                product_slugs[label] = resp.json()["slug"]
+
+            with SessionLocal() as db:
+                for label in ("a", "b"):
+                    product = db.get(Product, product_ids[label])
+                    product.seller_id = seller_id
+                    db.add(product)
+                db.commit()
+
+                comment_ids = [f"c-summary-{suffix}-1", f"c-summary-{suffix}-2", f"c-summary-{suffix}-flagged"]
+                db.add_all([
+                    Comment(id=comment_ids[0], product_id=product_ids["a"], user_id=buyer_id,
+                            body="Loved it", rating=5),
+                    Comment(id=comment_ids[1], product_id=product_ids["b"], user_id=buyer_id,
+                            body="Pretty good", rating=3),
+                    # Flagged (different user — one comment per buyer/product) —
+                    # must be excluded from both rating and the reviews list.
+                    Comment(id=comment_ids[2], product_id=product_ids["a"], user_id=spammer_id,
+                            body="spam", rating=1, is_flagged=True),
+                ])
+                db.commit()
+
+            summary_resp = client.get(f"/api/v1/sellers/{seller_id}/summary")
+            assert summary_resp.status_code == 200, summary_resp.text
+            summary = summary_resp.json()
+            assert summary["sellerRating"] == 4.0  # avg(5, 3), flagged excluded
+            assert summary["sellerReviewsCount"] == 2
+            assert summary["sellerBadge"] == "Verified vendor"
+            # G17: public summary must never include PII.
+            assert "email" not in summary
+            assert "phone" not in summary
+            assert "sellerContact" not in summary
+            assert summary["storeLocation"] == {
+                "addressLine1": "", "city": "", "state": "", "postalCode": "", "country": "Ghana",
+            }
+
+            # Same lookup by store slug (not just raw id) must resolve too.
+            slug_resp = client.get(f"/api/v1/sellers/summary-store-{suffix}/summary")
+            assert slug_resp.status_code == 200
+            assert slug_resp.json()["id"] == seller_id
+
+            reviews_resp = client.get(f"/api/v1/sellers/{seller_id}/reviews")
+            assert reviews_resp.status_code == 200, reviews_resp.text
+            reviews = reviews_resp.json()
+            assert len(reviews) == 2
+            bodies = {r["body"] for r in reviews}
+            assert bodies == {"Loved it", "Pretty good"}
+            assert all(not r["isFlagged"] for r in reviews)
+            by_body = {r["body"]: r for r in reviews}
+            assert by_body["Loved it"]["productName"] == f"Summary Product a {suffix}"
+            assert by_body["Loved it"]["productSlug"] == product_slugs["a"]
+    finally:
+        with SessionLocal() as db:
+            for cid in comment_ids:
+                c = db.get(Comment, cid)
+                if c:
+                    db.delete(c)
+            for pid in product_ids.values():
+                p = db.get(Product, pid)
+                if p:
+                    db.delete(p)
+            for uid in (seller_id, buyer_id, spammer_id):
+                u = db.get(User, uid)
+                if u:
+                    db.delete(u)
+            db.commit()

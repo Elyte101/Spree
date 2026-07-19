@@ -13,6 +13,7 @@ import {
   Product,
   ProductComment,
   SellerLocation,
+  SellerReview,
   SellerSummary,
   SearchResponse,
   TopProductsResponse,
@@ -474,6 +475,14 @@ export const getAdminOverview = (actorId: string) =>
 export const getSellerSummary = (identifier: string) =>
   getJson<SellerSummary | undefined>(`/sellers/${identifier}/summary`, undefined, {
     fallback: () => undefined,
+    revalidate: CATALOG_REVALIDATE_SECONDS,
+  });
+
+// Recent reviews across all of a seller's products — for the public seller
+// profile page's "recent reviews" section.
+export const getSellerReviews = (identifier: string, limit = 8) =>
+  getJson<SellerReview[]>(`/sellers/${identifier}/reviews${buildQueryString({ limit })}`, undefined, {
+    fallback: () => [],
     revalidate: CATALOG_REVALIDATE_SECONDS,
   });
 

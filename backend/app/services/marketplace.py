@@ -12,7 +12,7 @@ from app.services.auth import (
     _default_shipping_address,
     _default_store_location,
 )
-from app.services.catalog import _product_to_dict
+from app.services.catalog import _comment_to_dict, _product_to_dict
 
 
 def _seller_query(include_inactive: bool = False):
@@ -214,6 +214,36 @@ def get_seller_summary(db: Session, identifier: str) -> dict:
     vendor = _resolve_seller(db, identifier)
     metrics = _batch_seller_metrics(db, [vendor.id])
     return _serialize_seller_summary(vendor, metrics[vendor.id])
+
+
+def list_seller_reviews(db: Session, identifier: str, limit: int = 8) -> list[dict]:
+    """Recent non-flagged, rated reviews across all of a seller's products —
+    for the public seller profile page. Same shape as a single product's
+    comment list (_comment_to_dict), plus the product name/slug so each
+    review can link back to the product it was left on.
+    """
+    vendor = _resolve_seller(db, identifier)
+    rows = db.execute(
+        select(Comment, Product.name, Product.slug)
+        .join(Product, Comment.product_id == Product.id)
+        .where(
+            Product.seller_id == vendor.id,
+            Comment.is_flagged.is_(False),
+            Comment.rating.isnot(None),
+        )
+        .order_by(Comment.created_at.desc())
+        .limit(limit)
+    ).all()
+
+    result = []
+    for comment, product_name, product_slug in rows:
+        user = db.get(User, comment.user_id)
+        result.append({
+            **_comment_to_dict(comment, user),
+            "productName": product_name,
+            "productSlug": product_slug,
+        })
+    return result
 
 
 def list_admin_sellers(db: Session, filter_type: str = "all") -> list[dict]:

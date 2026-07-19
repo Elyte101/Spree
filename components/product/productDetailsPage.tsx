@@ -553,9 +553,29 @@ export function ProductDetailsPage({
                   <Typography variant="caption" color="text.secondary">
                     Sold by
                   </Typography>
-                  <Typography variant="body1" fontWeight={700}>
-                    {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
-                  </Typography>
+                  {/* Only linked when `seller` resolved server-side — a
+                      product's seller may not have a public profile (e.g. no
+                      store name set), in which case /seller/[id] would 404. */}
+                  {seller ? (
+                    <Typography
+                      component={NextLink}
+                      href={`/seller/${product.storeSlug || product.sellerId}`}
+                      variant="body1"
+                      fontWeight={700}
+                      sx={{
+                        display: "block",
+                        color: "text.primary",
+                        textDecoration: "none",
+                        "&:hover": { color: "primary.main", textDecoration: "underline" },
+                      }}
+                    >
+                      {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body1" fontWeight={700}>
+                      {product.storeName ?? product.sellerName ?? "Marketplace vendor"}
+                    </Typography>
+                  )}
                   <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
                     {product.sellerType ? (
                       <Typography variant="body2" color="text.secondary">
