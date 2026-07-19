@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AutoAwesome,
   CategoryRounded,
@@ -58,8 +58,6 @@ interface ProductListingPageProps {
   collections: Collection[];
   sellerLocations: SellerLocation[];
   initialSearch?: string;
-  initialCategory?: string;
-  initialCollection?: string;
 }
 
 const sortOptions: Array<{ value: CatalogSort; label: string }> = [
@@ -80,12 +78,8 @@ export function ProductListingPage({
   collections,
   sellerLocations,
   initialSearch,
-  initialCategory,
-  initialCollection,
 }: ProductListingPageProps) {
-  const selectedCategory = useCatalogFiltersStore((state) => state.category);
   const selectedBrand = useCatalogFiltersStore((state) => state.brand);
-  const selectedCollection = useCatalogFiltersStore((state) => state.collection);
   const sellerCountry = useCatalogFiltersStore((state) => state.sellerCountry);
   const sellerRegion = useCatalogFiltersStore((state) => state.sellerRegion);
   const sort = useCatalogFiltersStore((state) => state.sort);
@@ -94,9 +88,7 @@ export function ProductListingPage({
   const minPrice = useCatalogFiltersStore((state) => state.minPrice);
   const maxPrice = useCatalogFiltersStore((state) => state.maxPrice);
   const search = useCatalogFiltersStore((state) => state.search);
-  const setSelectedCategory = useCatalogFiltersStore((state) => state.setCategory);
   const setSelectedBrand = useCatalogFiltersStore((state) => state.setBrand);
-  const setSelectedCollection = useCatalogFiltersStore((state) => state.setCollection);
   const setSellerCountry = useCatalogFiltersStore((state) => state.setSellerCountry);
   const setSellerRegion = useCatalogFiltersStore((state) => state.setSellerRegion);
   const setSort = useCatalogFiltersStore((state) => state.setSort);
@@ -106,55 +98,83 @@ export function ProductListingPage({
   const setMaxPrice = useCatalogFiltersStore((state) => state.setMaxPrice);
   const setSearch = useCatalogFiltersStore((state) => state.setSearch);
   const resetCatalogFilters = useCatalogFiltersStore((state) => state.reset);
-  // Seed the store from ?search=/?category=/?collection= on first render —
-  // so the header search bar, the homepage category tiles, and the homepage
-  // collection cards all land on a pre-filtered view instead of "All". The
-  // page.tsx server component already validated category/collection against
-  // the real lists, so any non-empty value here is trusted as-is.
+
+  // category/collection have exactly ONE source of truth: the URL. No
+  // Zustand state, no seed-on-mount, no reactive sync effect — chip
+  // highlighting, the API params, and the address bar all derive from this
+  // same read on every render, so they can never disagree with each other.
+  // (Root cause of the "one click behind" bug: the previous design kept
+  // category in a separate Zustand field, synced to the URL via a
+  // useEffect. That effect's dependency-triggered re-run is itself a
+  // scheduling hop *after* the state update it's reacting to — on a slow
+  // connection or a rapid second click, the URL update, the store update,
+  // and the react-query fetch could each be one step out of phase with the
+  // others, since three independent state copies were involved instead of one.)
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Validated against the real lists (already available as props) so a
+  // garbage/stale ?category= value falls back to "All" instead of silently
+  // filtering to zero results with no chip highlighted.
+  const rawCategory = searchParams.get("category") ?? "";
+  const activeCategory = homeFeed.categories.some((c) => c.name === rawCategory) ? rawCategory : "";
+  const rawCollection = searchParams.get("collection") ?? "";
+  const activeCollection = collections.some((c) => c.slug === rawCollection) ? rawCollection : "";
+
+  // Clicked value is used directly — never read back from activeCategory/
+  // activeCollection within the same handler tick. searchParams itself is
+  // safe to clone here (unlike the old effect) because it's read fresh from
+  // this render's closure at the moment of the click, not from a ref or an
+  // effect that fires on a later, possibly-stale render.
+  const applyCategory = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("category", next);
+    else params.delete("category");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    setPage(1);
+  };
+  const applyCollection = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("collection", next);
+    else params.delete("collection");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    setPage(1);
+  };
+
+  // Seed the store from ?search= on first render so the header search bar
+  // navigates correctly to /products?search=term.
   const initialSearchRef = React.useRef(initialSearch ?? "");
-  const initialCategoryRef = React.useRef(initialCategory ?? "");
-  const initialCollectionRef = React.useRef(initialCollection ?? "");
   React.useEffect(() => {
     if (initialSearchRef.current) {
       setSearch(initialSearchRef.current);
       setSearchInput(initialSearchRef.current);
     }
-    if (initialCategoryRef.current) {
-      setSelectedCategory(initialCategoryRef.current);
-    }
-    if (initialCollectionRef.current) {
-      setSelectedCollection(initialCollectionRef.current);
-    }
-  // These are stable Zustand actions — running once on mount is intentional.
+  // setSearch is a stable Zustand action — running once on mount is intentional.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the URL in sync with search/category/collection so filtered views
-  // are shareable and back/forward navigation works. Skips the very first
-  // run — that pass is the mount-time seed (URL -> store) above; syncing
-  // here too would race it, since both effects see the same pre-seed render.
-  //
-  // Built entirely from the Zustand store (search/selectedCategory/
-  // selectedCollection), never from the router's own useSearchParams() —
-  // that value is a snapshot of the *previous* committed URL, and cloning
-  // it as the base for the *next* URL is exactly the stale-state-read bug
-  // that let a rapid second click apply on top of a not-yet-committed first
-  // one instead of the value that was actually just clicked.
-  const router = useRouter();
-  const pathname = usePathname();
-  const hasSkippedInitialUrlSync = React.useRef(false);
+  // Keep ?search= in the URL in sync too, preserving whatever category/
+  // collection are currently active. Skips the very first run (the mount
+  // seed above). category/collection are read fresh from searchParams, not
+  // from a stale snapshot, so this can't reapply an old filter either.
+  const hasSkippedInitialSearchSync = React.useRef(false);
   React.useEffect(() => {
-    if (!hasSkippedInitialUrlSync.current) {
-      hasSkippedInitialUrlSync.current = true;
+    if (!hasSkippedInitialSearchSync.current) {
+      hasSkippedInitialSearchSync.current = true;
       return;
     }
-    const params = new URLSearchParams();
+    const params = new URLSearchParams(searchParams.toString());
     if (search) params.set("search", search);
-    if (selectedCategory) params.set("category", selectedCategory);
-    if (selectedCollection) params.set("collection", selectedCollection);
+    else params.delete("search");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [search, selectedCategory, selectedCollection, pathname, router]);
+  // searchParams intentionally excluded: this effect only reacts to `search`
+  // changing (from the debounced input below); including searchParams would
+  // make our own router.replace() re-trigger it.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, pathname, router]);
 
   const [searchInput, setSearchInput] = React.useState(initialSearch ?? search);
   const deferredSearch = React.useDeferredValue(searchInput.trim());
@@ -187,9 +207,9 @@ export function ProductListingPage({
       limit: PRODUCTS_PER_PAGE,
       sort,
       search: search || undefined,
-      category: selectedCategory || undefined,
+      category: activeCategory || undefined,
       brand: selectedBrand || undefined,
-      collection: selectedCollection || undefined,
+      collection: activeCollection || undefined,
       sellerCountry: sellerCountry || undefined,
       sellerRegion: sellerRegion || undefined,
       inStock: inStockOnly ? true : undefined,
@@ -197,16 +217,16 @@ export function ProductListingPage({
       maxPrice,
     }),
     [
-      inStockOnly, maxPrice, minPrice, page, search, selectedBrand, selectedCategory,
-      selectedCollection, sellerCountry, sellerRegion, sort,
+      activeCategory, activeCollection, inStockOnly, maxPrice, minPrice, page, search,
+      selectedBrand, sellerCountry, sellerRegion, sort,
     ]
   );
 
-  const useInitialCatalog =
+  const filtersMatchInitialCatalog =
     !search &&
-    !selectedCategory &&
+    !activeCategory &&
     !selectedBrand &&
-    !selectedCollection &&
+    !activeCollection &&
     !sellerCountry &&
     !sellerRegion &&
     !inStockOnly &&
@@ -214,6 +234,20 @@ export function ProductListingPage({
     maxPrice === undefined &&
     sort === initialCatalog.sort &&
     page === initialCatalog.page;
+  // Seed react-query with initialCatalog only on the render(s) before the
+  // user has ever navigated away from the default filter state — not every
+  // time the filters happen to match it again later. react-query v3's
+  // keepPreviousData doesn't correctly hand off to a key that resolves via
+  // initialData/cache instead of an actual fetch: reselecting "All" after
+  // "Tech" issued zero network requests and stayed stuck showing Tech's
+  // data forever, because there was no fetch promise for keepPreviousData
+  // to resolve into. Once real fetches are involved on both sides of the
+  // transition, keepPreviousData behaves correctly.
+  const hasLeftDefaultFiltersRef = React.useRef(false);
+  if (!filtersMatchInitialCatalog) {
+    hasLeftDefaultFiltersRef.current = true;
+  }
+  const useInitialCatalog = filtersMatchInitialCatalog && !hasLeftDefaultFiltersRef.current;
 
   // Prefer backend-supplied price range; fall back to computing from the
   // first-page items when the backend returns the 0/0 placeholder default.
@@ -264,6 +298,10 @@ export function ProductListingPage({
   const resetFilters = () => {
     resetCatalogFilters();
     setSearchInput("");
+    // category/collection live only in the URL now, so clearing them means
+    // clearing the URL directly — resetCatalogFilters() (Zustand) can't
+    // touch them.
+    router.replace(pathname, { scroll: false });
   };
 
   const suggestions = React.useMemo(() => {
@@ -287,13 +325,13 @@ export function ProductListingPage({
   // suggestion always fires before the dropdown disappears.
   const suggBlurTimer = React.useRef<number | null>(null);
   const hasActiveFilters = Boolean(
-    selectedCategory || selectedBrand || selectedCollection || inStockOnly || sort !== "featured"
+    activeCategory || selectedBrand || activeCollection || inStockOnly || sort !== "featured"
     || minPrice !== undefined || maxPrice !== undefined || sellerCountry || sellerRegion
   );
   const activeFilterCount = [
-    selectedCategory,
+    activeCategory,
     selectedBrand,
-    selectedCollection,
+    activeCollection,
     inStockOnly ? "stock" : "",
     sort !== "featured" ? "sort" : "",
     minPrice !== undefined || maxPrice !== undefined ? "price" : "",
@@ -531,7 +569,7 @@ export function ProductListingPage({
                         if (suggBlurTimer.current !== null) window.clearTimeout(suggBlurTimer.current);
                         if (s.type === "category") {
                           setSearchInput("");
-                          setSelectedCategory(s.label);
+                          applyCategory(s.label);
                         } else {
                           setSearchInput(s.label);
                         }
@@ -597,24 +635,18 @@ export function ProductListingPage({
                     <Chip
                       label="All"
                       clickable
-                      color={selectedCategory === ALL_FILTER_VALUE ? "primary" : "default"}
-                      variant={selectedCategory === ALL_FILTER_VALUE ? "filled" : "outlined"}
-                      onClick={() => {
-                        setSelectedCategory(ALL_FILTER_VALUE);
-                        setPage(1);
-                      }}
+                      color={activeCategory === ALL_FILTER_VALUE ? "primary" : "default"}
+                      variant={activeCategory === ALL_FILTER_VALUE ? "filled" : "outlined"}
+                      onClick={() => applyCategory(ALL_FILTER_VALUE)}
                     />
                     {homeFeed.categories.map((category) => (
                       <Chip
                         key={category.id}
                         label={category.name}
                         clickable
-                        color={selectedCategory === category.name ? "primary" : "default"}
-                        variant={selectedCategory === category.name ? "filled" : "outlined"}
-                        onClick={() => {
-                          setSelectedCategory(category.name);
-                          setPage(1);
-                        }}
+                        color={activeCategory === category.name ? "primary" : "default"}
+                        variant={activeCategory === category.name ? "filled" : "outlined"}
+                        onClick={() => applyCategory(category.name)}
                       />
                     ))}
                   </Stack>
@@ -819,9 +851,9 @@ export function ProductListingPage({
               <Typography variant="subtitle2" sx={{ mb: 1.25 }}>Collections</Typography>
               {collections.length ? (
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip label="All" clickable color={selectedCollection === ALL_FILTER_VALUE ? "primary" : "default"} variant={selectedCollection === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => { setSelectedCollection(ALL_FILTER_VALUE); setPage(1); }} />
+                  <Chip label="All" clickable color={activeCollection === ALL_FILTER_VALUE ? "primary" : "default"} variant={activeCollection === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => applyCollection(ALL_FILTER_VALUE)} />
                   {collections.map((collection) => (
-                    <Chip key={collection.id} label={collection.name} clickable color={selectedCollection === collection.slug ? "primary" : "default"} variant={selectedCollection === collection.slug ? "filled" : "outlined"} onClick={() => { setSelectedCollection(collection.slug); setPage(1); }} />
+                    <Chip key={collection.id} label={collection.name} clickable color={activeCollection === collection.slug ? "primary" : "default"} variant={activeCollection === collection.slug ? "filled" : "outlined"} onClick={() => applyCollection(collection.slug)} />
                   ))}
                 </Stack>
               ) : (

@@ -19,7 +19,7 @@ export function useCatalogQuery(
       initialData,
       keepPreviousData: true,
       refetchOnWindowFocus: false,
-      staleTime: ONE_MINUTE,
+      staleTime: 0,
     }
   );
 }

@@ -58,8 +58,6 @@ export default async function ProductsPage({ searchParams }: PageProps) {
       collections={collections}
       sellerLocations={sellerLocations}
       initialSearch={search}
-      initialCategory={category}
-      initialCollection={collection}
     />
   );
 }

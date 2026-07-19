@@ -7,9 +7,7 @@ import { CatalogSort } from "@/types/types";
 
 interface CatalogFiltersStoreState {
   search: string;
-  category: string;
   brand: string;
-  collection: string;
   sellerCountry: string;
   sellerRegion: string;
   sort: CatalogSort;
@@ -18,9 +16,7 @@ interface CatalogFiltersStoreState {
   minPrice: number | undefined;
   maxPrice: number | undefined;
   setSearch: (value: string) => void;
-  setCategory: (value: string) => void;
   setBrand: (value: string) => void;
-  setCollection: (value: string) => void;
   setSellerCountry: (value: string) => void;
   setSellerRegion: (value: string) => void;
   setSort: (value: CatalogSort) => void;
@@ -33,9 +29,7 @@ interface CatalogFiltersStoreState {
 
 const defaultFilters = {
   search: "",
-  category: "",
   brand: "",
-  collection: "",
   sellerCountry: "",
   sellerRegion: "",
   sort: "featured" as CatalogSort,
@@ -50,9 +44,7 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
     (set) => ({
       ...defaultFilters,
       setSearch: (value) => set({ search: value, page: 1 }),
-      setCategory: (value) => set({ category: value, page: 1 }),
       setBrand: (value) => set({ brand: value, page: 1 }),
-      setCollection: (value) => set({ collection: value, page: 1 }),
       // Changing country invalidates any region picked under the previous
       // country, so it's reset alongside — never leave a stale region from
       // a different country silently applied.
@@ -67,9 +59,13 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
     }),
     {
       // localStorage safety: persists only UI filter/sort state (search text,
-      // category, brand, collection, seller country/region, sort order, page,
-      // inStockOnly toggle). No auth tokens, user IDs, addresses, or payment
-      // data are stored here.
+      // brand, seller country/region, sort order, page, inStockOnly toggle).
+      // category/collection are NOT persisted here — they live only in the
+      // URL (?category=/?collection=), the single source of truth the
+      // /products page reads from; keeping them out of this store closes off
+      // an entire class of "chip shows one thing, applied filter shows
+      // another" bugs where two independent state copies could disagree.
+      // No auth tokens, user IDs, addresses, or payment data are stored here.
       name: "spree-catalog-filters",
       storage: createJSONStorage(() =>
         typeof window !== "undefined"
