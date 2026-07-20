@@ -172,6 +172,47 @@ def test_products_endpoint_returns_valid_catalog_shape():
         assert "priceRange" in payload["filters"]
 
 
+def test_price_range_filter_bounds_cover_every_products_displayed_price():
+    # filters.priceRange must bound the buyer-facing `price` shown on product
+    # cards (commission-inclusive), not the seller's payout price — otherwise
+    # the priciest (or cheapest) product falls outside the slider's own range
+    # and can never be selected by the price filter. Seed prices that cross
+    # every commission bracket so a bug that only shows up past $500/$2000/
+    # $5000 (where seller_price and buyer_price diverge most) can't hide.
+    with TestClient(app) as client:
+        for seller_price in (5, 899.99, 4200, 21999.99):
+            payload = _create_product_payload()
+            payload["price"] = seller_price
+            create_response = client.post(
+                "/api/v1/products", json=payload, headers=ADMIN_HEADERS
+            )
+            assert create_response.status_code == 201
+
+        response = client.get("/api/v1/products?limit=48")
+
+        assert response.status_code == 200
+        payload = response.json()
+        items = payload["items"]
+        assert items, "expected the just-created products to be present"
+        assert payload["total"] == len(items), "test assumes a single page covers every product"
+
+        displayed_prices = [float(item["price"]) for item in items]
+        price_range = payload["filters"]["priceRange"]
+
+        assert price_range["max"] >= max(displayed_prices)
+        assert price_range["min"] <= min(displayed_prices)
+
+        # And the filter predicate itself must be consistent with those bounds:
+        # querying at the reported max/min must not exclude the products that
+        # define them (this is what would fail if the query still compared
+        # against the raw seller price instead of the buyer-facing price).
+        bounded = client.get(
+            f"/api/v1/products?limit=48&minPrice={price_range['min']}&maxPrice={price_range['max']}"
+        )
+        assert bounded.status_code == 200
+        assert bounded.json()["total"] == payload["total"]
+
+
 def test_home_feed_supports_blank_catalog():
     with TestClient(app) as client:
         response = client.get("/api/v1/home")

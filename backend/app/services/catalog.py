@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from math import ceil
+from math import ceil, floor
 from uuid import uuid4
 
 from fastapi import HTTPException, status
@@ -321,11 +321,19 @@ def _apply_product_filters(statement, params: ProductListParams):
     if params.in_stock is not None:
         statement = statement.where(Product.stock > 0 if params.in_stock else Product.stock <= 0)
 
+    # min_price/max_price are the buyer-facing (commission-inclusive) bounds
+    # shown on product cards and in the price-range slider, but Product.price
+    # stores the seller's payout price — convert through the pricing engine's
+    # inverse before comparing, or the filter would compare against the wrong
+    # quantity entirely (e.g. excluding a product whose displayed price is in
+    # range because its seller price alone falls just outside the raw bound).
     if params.min_price is not None:
-        statement = statement.where(Product.price >= params.min_price)
+        min_seller_price = pricing.seller_price_for_buyer_price(Decimal(str(params.min_price)))
+        statement = statement.where(Product.price >= min_seller_price)
 
     if params.max_price is not None:
-        statement = statement.where(Product.price <= params.max_price)
+        max_seller_price = pricing.seller_price_for_buyer_price(Decimal(str(params.max_price)))
+        statement = statement.where(Product.price <= max_seller_price)
 
     return statement
 
@@ -355,14 +363,28 @@ def _catalog_filters(db: Session) -> dict:
     price_row = db.execute(select(func.min(Product.price), func.max(Product.price))).one()
     tag_rows = db.scalars(select(Product.tags)).all()
 
+    # price_row holds Product.price (seller payout), but the slider must
+    # bound the buyer-facing price shown on product cards — buyer_price() is
+    # strictly increasing in seller_price, so converting just the two extreme
+    # seller prices still yields the correct buyer-price min/max without
+    # scanning every row. Floor/ceil to whole units so rounding never pushes
+    # the cheapest or priciest product outside the slider's own bounds.
+    min_seller_price, max_seller_price = price_row[0], price_row[1]
+    if min_seller_price is not None and max_seller_price is not None:
+        price_min = floor(pricing.buyer_price(Decimal(str(min_seller_price))))
+        price_max = ceil(pricing.buyer_price(Decimal(str(max_seller_price))))
+    else:
+        price_min = 0
+        price_max = 0
+
     return {
         "categories": sorted(db.scalars(select(Category.name).order_by(Category.name.asc())).all()),
         "brands": sorted(db.scalars(select(Brand.name).order_by(Brand.name.asc())).all()),
         "tags": sorted({tag for tags in tag_rows for tag in (tags or [])}),
         "collections": sorted(db.scalars(select(Collection.slug).order_by(Collection.name.asc())).all()),
         "priceRange": {
-            "min": float(price_row[0] or 0),
-            "max": float(price_row[1] or 0),
+            "min": price_min,
+            "max": price_max,
         },
     }
 

@@ -138,3 +138,37 @@ def buyer_price(seller_price: Decimal) -> Decimal:
 def seller_payout_from_listed(listed_price: Decimal, rate: Decimal | None) -> Decimal:
     effective = rate if rate is not None else LEGACY_COMMISSION_RATE
     return (listed_price / (Decimal("1") + effective)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def seller_price_for_buyer_price(target_buyer_price: Decimal) -> Decimal:
+    """Inverse of buyer_price(): the seller_price whose commission-inclusive
+    buyer price equals target_buyer_price.
+
+    buyer_price() is piecewise-linear and strictly increasing in seller_price
+    (every bracket rate is positive), so it's invertible — walk the same
+    brackets, tracking the cumulative (seller_price, buyer_price) breakpoint
+    at each ceiling, and invert within whichever segment target_buyer_price
+    falls in. Used to translate a buyer-facing price filter bound into the
+    equivalent seller_price threshold for a Product.price >= / <= comparison,
+    since Product.price stores seller_price, not the displayed buyer price.
+    """
+    if target_buyer_price <= Decimal("0"):
+        return Decimal("0")
+
+    prev_seller_price = Decimal("0")
+    prev_buyer_price = Decimal("0")
+    for ceiling, rate in _BRACKETS:
+        slope = Decimal("1") + rate
+        if ceiling is None:
+            seller_price = prev_seller_price + (target_buyer_price - prev_buyer_price) / slope
+            return seller_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        buyer_price_at_ceiling = prev_buyer_price + (ceiling - prev_seller_price) * slope
+        if target_buyer_price <= buyer_price_at_ceiling:
+            seller_price = prev_seller_price + (target_buyer_price - prev_buyer_price) / slope
+            return seller_price.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        prev_seller_price = ceiling
+        prev_buyer_price = buyer_price_at_ceiling
+
+    return prev_seller_price
