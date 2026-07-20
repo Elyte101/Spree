@@ -1,15 +1,26 @@
 -- RLS policies for Spree — run once in the Supabase SQL Editor (or via psql).
--- Idempotent: safe to re-run. Last updated: 2026-07-14.
+-- Idempotent: safe to re-run. Last updated: 2026-07-20.
+--
+-- This file is also applied automatically on backend startup — see
+-- _RLS_STATEMENTS / _run_rls_migrations() in backend/app/db/init_db.py,
+-- which contains the exact same statements in Python-list form. That only
+-- happens when AUTO_INITIALIZE_DATABASE is enabled though (production may
+-- have it off — see initialize_database()'s own warning about it), so run
+-- this manually in the SQL Editor too; it's idempotent, running it twice
+-- changes nothing. Keep both copies in sync — this file is not generated
+-- from the Python one or vice versa.
 --
 -- Architecture note
 -- -----------------
--- The FastAPI backend connects as service_role (DATABASE_SUPABASE_SERVICE_ROLE_KEY).
--- service_role bypasses RLS entirely, so these policies only affect direct
--- PostgREST / Supabase client access.  The frontend NEVER queries Supabase
--- directly — all DB access goes through the backend API. Every policy below
--- is defense-in-depth against someone hitting PostgREST directly with the
+-- The FastAPI backend connects via DATABASE_URL directly to Postgres (not
+-- through PostgREST), using a role that owns these tables — so it bypasses
+-- RLS entirely regardless of what's defined here. These policies are pure
+-- defense-in-depth against someone hitting PostgREST directly with the
 -- anon/authenticated key (or Supabase's dashboard "public" API) — the app
 -- itself never relies on any of these policies for normal operation.
+-- (DATABASE_SUPABASE_SERVICE_ROLE_KEY is a different, unrelated credential
+-- used only by the frontend's own Next.js routes for Supabase Storage
+-- uploads — not by this backend, and not relevant to RLS on these tables.)
 --
 -- 2026-07-14: extended from the original 2 tables (promo_banners,
 -- identity_sessions) to cover every table in the schema. New tables added

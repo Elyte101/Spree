@@ -77,24 +77,57 @@ _CONSTRAINT_MIGRATIONS: list[str] = [
 # RLS migrations — PostgreSQL / Supabase only.
 # Executed once per table; idempotent (ENABLE ROW LEVEL SECURITY is a no-op
 # when already enabled; DROP POLICY IF EXISTS + CREATE POLICY replaces safely).
+# Auto-applied on every startup where this runs (see initialize_database())
+# — gated behind AUTO_INITIALIZE_DATABASE, which production may have turned
+# off (see the warning below). backend/scripts/rls_policies.sql is the exact
+# same statements in raw-SQL form, for pasting into the Supabase SQL Editor
+# directly — keep the two in sync; this Python list is not generated from it.
 #
-# Design intent:
-#   promo_banners    — public marketing content; anyone may SELECT, nobody may
-#                      write via PostgREST (backend uses service_role which
-#                      bypasses RLS for all writes).
-#   identity_sessions — contains NIA mugshot, encrypted Ghana Card number, DOB,
-#                      full name, and a secret session_id.  No PostgREST policy
-#                      at all = complete lockdown; service_role bypasses RLS for
-#                      backend reads/writes.
-#   comments         — product reviews (G21). Anyone may SELECT non-flagged
-#                      rows; writes only via FastAPI's service_role, which
-#                      enforces auth, email verification, rate limiting, and
-#                      verified-purchaser checks that PostgREST can't express.
+# Every table in the schema must appear here. Two tiers:
+#   - Public storefront content (promo_banners, categories, brands,
+#     collections, products, comments): a public SELECT-only policy, since
+#     these are genuinely public and PostgREST returning them directly isn't
+#     a leak. products/comments are filtered to hide blacklisted/flagged rows
+#     even from a direct PostgREST query.
+#   - Everything else (accounts, orders, payments, the ledger, auth
+#     credentials, security telemetry, admin/audit logs): full lockdown, zero
+#     policies, since PostgREST has no legitimate reason to touch any of it.
+#
+# None of this matters to the app's own operation either way: the FastAPI
+# backend connects via DATABASE_URL directly to Postgres (not through
+# PostgREST), using a role that owns these tables, so it bypasses RLS
+# entirely regardless of what's defined here. These policies are pure
+# defense-in-depth against someone hitting PostgREST directly with the
+# anon/authenticated key. (DATABASE_SUPABASE_SERVICE_ROLE_KEY is a different,
+# unrelated credential — used only by the frontend's own Next.js routes for
+# Supabase Storage uploads, not by this backend or by anything RLS-relevant.)
 _RLS_STATEMENTS: list[str] = [
-    # ── Enable RLS ────────────────────────────────────────────────────────────
+    # ── Enable RLS on every table ────────────────────────────────────────────
     "ALTER TABLE public.promo_banners ENABLE ROW LEVEL SECURITY",
-    "ALTER TABLE public.identity_sessions ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.brands ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.collections ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.products ENABLE ROW LEVEL SECURITY",
     "ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.identity_sessions ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.users ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.verification_tokens ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.verification_audit_logs ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.seller_follows ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.seller_reports ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.carts ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.cart_items ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.order_items ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.ledger_entries ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.product_likes ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.rate_limit_events ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.webauthn_credentials ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.webauthn_challenges ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY",
+    "ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY",
     # ── promo_banners: public read ────────────────────────────────────────────
     "DROP POLICY IF EXISTS promo_banners_public_select ON public.promo_banners",
     (
@@ -102,6 +135,29 @@ _RLS_STATEMENTS: list[str] = [
         " ON public.promo_banners"
         " FOR SELECT TO anon, authenticated"
         " USING (true)"
+    ),
+    # ── categories/brands/collections: public read ───────────────────────────
+    "DROP POLICY IF EXISTS categories_public_select ON public.categories",
+    (
+        "CREATE POLICY categories_public_select"
+        " ON public.categories FOR SELECT TO anon, authenticated USING (true)"
+    ),
+    "DROP POLICY IF EXISTS brands_public_select ON public.brands",
+    (
+        "CREATE POLICY brands_public_select"
+        " ON public.brands FOR SELECT TO anon, authenticated USING (true)"
+    ),
+    "DROP POLICY IF EXISTS collections_public_select ON public.collections",
+    (
+        "CREATE POLICY collections_public_select"
+        " ON public.collections FOR SELECT TO anon, authenticated USING (true)"
+    ),
+    # ── products: public read, but never a blacklisted row ──────────────────
+    "DROP POLICY IF EXISTS products_public_select ON public.products",
+    (
+        "CREATE POLICY products_public_select"
+        " ON public.products FOR SELECT TO anon, authenticated"
+        " USING (is_blacklisted = false)"
     ),
     # ── comments: public read of non-flagged rows only; no direct writes ─────
     "DROP POLICY IF EXISTS comments_public_select ON public.comments",
@@ -111,8 +167,9 @@ _RLS_STATEMENTS: list[str] = [
         " FOR SELECT TO anon, authenticated"
         " USING (is_flagged = false)"
     ),
-    # identity_sessions: zero policies → PostgREST returns 0 rows for every role.
-    # service_role (used by FastAPI) bypasses RLS entirely.
+    # identity_sessions and everything in the "full lockdown" tier above get
+    # zero policies → PostgREST returns 0 rows for every role. The FastAPI
+    # backend's direct DATABASE_URL connection bypasses RLS for all access.
 ]
 
 
