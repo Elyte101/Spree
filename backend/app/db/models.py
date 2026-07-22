@@ -38,7 +38,18 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     slug: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     image: Mapped[str] = mapped_column(String(255))
+    # Self-referential: NULL = main category, set = subcategory of that main
+    # category (e.g. "Makeup" -> parent "Beauty & Personal Care"). Products
+    # are assigned to whichever level the seller picked (usually the leaf
+    # subcategory); storefront category filters match a category's
+    # descendants too, so browsing/filtering by a main category still
+    # surfaces everything filed under its subcategories.
+    parent_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("categories.id"), nullable=True, index=True
+    )
 
+    parent: Mapped["Category | None"] = relationship(remote_side=[id], back_populates="children")
+    children: Mapped[list["Category"]] = relationship(back_populates="parent")
     products: Mapped[list["Product"]] = relationship(back_populates="category")
 
 

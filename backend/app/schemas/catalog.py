@@ -122,6 +122,7 @@ class CategoryOut(BaseModel):
     slug: str
     image: str
     itemCount: int
+    parentId: str | None = None
 
 
 class BrandOut(BaseModel):

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "react-query";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -46,32 +47,44 @@ interface ImageEntry {
 
 const ACCEPTED_MIME = ["image/jpeg", "image/png", "image/webp"];
 
-export const PRESET_CATEGORIES = [
-  "Phones & Accessories",
-  "Electronics & Gadgets",
-  "Fashion & Clothing",
-  "Shoes & Footwear",
-  "Bags & Accessories",
-  "Beauty & Skincare",
-  "Hair & Beauty Products",
-  "Health & Wellness",
-  "Home & Living",
-  "Kitchen & Dining",
-  "Food & Beverages",
-  "Sports & Outdoors",
-  "Books & Stationery",
-  "Toys & Games",
-  "Baby & Kids",
-  "Jewelry & Watches",
-  "Art & Crafts",
-  "Agriculture & Farming",
-  "Pet Supplies",
-  "Automotive",
-  "Office Supplies",
-  "Tools & Hardware",
-  "Music & Instruments",
-];
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+// Fixed, select-only option sets — colors and sizes are picked, never typed,
+// so listings stay consistent and filterable instead of accumulating one-off
+// spellings ("Navy" vs "navy blue" vs "Dark Blue").
+const COLOR_OPTIONS = [
+  "Black", "White", "Gray", "Silver", "Gold",
+  "Red", "Maroon", "Pink", "Orange", "Yellow",
+  "Green", "Olive", "Teal", "Turquoise", "Blue", "Navy",
+  "Purple", "Lavender", "Brown", "Beige", "Cream",
+  "Multicolor", "Ankara Print", "Kente Print",
+];
+
+const CLOTHING_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
+const SHOE_SIZES = ["36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46"];
+const KIDS_AGE_SIZES = [
+  "0-3 months", "3-6 months", "6-12 months",
+  "1-2 years", "2-4 years", "4-6 years", "6-8 years", "8-10 years", "10-12 years",
+];
+// Sold-by-length goods (fabric, rope, timber, wiring…) — covers every unit
+// these actually get cut/quoted in, rather than forcing one.
+const LENGTH_SIZES = [
+  "1 yard", "2 yards", "3 yards", "6 yards (full piece)",
+  "1 meter", "2 meters", "3 meters", "5 meters", "10 meters",
+  "12 inches", "24 inches", "36 inches",
+  "1 foot", "3 feet", "6 feet",
+];
+
+// Keyed by main-category slug (see backend/app/db/init_db.py's
+// _CATEGORY_TAXONOMY) — categories with no entry here simply show no Sizes
+// field at all, since a generic size concept doesn't apply to them.
+const SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG: Record<string, string[]> = {
+  "fashion-apparel": CLOTHING_SIZES,
+  "shoes-footwear": SHOE_SIZES,
+  "baby-kids": KIDS_AGE_SIZES,
+  "fabrics-textiles": LENGTH_SIZES,
+  "tools-hardware": LENGTH_SIZES,
+};
 
 const splitList = (value: string) =>
   value
@@ -102,29 +115,32 @@ export function ProductCreateForm({
   const [price, setPrice] = React.useState("");
   const [discount, setDiscount] = React.useState("0");
   const [stock, setStock] = React.useState("");
-  const [categoryName, setCategoryName] = React.useState("");
+  const [mainCategoryId, setMainCategoryId] = React.useState("");
+  const [subcategoryId, setSubcategoryId] = React.useState("");
   const [brandName, setBrandName] = React.useState("");
   const [collectionName, setCollectionName] = React.useState("");
   const [badge, setBadge] = React.useState("");
   const [imageEntries, setImageEntries] = React.useState<ImageEntry[]>([]);
   const [isDragging, setIsDragging] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [colors, setColors] = React.useState("");
-  const [sizes, setSizes] = React.useState("");
+  const [colorOptions, setColorOptions] = React.useState<string[]>([]);
+  const [sizeOptions, setSizeOptions] = React.useState<string[]>([]);
   const [tags, setTags] = React.useState("");
   const [featureOnHomepage, setFeatureOnHomepage] = React.useState(false);
   const [markAsNewArrival, setMarkAsNewArrival] = React.useState(false);
 
-  const allCategories = Array.from(
-    new Set([...PRESET_CATEGORIES, ...categories.map((c) => c.name)])
-  );
+  const mainCategories = categories.filter((c) => !c.parentId);
+  const subcategories = categories.filter((c) => c.parentId === mainCategoryId);
+  const selectedMainCategory = mainCategories.find((c) => c.id === mainCategoryId);
+  const availableSizeOptions = selectedMainCategory
+    ? SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG[selectedMainCategory.slug] ?? []
+    : [];
+
   const brandSuggestions = buildSuggestions(brands.map((brand) => brand.name));
   const collectionSuggestions = buildSuggestions(
     collections.map((collection) => collection.name)
   );
   const uploadedImages = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
-  const colorOptions = splitList(colors);
-  const sizeOptions = splitList(sizes);
   const customTags = splitList(tags);
   const computedTags = Array.from(
     new Set([
@@ -151,7 +167,7 @@ export function ProductCreateForm({
       description.trim() &&
       Number(price) > 0 &&
       stock.trim() !== "" &&
-      categoryName.trim() &&
+      subcategoryId &&
       brandName.trim() &&
       uploadedImages.length
   );
@@ -226,7 +242,7 @@ export function ProductCreateForm({
       price: Number(price),
       discount: Number(discount),
       images: uploadedImages,
-      categoryName: categoryName.trim(),
+      categoryId: subcategoryId,
       brandName: brandName.trim(),
       collectionName: collectionName.trim() || undefined,
       stock: Number(stock),
@@ -576,22 +592,47 @@ export function ProductCreateForm({
                   sx={{
                     display: "grid",
                     gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
                   }}
                 >
                   <FormControl required>
-                    <InputLabel id="create-category-label">Category</InputLabel>
+                    <InputLabel id="create-main-category-label">Category</InputLabel>
                     <Select
-                      labelId="create-category-label"
-                      value={categoryName}
+                      labelId="create-main-category-label"
+                      value={mainCategoryId}
                       label="Category"
-                      onChange={(event) => setCategoryName(event.target.value)}
+                      onChange={(event) => {
+                        setMainCategoryId(event.target.value);
+                        setSubcategoryId("");
+                        setSizeOptions([]);
+                      }}
                     >
-                      {allCategories.map((name) => (
-                        <MenuItem key={name} value={name}>{name}</MenuItem>
+                      {mainCategories.map((category) => (
+                        <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                       ))}
                     </Select>
                   </FormControl>
+                  <FormControl required disabled={!mainCategoryId}>
+                    <InputLabel id="create-subcategory-label">Subcategory</InputLabel>
+                    <Select
+                      labelId="create-subcategory-label"
+                      value={subcategoryId}
+                      label="Subcategory"
+                      onChange={(event) => setSubcategoryId(event.target.value)}
+                    >
+                      {subcategories.map((category) => (
+                        <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 2,
+                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                  }}
+                >
                   <TextField
                     label="Brand"
                     value={brandName}
@@ -654,21 +695,43 @@ export function ProductCreateForm({
                   sx={{
                     display: "grid",
                     gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    gridTemplateColumns: availableSizeOptions.length
+                      ? { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }
+                      : "1fr",
                   }}
                 >
-                  <TextField
-                    label="Colors"
-                    helperText="Comma-separated or one per line"
-                    value={colors}
-                    onChange={(event) => setColors(event.target.value)}
+                  <Autocomplete
+                    multiple
+                    options={COLOR_OPTIONS}
+                    value={colorOptions}
+                    onChange={(_event, value) => setColorOptions(value)}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Colors" helperText="Pick every color this item comes in" />
+                    )}
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => {
+                        const { key, ...tagProps } = getTagProps({ index });
+                        return <Chip key={key} label={option} size="small" {...tagProps} />;
+                      })
+                    }
                   />
-                  <TextField
-                    label="Sizes"
-                    helperText="Comma-separated or one per line"
-                    value={sizes}
-                    onChange={(event) => setSizes(event.target.value)}
-                  />
+                  {availableSizeOptions.length ? (
+                    <Autocomplete
+                      multiple
+                      options={availableSizeOptions}
+                      value={sizeOptions}
+                      onChange={(_event, value) => setSizeOptions(value)}
+                      renderInput={(params) => (
+                        <TextField {...params} label="Sizes" helperText="Pick every size this item comes in" />
+                      )}
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => {
+                          const { key, ...tagProps } = getTagProps({ index });
+                          return <Chip key={key} label={option} size="small" {...tagProps} />;
+                        })
+                      }
+                    />
+                  ) : null}
                 </Box>
                 <Divider />
                 <Stack direction={{ xs: "column", md: "row" }} spacing={1}>

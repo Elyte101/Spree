@@ -172,6 +172,64 @@ def test_products_endpoint_returns_valid_catalog_shape():
         assert "priceRange" in payload["filters"]
 
 
+def test_category_taxonomy_seeded_with_main_and_subcategories():
+    # /categories backs the seller create-product form's cascading picker —
+    # it must expose the full main+sub tree (not just top-level categories),
+    # since the form needs subcategory options for whichever main category
+    # the seller picks.
+    with TestClient(app) as client:
+        response = client.get("/api/v1/categories")
+
+        assert response.status_code == 200
+        all_categories = response.json()
+        assert len(all_categories) > 50, "expected the full main+sub taxonomy to be seeded"
+
+        beauty = next(c for c in all_categories if c["name"] == "Beauty & Personal Care")
+        assert beauty["parentId"] is None
+
+        makeup = next(c for c in all_categories if c["name"] == "Makeup")
+        assert makeup["parentId"] == beauty["id"]
+
+
+def test_home_feed_only_lists_main_categories():
+    # The storefront's homepage tiles / filter sidebar would be unusable if
+    # flooded with every subcategory — home_feed must only ever surface
+    # top-level categories.
+    with TestClient(app) as client:
+        response = client.get("/api/v1/home")
+
+        assert response.status_code == 200
+        categories = response.json()["categories"]
+        assert categories, "expected the seeded main categories to be present"
+        assert all(c["parentId"] is None for c in categories)
+
+
+def test_filtering_by_main_category_includes_its_subcategory_products():
+    # A product filed under a subcategory (e.g. "Makeup") must still show up
+    # when a shopper filters the storefront by its main category ("Beauty &
+    # Personal Care") — that's the whole point of storefront browsing still
+    # working by main category after products move to leaf subcategories.
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        makeup_id = categories["Makeup"]["id"]
+
+        payload = _create_product_payload()
+        payload["categoryId"] = makeup_id
+        del payload["categoryName"]
+        create_response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+        assert create_response.status_code == 201
+        created = create_response.json()
+        assert created["categoryId"] == makeup_id
+
+        by_main = client.get("/api/v1/products?category=Beauty %26 Personal Care&limit=48")
+        assert by_main.status_code == 200
+        assert any(item["id"] == created["id"] for item in by_main.json()["items"])
+
+        by_sub = client.get("/api/v1/products?category=Makeup&limit=48")
+        assert by_sub.status_code == 200
+        assert any(item["id"] == created["id"] for item in by_sub.json()["items"])
+
+
 def test_price_range_filter_bounds_cover_every_products_displayed_price():
     # filters.priceRange must bound the buyer-facing `price` shown on product
     # cards (commission-inclusive), not the seller's payout price — otherwise

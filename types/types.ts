@@ -181,6 +181,8 @@ export interface Category {
   slug: string;
   image: string;
   itemCount: number;
+  // null/undefined = main category; set = subcategory of that main category.
+  parentId?: string | null;
 }
 
 export interface Brand {

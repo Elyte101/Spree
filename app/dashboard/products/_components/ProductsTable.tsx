@@ -34,8 +34,7 @@ import {
 } from "@mui/material";
 
 import { api, ApiClientError, UpdateProductPayload } from "@/lib/api";
-import { PRESET_CATEGORIES } from "@/components/admin/productCreateForm";
-import { Product, UserRole } from "@/types/types";
+import { Category, Product, UserRole } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
 interface ProductsTableProps {
@@ -43,6 +42,7 @@ interface ProductsTableProps {
   filter: string;
   role: UserRole;
   userId: string;
+  categories: Category[];
 }
 
 type FilterTab = "all" | "blacklisted" | "finished";
@@ -78,7 +78,7 @@ const PencilIcon = () => (
   </svg>
 );
 
-export function ProductsTable({ products, filter, role, userId }: ProductsTableProps) {
+export function ProductsTable({ products, filter, role, userId, categories }: ProductsTableProps) {
   const router = useRouter();
   const isAdmin = role === "admin";
   const currentFilter = (FILTER_TABS.some((t) => t.value === filter) ? filter : "all") as FilterTab;
@@ -105,7 +105,8 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
   const [editStock, setEditStock] = React.useState("");
   const [editBadge, setEditBadge] = React.useState("");
   const [editTags, setEditTags] = React.useState("");
-  const [editCategoryName, setEditCategoryName] = React.useState("");
+  const [editMainCategoryId, setEditMainCategoryId] = React.useState("");
+  const [editCategoryId, setEditCategoryId] = React.useState("");
   const [editBrandName, setEditBrandName] = React.useState("");
   const [editCollectionName, setEditCollectionName] = React.useState("");
   const [editSaving, setEditSaving] = React.useState(false);
@@ -116,6 +117,9 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
 
   const canManage = (p: Product) => isAdmin || p.sellerId === userId;
 
+  const editMainCategories = categories.filter((c) => !c.parentId);
+  const editSubcategories = categories.filter((c) => c.parentId === editMainCategoryId);
+
   const openEdit = (product: Product) => {
     setEditTarget(product);
     setEditName(product.name);
@@ -125,7 +129,9 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
     setEditStock(String(product.stock));
     setEditBadge(product.badge ?? "");
     setEditTags(product.tags.join(", "));
-    setEditCategoryName(product.category);
+    const currentCategory = categories.find((c) => c.id === product.categoryId);
+    setEditMainCategoryId(currentCategory?.parentId ?? currentCategory?.id ?? "");
+    setEditCategoryId(product.categoryId);
     setEditBrandName(product.brand);
     setEditCollectionName(product.collection ?? "");
     setImageEntries(
@@ -155,7 +161,7 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
       if (editBadge.trim() !== (editTarget.badge ?? "")) payload.badge = editBadge.trim() || null;
       const newTags = editTags.split(/[\n,]+/).map((t) => t.trim()).filter(Boolean);
       if (JSON.stringify(newTags) !== JSON.stringify(editTarget.tags)) payload.tags = newTags;
-      if (editCategoryName.trim() !== editTarget.category) payload.categoryName = editCategoryName.trim();
+      if (editCategoryId && editCategoryId !== editTarget.categoryId) payload.categoryId = editCategoryId;
       if (editBrandName.trim() !== editTarget.brand) payload.brandName = editBrandName.trim();
       if (editCollectionName.trim() !== (editTarget.collection ?? "")) payload.collectionName = editCollectionName.trim() || undefined;
       const currentImageUrls = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
@@ -468,19 +474,38 @@ export function ProductsTable({ products, filter, role, userId }: ProductsTableP
               <TextField label="Discount %" type="number" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} slotProps={{ input: { inputProps: { min: 0, max: 90, step: 1 } } }} />
               <TextField label="Stock" type="number" value={editStock} onChange={(e) => setEditStock(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: 1 } } }} />
             </Box>
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
               <FormControl>
-                <InputLabel id="edit-category-label">Category</InputLabel>
+                <InputLabel id="edit-main-category-label">Category</InputLabel>
                 <Select
-                  labelId="edit-category-label"
-                  value={editCategoryName}
+                  labelId="edit-main-category-label"
+                  value={editMainCategoryId}
                   label="Category"
-                  onChange={(e) => setEditCategoryName(e.target.value)}
+                  onChange={(e) => {
+                    setEditMainCategoryId(e.target.value);
+                    setEditCategoryId("");
+                  }}
                 >
-                  {Array.from(new Set([...PRESET_CATEGORIES, ...(editCategoryName && !PRESET_CATEGORIES.includes(editCategoryName) ? [editCategoryName] : [])]))
-                    .map((name) => <MenuItem key={name} value={name}>{name}</MenuItem>)}
+                  {editMainCategories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                  ))}
                 </Select>
               </FormControl>
+              <FormControl disabled={!editMainCategoryId}>
+                <InputLabel id="edit-subcategory-label">Subcategory</InputLabel>
+                <Select
+                  labelId="edit-subcategory-label"
+                  value={editCategoryId}
+                  label="Subcategory"
+                  onChange={(e) => setEditCategoryId(e.target.value)}
+                >
+                  {editSubcategories.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
               <TextField label="Brand" value={editBrandName} onChange={(e) => setEditBrandName(e.target.value)} />
               <TextField label="Collection" value={editCollectionName} onChange={(e) => setEditCollectionName(e.target.value)} />
             </Box>

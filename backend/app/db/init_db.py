@@ -1,11 +1,13 @@
 import logging
+import re
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import inspect, select, text
 
 from app.core.config import settings
 from app.core.security import hash_password
-from app.db.models import Base, SiteSetting, User
+from app.db.models import Base, Category, SiteSetting, User
 from app.db.session import SessionLocal, engine
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,14 @@ _COLUMN_MIGRATIONS: list[tuple[str, str, str, str]] = [
     # App-generated tracking ID per order item, embedding product_id — set at
     # checkout, distinct from the seller-entered courier tracking_number.
     ("order_items", "tracking_id", "VARCHAR(80)", "TEXT"),
+    # Main category / subcategory hierarchy: NULL = main category, set = a
+    # subcategory of that main category. No FK constraint here on purpose —
+    # SQLite's ADD COLUMN can't attach one to an existing table, and Postgres
+    # would need the referenced row to already exist at ALTER time; the app
+    # never relies on DB-level FK enforcement for this, only on the ORM
+    # relationship, so keeping the migration a plain column keeps it valid on
+    # both dialects and safe to run in any order.
+    ("categories", "parent_id", "VARCHAR(64)", "TEXT"),
 ]
 
 # Column type upgrades for columns that already exist but need wider precision.
@@ -173,30 +183,52 @@ _RLS_STATEMENTS: list[str] = [
 ]
 
 
+def _run_one_statement(eng, statement: str, label: str) -> None:
+    """Run a single migration statement in its own connection/transaction.
+
+    Each call is isolated on purpose: these statements used to run as one
+    batch sharing a single transaction, so any single failure (e.g. an ADD
+    CONSTRAINT rejected by preexisting duplicate data) aborted that whole
+    transaction and silently rolled back every other statement queued behind
+    it — which is exactly how order_items.tracking_id (last entry in
+    _COLUMN_MIGRATIONS) ended up permanently missing in production: an
+    earlier, unrelated statement kept failing on every startup, and its
+    failure kept discarding this one along with it. Isolating each statement
+    means one bad migration can only ever cost itself.
+    """
+    try:
+        with eng.connect() as conn:
+            conn.execute(text(statement))
+            conn.commit()
+        logger.debug("Migration ok: %s", label)
+    except Exception as exc:
+        logger.warning("Migration warning (non-fatal) for %s: %s", label, exc)
+
+
 def _run_column_migrations(eng) -> None:
     """
     Add columns that were introduced after the initial create_all.
     Uses ADD COLUMN IF NOT EXISTS on PostgreSQL (idempotent).
     Falls back to an inspect-then-alter pattern for SQLite.
-    Failures are logged as warnings rather than raised so a missing column
-    on a new table does not block startup.
+    Each statement is isolated (see _run_one_statement) so a failure in one
+    never blocks the rest, and is logged as a warning rather than raised so
+    a missing column on a new table does not block startup.
     """
     dialect = eng.dialect.name
-    try:
-        with eng.connect() as conn:
-            if dialect == "postgresql":
-                for table, column, pg_type, _ in _COLUMN_MIGRATIONS:
-                    conn.execute(
-                        text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {pg_type}")
-                    )
-                    logger.debug("Ensured column %s.%s exists", table, column)
-                for table, column, alter_sql in _COLUMN_TYPE_UPGRADES:
-                    conn.execute(text(alter_sql))
-                    logger.debug("Upgraded column type %s.%s", table, column)
-                for stmt in _CONSTRAINT_MIGRATIONS:
-                    conn.execute(text(stmt))
-                    logger.debug("Ensured constraint: %s", stmt.strip()[:72])
-            else:
+    if dialect == "postgresql":
+        for table, column, pg_type, _ in _COLUMN_MIGRATIONS:
+            _run_one_statement(
+                eng,
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {pg_type}",
+                f"add column {table}.{column}",
+            )
+        for table, column, alter_sql in _COLUMN_TYPE_UPGRADES:
+            _run_one_statement(eng, alter_sql, f"upgrade column type {table}.{column}")
+        for stmt in _CONSTRAINT_MIGRATIONS:
+            _run_one_statement(eng, stmt, f"constraint: {stmt.strip()[:72]}")
+    else:
+        try:
+            with eng.connect() as conn:
                 inspector = inspect(eng)
                 for table, column, _, sqlite_type in _COLUMN_MIGRATIONS:
                     existing_tables = inspector.get_table_names()
@@ -206,28 +238,100 @@ def _run_column_migrations(eng) -> None:
                     if column not in existing_cols:
                         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sqlite_type}"))
                         logger.info("Added column %s.%s (SQLite migration)", table, column)
-            conn.commit()
-    except Exception as exc:
-        logger.warning("Column migration warning (non-fatal): %s", exc)
+                conn.commit()
+        except Exception as exc:
+            logger.warning("Column migration warning (non-fatal): %s", exc)
 
 
 def _run_rls_migrations(eng) -> None:
     """Enable RLS and apply PostgREST access policies on Supabase-exposed tables.
 
-    No-op on SQLite (RLS is a PostgreSQL feature).  Failures are logged as
-    warnings — a missing policy is a security concern but must not break startup.
+    No-op on SQLite (RLS is a PostgreSQL feature). Each statement is isolated
+    (see _run_one_statement) so one failing ALTER/POLICY can't roll back the
+    others sharing the batch, and is logged as a warning rather than raised —
+    a missing policy is a security concern but must not break startup.
     """
     if eng.dialect.name != "postgresql":
         return
+    for stmt in _RLS_STATEMENTS:
+        _run_one_statement(eng, stmt, stmt[:72])
+    logger.info("RLS policies applied.")
+
+
+_CATEGORY_PLACEHOLDER_IMAGE = "https://placehold.co/600x600/655AFF/FFFFFF?text=Spree"
+
+# Main category -> subcategory tree offered at product creation (see
+# productCreateForm.tsx's cascading Category / Subcategory selects). Seeded
+# idempotently on every startup (see _seed_category_taxonomy) rather than via
+# the manual backend/app/seeds/catalog.py script, since that script is never
+# run automatically in production — sellers would otherwise have nothing to
+# pick from. Matched by slug, so re-running never duplicates or reparents
+# anything; ad-hoc categories a seller already created via free-text entry
+# before this taxonomy existed (e.g. "Phones & Accessories") are left
+# untouched — this only adds rows, it never renames/deletes/reparents.
+_CATEGORY_TAXONOMY: list[tuple[str, list[str]]] = [
+    ("Fashion & Apparel", ["Women's Clothing", "Men's Clothing", "Traditional Wear", "Kids' Clothing", "Lingerie & Sleepwear", "Activewear"]),
+    ("Shoes & Footwear", ["Women's Shoes", "Men's Shoes", "Kids' Shoes", "Sandals & Slippers", "Sports Shoes"]),
+    ("Bags & Accessories", ["Handbags & Purses", "Backpacks", "Wallets", "Belts", "Sunglasses", "Hats & Caps"]),
+    ("Beauty & Personal Care", ["Makeup", "Wigs & Hair Extensions", "Nails", "Skincare", "Hair Care", "Fragrances", "Personal Hygiene"]),
+    ("Health & Wellness", ["Supplements & Vitamins", "Medical Supplies", "Fitness & Wellness Devices"]),
+    ("Electronics & Gadgets", ["Mobile Phones", "Laptops & Computers", "Audio & Headphones", "Cameras", "Phone & Computer Accessories", "Smart Watches & Wearables"]),
+    ("Home & Living", ["Furniture", "Bedding & Linens", "Home Décor", "Storage & Organization", "Lighting"]),
+    ("Kitchen & Dining", ["Cookware", "Kitchen Appliances", "Dinnerware & Cutlery", "Food Storage"]),
+    ("Food & Groceries", ["Snacks", "Beverages", "Spices & Seasonings", "Fresh Produce", "Grains & Staples"]),
+    ("Fabrics & Textiles", ["African Print Fabric", "Lace Fabric", "Plain & Cotton Fabric", "Silk & Chiffon"]),
+    ("Sports & Fitness", ["Gym Equipment", "Team Sports", "Outdoor & Camping", "Bicycles"]),
+    ("Books & Stationery", ["Books", "School Supplies", "Office Stationery", "Art Supplies"]),
+    ("Toys & Games", ["Educational Toys", "Action Figures & Dolls", "Board Games & Puzzles", "Outdoor Play"]),
+    ("Baby & Kids", ["Diapers & Wipes", "Baby Feeding", "Baby Gear", "Kids' Furniture"]),
+    ("Jewelry & Watches", ["Necklaces", "Earrings", "Bracelets & Bangles", "Rings", "Watches"]),
+    ("Art & Crafts", ["Handmade Crafts", "Craft Supplies", "Paintings & Wall Art"]),
+    ("Agriculture & Farming", ["Seeds & Plants", "Farm Tools", "Livestock Supplies"]),
+    ("Pet Supplies", ["Pet Food", "Pet Accessories", "Pet Grooming"]),
+    ("Automotive", ["Car Accessories", "Car Care", "Motorcycle Parts"]),
+    ("Office Supplies", ["Office Furniture", "Printers & Ink", "Filing & Storage"]),
+    ("Tools & Hardware", ["Hand Tools", "Power Tools", "Building Materials"]),
+    ("Music & Instruments", ["Instruments", "Audio Equipment", "Accessories"]),
+]
+
+
+def _taxonomy_slug(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", value.lower().strip()).strip("-")
+
+
+def _seed_category_taxonomy(session) -> None:
     try:
-        with eng.connect() as conn:
-            for stmt in _RLS_STATEMENTS:
-                conn.execute(text(stmt))
-                logger.debug("RLS: %s", stmt[:72])
-            conn.commit()
-        logger.info("RLS policies applied.")
+        for main_name, children in _CATEGORY_TAXONOMY:
+            main_slug = _taxonomy_slug(main_name)
+            main_category = session.scalar(select(Category).where(Category.slug == main_slug))
+            if main_category is None:
+                main_category = Category(
+                    id=f"cat-{uuid4().hex[:12]}",
+                    name=main_name,
+                    slug=main_slug,
+                    image=_CATEGORY_PLACEHOLDER_IMAGE,
+                )
+                session.add(main_category)
+                session.flush()
+
+            for child_name in children:
+                child_slug = f"{main_slug}-{_taxonomy_slug(child_name)}"
+                existing_child = session.scalar(select(Category).where(Category.slug == child_slug))
+                if existing_child is None:
+                    session.add(
+                        Category(
+                            id=f"cat-{uuid4().hex[:12]}",
+                            name=child_name,
+                            slug=child_slug,
+                            image=_CATEGORY_PLACEHOLDER_IMAGE,
+                            parent_id=main_category.id,
+                        )
+                    )
+        session.commit()
+        logger.info("Category taxonomy seeded.")
     except Exception as exc:
-        logger.warning("RLS migration warning (non-fatal): %s", exc)
+        session.rollback()
+        logger.warning("Category taxonomy seed warning (non-fatal): %s", exc)
 
 
 def initialize_database() -> None:
@@ -252,6 +356,9 @@ def initialize_database() -> None:
     logger.info("Database schema ready.")
     _run_column_migrations(engine)
     _run_rls_migrations(engine)
+
+    with SessionLocal() as session:
+        _seed_category_taxonomy(session)
 
     if not settings.should_seed_admin:
         logger.warning("Skipping admin seed: SEED_ADMIN_* env vars not fully configured.")

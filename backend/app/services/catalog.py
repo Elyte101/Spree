@@ -183,6 +183,7 @@ def _category_to_dict(category: Category, count: int) -> dict:
         "slug": category.slug,
         "image": category.image,
         "itemCount": count,
+        "parentId": category.parent_id,
     }
 
 
@@ -253,13 +254,20 @@ def _apply_product_filters(statement, params: ProductListParams):
         )
 
     if params.category:
+        # Products are filed under a specific (usually leaf) category, but
+        # storefront browsing/filtering happens by main category — e.g.
+        # selecting "Beauty & Personal Care" must also surface products filed
+        # under its "Makeup"/"Wigs & Hair Extensions"/etc. subcategories, not
+        # just ones assigned directly to the main category itself.
         normalized_category = params.category.strip().lower()
+        category_match = or_(
+            Category.id == params.category,
+            Category.slug == params.category,
+            func.lower(Category.name) == normalized_category,
+        )
+        descendant_of_match = select(Category.id).where(category_match)
         statement = statement.where(
-            or_(
-                Category.id == params.category,
-                Category.slug == params.category,
-                func.lower(Category.name) == normalized_category,
-            )
+            or_(category_match, Category.parent_id.in_(descendant_of_match))
         )
 
     if params.brand:
@@ -617,7 +625,7 @@ def get_home_feed(db: Session) -> dict:
         ),
         "featuredProducts": [_product_to_dict(product) for product in featured_products],
         "newArrivals": [_product_to_dict(product) for product in new_arrivals],
-        "categories": list_categories(db),
+        "categories": list_categories(db, main_only=True),
         "collections": list_collections(db),
         "brands": list_brands(db),
     }
@@ -769,13 +777,22 @@ def get_related_products(db: Session, identifier: str, limit: int = 4) -> list[d
     return [_product_to_dict(candidate) for candidate in related_products]
 
 
-def list_categories(db: Session) -> list[dict]:
-    rows = db.execute(
+def list_categories(db: Session, main_only: bool = False) -> list[dict]:
+    """main_only=True returns just top-level categories (parent_id IS NULL) —
+    used for storefront browsing (home feed tiles, the /products filter
+    sidebar), which would otherwise be flooded with every subcategory. The
+    full main+sub tree (main_only=False, the default) backs the /categories
+    endpoint the seller-facing create-product form's cascading picker uses.
+    """
+    query = (
         select(Category, func.count(Product.id))
         .outerjoin(Product, Product.category_id == Category.id)
         .group_by(Category.id)
         .order_by(Category.name.asc())
-    ).all()
+    )
+    if main_only:
+        query = query.where(Category.parent_id.is_(None))
+    rows = db.execute(query).all()
     return [_category_to_dict(category, count) for category, count in rows]
 
 

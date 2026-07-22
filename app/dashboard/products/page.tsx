@@ -15,6 +15,7 @@ import { canCreateProductsRole } from "@/lib/roles";
 import {
   BACKEND_UNAVAILABLE_MESSAGE,
   getAdminOverview,
+  getCategories,
   getProducts,
   getUserProfile,
 } from "@/lib/serverApi";
@@ -56,7 +57,7 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
 
   const { filter = "all" } = await searchParams;
 
-  const [catalog, overview] = await Promise.all([
+  const [catalog, overview, categories] = await Promise.all([
     getProducts(
       {
         limit: 48,
@@ -67,6 +68,7 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
       session.user.id
     ),
     isAdmin ? getAdminOverview(session.user.id) : Promise.resolve(null),
+    getCategories(),
   ]);
 
   const featuredCount = catalog.items.filter((p) => p.tags.includes("featured")).length;
@@ -170,6 +172,7 @@ export default async function DashboardProductsPage({ searchParams }: PageProps)
         filter={filter}
         role={session.user.role}
         userId={session.user.id}
+        categories={categories}
       />
     </Stack>
   );
