@@ -396,8 +396,14 @@ export function ProductListingPage({
             justifyContent="space-between"
             sx={{ position: "relative" }}
           >
-            <Stack spacing={2} >
-              <Stack sx={{ alignItems: "center", gap: 1.5, flexWrap: "wrap", direction: { xs: "column", sm: "row" } }}>
+            <Stack spacing={2} sx={{ minWidth: 0 }}>
+              <Stack
+                direction={{ xs: "column", md: "row" }}
+                justifyContent="space-between"
+                alignItems={{ xs: "flex-start", md: "center" }}
+                spacing={1.5}
+                sx={{ width: "100%" }}
+              >
                 <Chip
                   icon={<AutoAwesome />}
                   label={hasProducts ? "Shop the collection" : "More to come"}
