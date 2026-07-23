@@ -16,3 +16,55 @@ body {
      MUI GlobalStyles overrides this with the active palette color after hydration. */
   background-color: inherit;
 }
+
+/* Category chip marquee (products page hero + filter row) — a single
+   non-wrapping line that auto-scrolls right-to-left. The track renders its
+   content twice (see CategoryMarquee); animating translateX(0 -> -50%)
+   shifts by exactly one copy's width, so the loop is seamless. */
+.marquee-row {
+  overflow: hidden;
+  width: 100%;
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  gap: var(--marquee-gap, 12px);
+  animation: marquee var(--marquee-duration, 30s) linear infinite;
+}
+
+.marquee-row:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+.marquee-content {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--marquee-gap, 12px);
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Reduced motion: no auto-scroll — fall back to an ordinary horizontal
+   scroll strip with a single copy of the content (the duplicate clone,
+   which only exists to make the animation loop, is hidden). */
+@media (prefers-reduced-motion: reduce) {
+  .marquee-row {
+    overflow-x: auto;
+  }
+  .marquee-track {
+    animation: none;
+    width: auto;
+  }
+  .marquee-content[aria-hidden="true"] {
+    display: none;
+  }
+}

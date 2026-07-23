@@ -38,6 +38,7 @@ import {
 import { alpha } from "@mui/material/styles";
 
 import { ProductCard } from "@/components/product/productCard";
+import { CategoryMarquee } from "@/components/ui/categoryMarquee";
 import { useCatalogQuery } from "@/lib/hooks/useStorefrontQueries";
 import { useCatalogFiltersStore } from "@/lib/stores/catalogFiltersStore";
 import { ProductGridSkeleton } from "@/components/skeletons/productGridSkeleton";
@@ -418,7 +419,7 @@ export function ProductListingPage({
                 {heroSubtitle}
               </Typography>
               {homeFeed.categories.length ? (
-                <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap">
+                <CategoryMarquee durationSeconds={32} gap={12} sx={{ maxWidth: "100%" }}>
                   {homeFeed.categories.map((category) => (
                     <Chip
                       key={category.id}
@@ -430,7 +431,7 @@ export function ProductListingPage({
                       })}
                     />
                   ))}
-                </Stack>
+                </CategoryMarquee>
               ) : null}
             </Stack>
             <Paper
@@ -625,13 +626,7 @@ export function ProductListingPage({
                 </Stack>
 
                 {homeFeed.categories.length ? (
-                  <Stack
-                    direction="row"
-                    spacing={1}
-                    useFlexGap
-                    flexWrap="wrap"
-                    sx={{ display: { xs: "none", sm: "flex" } }}
-                  >
+                  <CategoryMarquee durationSeconds={26} gap={8}>
                     <Chip
                       label="All"
                       clickable
@@ -649,7 +644,7 @@ export function ProductListingPage({
                         onClick={() => applyCategory(category.name)}
                       />
                     ))}
-                  </Stack>
+                  </CategoryMarquee>
                 ) : null}
 
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
