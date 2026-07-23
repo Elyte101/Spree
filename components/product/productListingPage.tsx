@@ -397,19 +397,21 @@ export function ProductListingPage({
             sx={{ position: "relative" }}
           >
             <Stack spacing={2} >
-              <Chip
-                icon={<AutoAwesome />}
-                label={hasProducts ? "Shop the collection" : "More to come"}
-                sx={(theme) => ({
-                  width: "fit-content",
-                  color: theme.palette.common.white,
-                  backgroundColor: alpha(theme.palette.common.white, 0.14),
-                  borderRadius: 999,
-                })}
-              />
-              <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
-                {heroTitle}
-              </Typography>
+              <Stack sx={{ alignItems: "center", gap: 1.5, flexWrap: "wrap", direction: { xs: "column", sm: "row" } }}>
+                <Chip
+                  icon={<AutoAwesome />}
+                  label={hasProducts ? "Shop the collection" : "More to come"}
+                  sx={(theme) => ({
+                    width: "fit-content",
+                    color: theme.palette.common.white,
+                    backgroundColor: alpha(theme.palette.common.white, 0.14),
+                    borderRadius: 999,
+                  })}
+                />
+                <Typography variant="h3" sx={{ fontWeight: 900, lineHeight: 1 }}>
+                  {heroTitle}
+                </Typography>
+              </Stack>
               <Typography
                 variant="h6"
                 sx={(theme) => ({
