@@ -68,3 +68,49 @@ body {
     display: none;
   }
 }
+
+/* Category filter row ("Shop All Products") — single line, user-scrolled
+   (drag/swipe/wheel), no auto-scroll animation and no duplicated content. */
+.chip-scroll-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--chip-scroll-gap, 8px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  /* No-op on modern browsers (native momentum scroll is default) but kept
+     for explicit older-iOS-Safari momentum-scroll intent. */
+  -webkit-overflow-scrolling: touch;
+  /* Subtle/hidden scrollbar — still fully scrollable via drag/swipe/wheel. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chip-scroll-row::-webkit-scrollbar {
+  display: none;
+}
+
+.chip-scroll-row > * {
+  flex-shrink: 0;
+}
+
+.chip-scroll-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.chip-scroll-fade-left {
+  left: 0;
+  background: linear-gradient(to right, var(--chip-fade-color, transparent), transparent);
+}
+
+.chip-scroll-fade-right {
+  right: 0;
+  background: linear-gradient(to left, var(--chip-fade-color, transparent), transparent);
+}
