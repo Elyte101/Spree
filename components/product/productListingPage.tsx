@@ -395,7 +395,7 @@ export function ProductListingPage({
             justifyContent="space-between"
             sx={{ position: "relative" }}
           >
-            <Stack spacing={2} sx={{ maxWidth: 720 }}>
+            <Stack spacing={2} >
               <Chip
                 icon={<AutoAwesome />}
                 label={hasProducts ? "Shop the collection" : "More to come"}
