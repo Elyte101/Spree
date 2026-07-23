@@ -39,6 +39,7 @@ import { alpha } from "@mui/material/styles";
 
 import { ProductCard } from "@/components/product/productCard";
 import { CategoryMarquee } from "@/components/ui/categoryMarquee";
+import { ScrollableChipRow } from "@/components/ui/scrollableChipRow";
 import { useCatalogQuery } from "@/lib/hooks/useStorefrontQueries";
 import { useCatalogFiltersStore } from "@/lib/stores/catalogFiltersStore";
 import { ProductGridSkeleton } from "@/components/skeletons/productGridSkeleton";
@@ -626,7 +627,7 @@ export function ProductListingPage({
                 </Stack>
 
                 {homeFeed.categories.length ? (
-                  <CategoryMarquee durationSeconds={26} gap={8}>
+                  <ScrollableChipRow gap={8}>
                     <Chip
                       label="All"
                       clickable
@@ -644,7 +645,7 @@ export function ProductListingPage({
                         onClick={() => applyCategory(category.name)}
                       />
                     ))}
-                  </CategoryMarquee>
+                  </ScrollableChipRow>
                 ) : null}
 
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
