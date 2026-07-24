@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
+  Add,
   BrokenImageRounded,
+  Check,
   Favorite,
   FavoriteBorder,
   ShoppingBagOutlined,
@@ -82,6 +84,19 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
   React.useEffect(() => {
     setSecondImgError(false);
   }, [secondaryImage]);
+
+  // Shared by both the full Button (sm+) and the compact IconButton (xs) —
+  // same guard, same cart call, same "just added" feedback either way.
+  const handleAddToCart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (recentlyAdded) return;
+    addToCart(product, {
+      color: product.colors[0],
+      size: product.sizes?.[0],
+      isPreorder: !product.inStock,
+    });
+    setLastAddedAt(Date.now());
+  };
 
   return (
     <Card
@@ -385,7 +400,11 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
       {/* Content */}
       <Stack
         spacing={isMicro ? 0.5 : isCompact ? 0.75 : 1}
-        sx={{ p: isMicro ? 1 : isCompact ? 1.5 : 2, flexGrow: 1, pt: isMicro ? 0.75 : isCompact ? 1.25 : 1.5 }}
+        sx={
+          isMicro
+            ? { padding: { xs: "10px 12px 12px", sm: "12px 14px 14px" }, flexGrow: 1 }
+            : { p: isCompact ? 1.5 : 2, flexGrow: 1, pt: isCompact ? 1.25 : 1.5 }
+        }
       >
         {/* Brand + stock status */}
         <Stack
@@ -474,15 +493,24 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
           direction="row"
           alignItems="center"
           justifyContent="space-between"
-          sx={{ mt: "auto", pt: isMicro ? 0.5 : isCompact ? 0.75 : 1, gap: 1 }}
+          sx={{
+            mt: "auto",
+            pt: isMicro ? 0.5 : isCompact ? 0.75 : 1,
+            gap: isMicro ? { xs: 0.75, sm: 1 } : 1,
+            width: "100%",
+          }}
         >
           <Box sx={{ minWidth: 0 }}>
             <Typography
               variant={isMicro ? "body2" : isCompact ? "subtitle1" : "h6"}
-              fontWeight={800}
+              fontWeight={isMicro ? 700 : 800}
               color="primary.main"
               lineHeight={1}
-              noWrap
+              sx={
+                isMicro
+                  ? { whiteSpace: "nowrap", fontSize: { xs: "0.85rem", sm: "0.9rem" }, letterSpacing: "-0.2px" }
+                  : { whiteSpace: "nowrap" }
+              }
             >
               {formatPrice(product.price)}
             </Typography>
@@ -515,17 +543,9 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                     <ShoppingBagOutlined sx={{ fontSize: isMicro ? "10px !important" : "14px !important" }} />
                   ) : undefined
                 }
-                onClick={(e) => {
-                  e.preventDefault();
-                  if (recentlyAdded) return;
-                  addToCart(product, {
-                    color: product.colors[0],
-                    size: product.sizes?.[0],
-                    isPreorder: !product.inStock,
-                  });
-                  setLastAddedAt(Date.now());
-                }}
+                onClick={handleAddToCart}
                 sx={{
+                  display: isMicro ? { xs: "none", sm: "inline-flex" } : "inline-flex",
                   borderRadius: 999,
                   px: isMicro ? 0.75 : isCompact ? 1.25 : 2,
                   py: isMicro ? 0.4 : 0.6,
@@ -543,6 +563,23 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
                       ? "Add"
                       : "Add to cart"}
               </Button>
+              {isMicro && (
+                <IconButton
+                  aria-label="Add to cart"
+                  onClick={handleAddToCart}
+                  sx={{
+                    display: { xs: "inline-flex", sm: "none" },
+                    flex: "0 0 auto",
+                    width: 34,
+                    height: 34,
+                    bgcolor: recentlyAdded ? "success.main" : "primary.main",
+                    color: recentlyAdded ? "success.contrastText" : "primary.contrastText",
+                    "&:hover": { bgcolor: recentlyAdded ? "success.dark" : "primary.dark" },
+                  }}
+                >
+                  {recentlyAdded ? <Check sx={{ fontSize: 18 }} /> : <Add sx={{ fontSize: 20 }} />}
+                </IconButton>
+              )}
             </motion.div>
           </AnimatePresence>
         </Stack>

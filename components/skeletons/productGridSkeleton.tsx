@@ -13,9 +13,9 @@ export function ProductGridSkeleton({ count = 8, dense = false }: ProductGridSke
     <Box
       sx={{
         display: "grid",
-        gap: 1.5,
+        gap: dense ? { xs: 1, sm: 1.5 } : 1.5,
         gridTemplateColumns: dense
-          ? "repeat(auto-fill, minmax(220px, 1fr))"
+          ? { xs: "repeat(2, 1fr)", sm: "repeat(auto-fill, minmax(220px, 1fr))" }
           : { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)", xl: "repeat(4, 1fr)" },
       }}
     >

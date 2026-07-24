@@ -738,8 +738,11 @@ export function ProductListingPage({
                   <Box
                     sx={{
                       display: "grid",
-                      gap: 1.5,
-                      gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+                      gap: { xs: 1, sm: 1.5 },
+                      gridTemplateColumns: {
+                        xs: "repeat(2, 1fr)",
+                        sm: "repeat(auto-fill, minmax(220px, 1fr))",
+                      },
                     }}
                   >
                     {catalog.items.map((product) => (
