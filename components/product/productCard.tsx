@@ -108,7 +108,7 @@ export function ProductCard({ product, size = "compact" }: ProductCardProps) {
         display: "flex",
         flexDirection: "column",
         width: "100%",
-        borderRadius: 3,
+        borderRadius: "16px",
         overflow: "hidden",
         border: "1.5px solid",
         borderColor: hovered ? "primary.main" : theme.palette.divider,
