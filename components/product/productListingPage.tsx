@@ -365,7 +365,7 @@ export function ProductListingPage({
         } 0%, ${theme.palette.background.paper} 100%)`,
       })}
     >
-    <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3 }, py: { xs: 3, md: 4 } }}>
+    <Box sx={{ maxWidth: 1280, mx: "auto", px: { xs: 2, sm: 3 }, pt: 1, pb: { xs: 3, md: 4 } }}>
       <Stack spacing={3}>
         <Paper
           elevation={0}

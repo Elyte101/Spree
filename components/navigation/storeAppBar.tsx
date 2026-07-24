@@ -126,6 +126,15 @@ export function StoreAppBar() {
     >
       <Toolbar
         sx={{
+          // MUI's own sx breakpoint object, not a CSS var: Toolbar ships its
+          // own internal responsive minHeight, and a plain var()-based
+          // override loses the cascade against it at the sm+ breakpoint (the
+          // two end up tied on specificity, decided by DOM insertion order,
+          // which doesn't reliably favor sx overrides for a component's own
+          // breakpointed defaults). These two numbers MUST match
+          // --appbar-height in app/globals.css (used by the root layout's
+          // <main> offset) — that's a plain inline style in a Server
+          // Component, so it has to be a CSS var/media-query there instead.
           minHeight: { xs: 64, sm: 72 },
           px: { xs: 1.5, sm: 2.5, md: 4 },
           gap: 1.5,

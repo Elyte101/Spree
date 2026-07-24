@@ -74,7 +74,13 @@ export default function RootLayout({
                   <ChatProvider>
                     <StoreAppBar />
                     <Analytics />
-                    <main style={{ flex: 1, minHeight: "calc(100vh - 72px)", paddingTop: "72px" }}>
+                    <main
+                      style={{
+                        flex: 1,
+                        minHeight: "calc(100vh - var(--appbar-height))",
+                        paddingTop: "var(--appbar-height)",
+                      }}
+                    >
                       {children}
                     </main>
                     <ChatErrorBoundary><ChatWidget /></ChatErrorBoundary>

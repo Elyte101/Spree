@@ -17,6 +17,25 @@ body {
   background-color: inherit;
 }
 
+/* Drives the root layout's <main> paddingTop/minHeight (app/layout.tsx is a
+   Server Component using a plain inline style, so it can't consume MUI's sx
+   breakpoint objects) so it matches the fixed StoreAppBar's actual rendered
+   height. MUST stay equal to the Toolbar's own `minHeight: { xs: 64, sm: 72 }`
+   sx in components/navigation/storeAppBar.tsx — kept as an MUI breakpoint
+   object there rather than reading this var, because Toolbar ships its own
+   internal responsive minHeight that a var()-based override loses the
+   cascade against at sm+. Two declarations, cross-referenced by comment,
+   since the Server/Client split rules out one shared literal. */
+:root {
+  --appbar-height: 64px;
+}
+
+@media (min-width: 600px) {
+  :root {
+    --appbar-height: 72px;
+  }
+}
+
 /* Category chip marquee (products page hero + filter row) — a single
    non-wrapping line that auto-scrolls right-to-left. The track renders its
    content twice (see CategoryMarquee); animating translateX(0 -> -50%)
