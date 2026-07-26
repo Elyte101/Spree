@@ -3,24 +3,16 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { CatalogSort } from "@/types/types";
-
 interface CatalogFiltersStoreState {
   search: string;
-  brand: string;
   sellerCountry: string;
   sellerRegion: string;
-  sort: CatalogSort;
-  page: number;
   inStockOnly: boolean;
   minPrice: number | undefined;
   maxPrice: number | undefined;
   setSearch: (value: string) => void;
-  setBrand: (value: string) => void;
   setSellerCountry: (value: string) => void;
   setSellerRegion: (value: string) => void;
-  setSort: (value: CatalogSort) => void;
-  setPage: (value: number) => void;
   setInStockOnly: (value: boolean) => void;
   setMinPrice: (value: number | undefined) => void;
   setMaxPrice: (value: number | undefined) => void;
@@ -29,11 +21,8 @@ interface CatalogFiltersStoreState {
 
 const defaultFilters = {
   search: "",
-  brand: "",
   sellerCountry: "",
   sellerRegion: "",
-  sort: "featured" as CatalogSort,
-  page: 1,
   inStockOnly: false,
   minPrice: undefined as number | undefined,
   maxPrice: undefined as number | undefined,
@@ -43,28 +32,28 @@ export const useCatalogFiltersStore = create<CatalogFiltersStoreState>()(
   persist(
     (set) => ({
       ...defaultFilters,
-      setSearch: (value) => set({ search: value, page: 1 }),
-      setBrand: (value) => set({ brand: value, page: 1 }),
+      setSearch: (value) => set({ search: value }),
       // Changing country invalidates any region picked under the previous
       // country, so it's reset alongside — never leave a stale region from
       // a different country silently applied.
-      setSellerCountry: (value) => set({ sellerCountry: value, sellerRegion: "", page: 1 }),
-      setSellerRegion: (value) => set({ sellerRegion: value, page: 1 }),
-      setSort: (value) => set({ sort: value, page: 1 }),
-      setPage: (value) => set({ page: value }),
-      setInStockOnly: (value) => set({ inStockOnly: value, page: 1 }),
-      setMinPrice: (value) => set({ minPrice: value, page: 1 }),
-      setMaxPrice: (value) => set({ maxPrice: value, page: 1 }),
+      setSellerCountry: (value) => set({ sellerCountry: value, sellerRegion: "" }),
+      setSellerRegion: (value) => set({ sellerRegion: value }),
+      setInStockOnly: (value) => set({ inStockOnly: value }),
+      setMinPrice: (value) => set({ minPrice: value }),
+      setMaxPrice: (value) => set({ maxPrice: value }),
       reset: () => set(defaultFilters),
     }),
     {
-      // localStorage safety: persists only UI filter/sort state (search text,
-      // brand, seller country/region, sort order, page, inStockOnly toggle).
-      // category/collection are NOT persisted here — they live only in the
-      // URL (?category=/?collection=), the single source of truth the
-      // /products page reads from; keeping them out of this store closes off
-      // an entire class of "chip shows one thing, applied filter shows
-      // another" bugs where two independent state copies could disagree.
+      // localStorage safety: persists only UI filter state (search text,
+      // seller country/region, inStockOnly toggle). category/collection/
+      // brand/sort/page are NOT persisted here — they live only in the URL
+      // (?category=/?collection=/?brand=/?sort=/?page=), the single source
+      // of truth the /products page reads from; keeping them out of this
+      // store closes off an entire class of "chip shows one thing, applied
+      // filter shows another" bugs where two independent state copies could
+      // disagree (worse here, even, since this store is localStorage-
+      // persisted — a stale ?page=/?sort= copy could survive across tabs
+      // and sessions, not just re-renders).
       // No auth tokens, user IDs, addresses, or payment data are stored here.
       name: "spree-catalog-filters",
       storage: createJSONStorage(() =>

@@ -81,37 +81,35 @@ export function ProductListingPage({
   sellerLocations,
   initialSearch,
 }: ProductListingPageProps) {
-  const selectedBrand = useCatalogFiltersStore((state) => state.brand);
   const sellerCountry = useCatalogFiltersStore((state) => state.sellerCountry);
   const sellerRegion = useCatalogFiltersStore((state) => state.sellerRegion);
-  const sort = useCatalogFiltersStore((state) => state.sort);
-  const page = useCatalogFiltersStore((state) => state.page);
   const inStockOnly = useCatalogFiltersStore((state) => state.inStockOnly);
   const minPrice = useCatalogFiltersStore((state) => state.minPrice);
   const maxPrice = useCatalogFiltersStore((state) => state.maxPrice);
   const search = useCatalogFiltersStore((state) => state.search);
-  const setSelectedBrand = useCatalogFiltersStore((state) => state.setBrand);
   const setSellerCountry = useCatalogFiltersStore((state) => state.setSellerCountry);
   const setSellerRegion = useCatalogFiltersStore((state) => state.setSellerRegion);
-  const setSort = useCatalogFiltersStore((state) => state.setSort);
-  const setPage = useCatalogFiltersStore((state) => state.setPage);
   const setInStockOnly = useCatalogFiltersStore((state) => state.setInStockOnly);
   const setMinPrice = useCatalogFiltersStore((state) => state.setMinPrice);
   const setMaxPrice = useCatalogFiltersStore((state) => state.setMaxPrice);
   const setSearch = useCatalogFiltersStore((state) => state.setSearch);
   const resetCatalogFilters = useCatalogFiltersStore((state) => state.reset);
 
-  // category/collection have exactly ONE source of truth: the URL. No
-  // Zustand state, no seed-on-mount, no reactive sync effect — chip
-  // highlighting, the API params, and the address bar all derive from this
-  // same read on every render, so they can never disagree with each other.
-  // (Root cause of the "one click behind" bug: the previous design kept
-  // category in a separate Zustand field, synced to the URL via a
-  // useEffect. That effect's dependency-triggered re-run is itself a
-  // scheduling hop *after* the state update it's reacting to — on a slow
-  // connection or a rapid second click, the URL update, the store update,
-  // and the react-query fetch could each be one step out of phase with the
-  // others, since three independent state copies were involved instead of one.)
+  // category/collection/brand/sort/page have exactly ONE source of truth:
+  // the URL. No Zustand state, no seed-on-mount, no reactive sync effect —
+  // chip highlighting, the API params, and the address bar all derive from
+  // this same read on every render, so they can never disagree with each
+  // other, and the filter state is shareable/bookmarkable/preserved on
+  // refresh or back/forward navigation.
+  // (Root cause of the "one click behind" bug this pattern originally fixed
+  // for category: the previous design kept it in a separate Zustand field,
+  // synced to the URL via a useEffect. That effect's dependency-triggered
+  // re-run is itself a scheduling hop *after* the state update it's reacting
+  // to — on a slow connection or a rapid second click, the URL update, the
+  // store update, and the react-query fetch could each be one step out of
+  // phase with the others, since independent state copies were involved
+  // instead of one. brand/sort/page were never migrated to this pattern when
+  // it was introduced for category/collection — this fixes that gap.)
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -122,6 +120,14 @@ export function ProductListingPage({
   const activeCategory = homeFeed.categories.some((c) => c.name === rawCategory) ? rawCategory : "";
   const rawCollection = searchParams.get("collection") ?? "";
   const activeCollection = collections.some((c) => c.slug === rawCollection) ? rawCollection : "";
+  const rawBrand = searchParams.get("brand") ?? "";
+  const activeBrand = brands.some((b) => b.name === rawBrand) ? rawBrand : "";
+  const rawSort = searchParams.get("sort") ?? "";
+  const activeSort: CatalogSort = sortOptions.some((option) => option.value === rawSort)
+    ? (rawSort as CatalogSort)
+    : "featured";
+  const rawPage = Number(searchParams.get("page"));
+  const activePage = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
 
   // Clicked value is used directly — never read back from activeCategory/
   // activeCollection within the same handler tick. searchParams itself is
@@ -132,17 +138,40 @@ export function ProductListingPage({
     const params = new URLSearchParams(searchParams.toString());
     if (next) params.set("category", next);
     else params.delete("category");
+    params.delete("page");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    setPage(1);
   };
   const applyCollection = (next: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (next) params.set("collection", next);
     else params.delete("collection");
+    params.delete("page");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    setPage(1);
+  };
+  const applyBrand = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next) params.set("brand", next);
+    else params.delete("brand");
+    params.delete("page");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const applySort = (next: CatalogSort) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next && next !== "featured") params.set("sort", next);
+    else params.delete("sort");
+    params.delete("page");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+  const applyPage = (next: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next > 1) params.set("page", String(next));
+    else params.delete("page");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
   // Seed the store from ?search= on first render so the header search bar
@@ -205,12 +234,12 @@ export function ProductListingPage({
 
   const params = React.useMemo(
     () => ({
-      page,
+      page: activePage,
       limit: PRODUCTS_PER_PAGE,
-      sort,
+      sort: activeSort,
       search: search || undefined,
       category: activeCategory || undefined,
-      brand: selectedBrand || undefined,
+      brand: activeBrand || undefined,
       collection: activeCollection || undefined,
       sellerCountry: sellerCountry || undefined,
       sellerRegion: sellerRegion || undefined,
@@ -219,23 +248,23 @@ export function ProductListingPage({
       maxPrice,
     }),
     [
-      activeCategory, activeCollection, inStockOnly, maxPrice, minPrice, page, search,
-      selectedBrand, sellerCountry, sellerRegion, sort,
+      activeBrand, activeCategory, activeCollection, activePage, activeSort,
+      inStockOnly, maxPrice, minPrice, search, sellerCountry, sellerRegion,
     ]
   );
 
   const filtersMatchInitialCatalog =
     !search &&
     !activeCategory &&
-    !selectedBrand &&
+    !activeBrand &&
     !activeCollection &&
     !sellerCountry &&
     !sellerRegion &&
     !inStockOnly &&
     minPrice === undefined &&
     maxPrice === undefined &&
-    sort === initialCatalog.sort &&
-    page === initialCatalog.page;
+    activeSort === initialCatalog.sort &&
+    activePage === initialCatalog.page;
   // Seed react-query with initialCatalog only on the render(s) before the
   // user has ever navigated away from the default filter state — not every
   // time the filters happen to match it again later. react-query v3's
@@ -292,10 +321,14 @@ export function ProductListingPage({
       : "We're filling the shop with new items. Please check back soon.");
 
   React.useEffect(() => {
-    if (catalog.totalPages > 0 && page > catalog.totalPages) {
-      setPage(catalog.totalPages);
+    if (catalog.totalPages > 0 && activePage > catalog.totalPages) {
+      applyPage(catalog.totalPages);
     }
-  }, [catalog.totalPages, page, setPage]);
+  // applyPage is a plain closure (not memoized, matching applyCategory/
+  // applyCollection above) — only catalog.totalPages/activePage actually
+  // need to gate this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog.totalPages, activePage]);
 
   const resetFilters = () => {
     resetCatalogFilters();
@@ -327,15 +360,15 @@ export function ProductListingPage({
   // suggestion always fires before the dropdown disappears.
   const suggBlurTimer = React.useRef<number | null>(null);
   const hasActiveFilters = Boolean(
-    activeCategory || selectedBrand || activeCollection || inStockOnly || sort !== "featured"
+    activeCategory || activeBrand || activeCollection || inStockOnly || activeSort !== "featured"
     || minPrice !== undefined || maxPrice !== undefined || sellerCountry || sellerRegion
   );
   const activeFilterCount = [
     activeCategory,
-    selectedBrand,
+    activeBrand,
     activeCollection,
     inStockOnly ? "stock" : "",
-    sort !== "featured" ? "sort" : "",
+    activeSort !== "featured" ? "sort" : "",
     minPrice !== undefined || maxPrice !== undefined ? "price" : "",
     sellerCountry || sellerRegion ? "location" : "",
   ].filter(Boolean).length;
@@ -527,7 +560,7 @@ export function ProductListingPage({
                 value={searchInput}
                 onChange={(e) => {
                   setSearchInput(e.target.value);
-                  setPage(1);
+                  applyPage(1);
                 }}
                 onFocus={() => {
                   if (suggBlurTimer.current) window.clearTimeout(suggBlurTimer.current);
@@ -547,7 +580,7 @@ export function ProductListingPage({
                   aria-label="clear search"
                   onClick={() => {
                     setSearchInput("");
-                    setPage(1);
+                    applyPage(1);
                   }}
                   sx={{ flexShrink: 0 }}
                 >
@@ -584,7 +617,7 @@ export function ProductListingPage({
                           setSearchInput(s.label);
                         }
                         setSearchFocused(false);
-                        setPage(1);
+                        applyPage(1);
                       }}
                     >
                       <ListItemIcon sx={{ minWidth: 32 }}>
@@ -661,7 +694,7 @@ export function ProductListingPage({
                     <Chip
                       label={`Price: ${formatPrice(minPrice ?? boundsMin)} – ${formatPrice(maxPrice ?? boundsMax)}`}
                       color="primary"
-                      onDelete={() => { setMinPrice(undefined); setMaxPrice(undefined); }}
+                      onDelete={() => { setMinPrice(undefined); setMaxPrice(undefined); applyPage(1); }}
                     />
                   ) : null}
                   {search ? <Chip label={`Search: ${search}`} color="primary" /> : null}
@@ -670,7 +703,7 @@ export function ProductListingPage({
                     <Chip
                       label={`Location: ${sellerCountry}${sellerRegion ? `, ${sellerRegion}` : ""}`}
                       color="primary"
-                      onDelete={() => setSellerCountry("")}
+                      onDelete={() => { setSellerCountry(""); applyPage(1); }}
                     />
                   ) : null}
                 </Stack>
@@ -759,7 +792,7 @@ export function ProductListingPage({
                   color="primary"
                   count={catalog.totalPages}
                   page={catalog.page}
-                  onChange={(_, value) => setPage(value)}
+                  onChange={(_, value) => applyPage(value)}
                   shape="rounded"
                   sx={{
                     "& .MuiPagination-ul": {
@@ -797,9 +830,9 @@ export function ProductListingPage({
               <InputLabel id="filter-sort-label">Sort by</InputLabel>
               <Select
                 labelId="filter-sort-label"
-                value={sort}
+                value={activeSort}
                 label="Sort by"
-                onChange={(event) => { setSort(event.target.value as CatalogSort); setPage(1); }}
+                onChange={(event) => applySort(event.target.value as CatalogSort)}
               >
                 {sortOptions.map((option) => (
                   <MenuItem key={option.value} value={option.value}>{option.label}</MenuItem>
@@ -812,7 +845,7 @@ export function ProductListingPage({
                 <Inventory2Outlined fontSize="small" />
                 <Typography variant="body2">In stock only</Typography>
               </Stack>
-              <Switch checked={inStockOnly} onChange={(event) => { setInStockOnly(event.target.checked); setPage(1); }} />
+              <Switch checked={inStockOnly} onChange={(event) => { setInStockOnly(event.target.checked); applyPage(1); }} />
             </Stack>
 
             {hasPriceBounds ? (
@@ -823,7 +856,7 @@ export function ProductListingPage({
                     <Chip
                       size="small"
                       label="Reset"
-                      onClick={() => { setMinPrice(undefined); setMaxPrice(undefined); }}
+                      onClick={() => { setMinPrice(undefined); setMaxPrice(undefined); applyPage(1); }}
                       clickable
                       sx={{ borderRadius: 999, height: 22, fontSize: "0.7rem" }}
                     />
@@ -839,6 +872,7 @@ export function ProductListingPage({
                       const [lo, hi] = value as [number, number];
                       setMinPrice(lo === boundsMin ? undefined : lo);
                       setMaxPrice(hi === boundsMax ? undefined : hi);
+                      applyPage(1);
                     }}
                     valueLabelDisplay="auto"
                     valueLabelFormat={(v) => formatPrice(v)}
@@ -872,9 +906,9 @@ export function ProductListingPage({
               <Typography variant="subtitle2" sx={{ mb: 1.25 }}>Brands</Typography>
               {brands.length ? (
                 <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                  <Chip label="All" clickable color={selectedBrand === ALL_FILTER_VALUE ? "primary" : "default"} variant={selectedBrand === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => { setSelectedBrand(ALL_FILTER_VALUE); setPage(1); }} />
+                  <Chip label="All" clickable color={activeBrand === ALL_FILTER_VALUE ? "primary" : "default"} variant={activeBrand === ALL_FILTER_VALUE ? "filled" : "outlined"} onClick={() => applyBrand(ALL_FILTER_VALUE)} />
                   {brands.map((brand) => (
-                    <Chip key={brand.id} label={brand.name} clickable color={selectedBrand === brand.name ? "primary" : "default"} variant={selectedBrand === brand.name ? "filled" : "outlined"} onClick={() => { setSelectedBrand(brand.name); setPage(1); }} />
+                    <Chip key={brand.id} label={brand.name} clickable color={activeBrand === brand.name ? "primary" : "default"} variant={activeBrand === brand.name ? "filled" : "outlined"} onClick={() => applyBrand(brand.name)} />
                   ))}
                 </Stack>
               ) : (
@@ -893,7 +927,7 @@ export function ProductListingPage({
                       value={sellerCountry}
                       label="Country"
                       displayEmpty
-                      onChange={(event) => setSellerCountry(event.target.value)}
+                      onChange={(event) => { setSellerCountry(event.target.value); applyPage(1); }}
                     >
                       <MenuItem value="">All countries</MenuItem>
                       {sellerCountries.map((country) => (
@@ -908,7 +942,7 @@ export function ProductListingPage({
                         clickable
                         color={sellerRegion === ALL_FILTER_VALUE ? "primary" : "default"}
                         variant={sellerRegion === ALL_FILTER_VALUE ? "filled" : "outlined"}
-                        onClick={() => setSellerRegion(ALL_FILTER_VALUE)}
+                        onClick={() => { setSellerRegion(ALL_FILTER_VALUE); applyPage(1); }}
                       />
                       {sellerRegionsForCountry.map((region) => (
                         <Chip
@@ -917,7 +951,7 @@ export function ProductListingPage({
                           clickable
                           color={sellerRegion === region ? "primary" : "default"}
                           variant={sellerRegion === region ? "filled" : "outlined"}
-                          onClick={() => setSellerRegion(region)}
+                          onClick={() => { setSellerRegion(region); applyPage(1); }}
                         />
                       ))}
                     </Stack>
