@@ -266,10 +266,19 @@ _CATEGORY_PLACEHOLDER_IMAGE = "https://placehold.co/600x600/655AFF/FFFFFF?text=S
 # the manual backend/app/seeds/catalog.py script, since that script is never
 # run automatically in production — sellers would otherwise have nothing to
 # pick from. Matched by slug, so re-running never duplicates or reparents
-# anything; ad-hoc categories a seller already created via free-text entry
-# before this taxonomy existed (e.g. "Phones & Accessories") are left
-# untouched — this only adds rows, it never renames/deletes/reparents.
+# anything; a main category entry that already existed pre-taxonomy (e.g.
+# "Phones & Accessories"/"Tech", created ad hoc via free-text entry) has its
+# own row reused as-is (id/image untouched) — only its listed children get
+# added underneath it.
+#
+# Every main category MUST have at least one subcategory — the create-product
+# form disables and blanks the Subcategory select for a category with none,
+# which makes the form impossible to submit for that category (Subcategory is
+# required whenever options exist). "Phones & Accessories" and "Tech" were
+# the two exceptions (0 children, pre-dating this taxonomy) until this fix.
 _CATEGORY_TAXONOMY: list[tuple[str, list[str]]] = [
+    ("Phones & Accessories", ["Smartphones", "Phone Cases", "Chargers & Cables", "Screen Protectors", "Headphones & Earbuds", "Power Banks"]),
+    ("Tech", ["Computers & Tablets", "Networking Equipment", "Smart Home Devices", "Wearable Tech", "Software & Licenses"]),
     ("Fashion & Apparel", ["Women's Clothing", "Men's Clothing", "Traditional Wear", "Kids' Clothing", "Lingerie & Sleepwear", "Activewear"]),
     ("Shoes & Footwear", ["Women's Shoes", "Men's Shoes", "Kids' Shoes", "Sandals & Slippers", "Sports Shoes"]),
     ("Bags & Accessories", ["Handbags & Purses", "Backpacks", "Wallets", "Belts", "Sunglasses", "Hats & Caps"]),

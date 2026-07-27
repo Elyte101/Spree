@@ -13,6 +13,7 @@ import {
   Divider,
   FormControl,
   FormControlLabel,
+  FormHelperText,
   IconButton,
   InputLabel,
   MenuItem,
@@ -131,6 +132,12 @@ export function ProductCreateForm({
 
   const mainCategories = categories.filter((c) => !c.parentId);
   const subcategories = categories.filter((c) => c.parentId === mainCategoryId);
+  // A category should always have subcategories (seeded server-side — see
+  // _CATEGORY_TAXONOMY in backend/app/db/init_db.py), but a stray orphan
+  // main category with none must not brick the form: Subcategory disables
+  // itself and stops being required rather than staying required with
+  // nothing selectable.
+  const hasNoSubcategories = Boolean(mainCategoryId) && subcategories.length === 0;
   const selectedMainCategory = mainCategories.find((c) => c.id === mainCategoryId);
   const availableSizeOptions = selectedMainCategory
     ? SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG[selectedMainCategory.slug] ?? []
@@ -167,7 +174,8 @@ export function ProductCreateForm({
       description.trim() &&
       Number(price) > 0 &&
       stock.trim() !== "" &&
-      subcategoryId &&
+      mainCategoryId &&
+      (hasNoSubcategories || subcategoryId) &&
       brandName.trim() &&
       uploadedImages.length
   );
@@ -242,7 +250,9 @@ export function ProductCreateForm({
       price: Number(price),
       discount: Number(discount),
       images: uploadedImages,
-      categoryId: subcategoryId,
+      // Falls back to the main category itself on the rare orphan-category
+      // edge case (hasNoSubcategories) where there's no subcategory to pick.
+      categoryId: subcategoryId || mainCategoryId,
       brandName: brandName.trim(),
       collectionName: collectionName.trim() || undefined,
       stock: Number(stock),
@@ -612,7 +622,7 @@ export function ProductCreateForm({
                       ))}
                     </Select>
                   </FormControl>
-                  <FormControl required disabled={!mainCategoryId}>
+                  <FormControl required={!hasNoSubcategories} disabled={!mainCategoryId || hasNoSubcategories}>
                     <InputLabel id="create-subcategory-label">Subcategory</InputLabel>
                     <Select
                       labelId="create-subcategory-label"
@@ -624,6 +634,9 @@ export function ProductCreateForm({
                         <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                       ))}
                     </Select>
+                    {hasNoSubcategories ? (
+                      <FormHelperText>No subcategories available for this category</FormHelperText>
+                    ) : null}
                   </FormControl>
                 </Box>
                 <Box
