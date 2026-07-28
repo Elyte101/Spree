@@ -468,18 +468,13 @@ export function LandingPage({
             >
             <Box
               sx={{
-                display: "grid",
+                display: "flex",
+                flexWrap: "wrap",
                 gap: 1.5,
-                gridTemplateColumns: {
-                  xs: "repeat(2, 1fr)",
-                  sm: "repeat(3, 1fr)",
-                  md: "repeat(4, 1fr)",
-                  lg: "repeat(auto-fill, minmax(140px, 1fr))",
-                },
               }}
             >
               {homeFeed.categories.map((category) => (
-                <motion.div key={category.id} variants={scaleItem}>
+                <motion.div key={category.id} variants={scaleItem} style={{ flex: "0 0 auto" }}>
                   <Paper
                     component={Link}
                     href={`/products?category=${encodeURIComponent(category.name)}`}
@@ -489,6 +484,13 @@ export function LandingPage({
                       flexDirection: "column",
                       alignItems: "center",
                       gap: 1.25,
+                      // Content-sized, not a shared grid track: a long name
+                      // (e.g. "Beauty & Personal Care") widens only its own
+                      // card instead of wrapping or being clipped, while a
+                      // short one (e.g. "Tech") stays at minWidth so it
+                      // doesn't look cramped next to its thumbnail.
+                      width: "max-content",
+                      minWidth: 128,
                       color: "text.primary",
                       textDecoration: "none",
                       borderRadius: 3,
@@ -505,7 +507,14 @@ export function LandingPage({
                     <Box sx={{ position: "relative", width: 52, height: 52 }}>
                       <ProductImage src={category.image} alt={category.name} sizes="52px" />
                     </Box>
-                    <Typography variant="body2" fontWeight={700} textAlign="center" lineHeight={1.3} fontSize="0.8rem">
+                    <Typography
+                      variant="body2"
+                      fontWeight={700}
+                      textAlign="center"
+                      lineHeight={1.3}
+                      fontSize="0.8rem"
+                      sx={{ whiteSpace: "nowrap" }}
+                    >
                       {category.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" fontWeight={600}>
