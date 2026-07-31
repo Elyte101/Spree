@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -34,6 +35,7 @@ import {
 } from "@mui/material";
 
 import { api, ApiClientError, UpdateProductPayload } from "@/lib/api";
+import { COLOR_OPTIONS, sizeGroupLookup, sizeValuesForSlug } from "@/lib/productTaxonomy";
 import { Category, Product, UserRole } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -109,6 +111,8 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
   const [editCategoryId, setEditCategoryId] = React.useState("");
   const [editBrandName, setEditBrandName] = React.useState("");
   const [editCollectionName, setEditCollectionName] = React.useState("");
+  const [editColors, setEditColors] = React.useState<string[]>([]);
+  const [editSizes, setEditSizes] = React.useState<string[]>([]);
   const [editSaving, setEditSaving] = React.useState(false);
   const [editError, setEditError] = React.useState("");
 
@@ -119,6 +123,12 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
 
   const editMainCategories = categories.filter((c) => !c.parentId);
   const editSubcategories = categories.filter((c) => c.parentId === editMainCategoryId);
+  const editSelectedMainCategory = editMainCategories.find((c) => c.id === editMainCategoryId);
+  const editAvailableSizeOptions = editMainCategoryId ? sizeValuesForSlug(editSelectedMainCategory?.slug) : [];
+  const editSizeGroupByValue = React.useMemo(
+    () => sizeGroupLookup(editSelectedMainCategory?.slug),
+    [editSelectedMainCategory?.slug]
+  );
 
   const openEdit = (product: Product) => {
     setEditTarget(product);
@@ -134,6 +144,8 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
     setEditCategoryId(product.categoryId);
     setEditBrandName(product.brand);
     setEditCollectionName(product.collection ?? "");
+    setEditColors(product.colors);
+    setEditSizes(product.sizes);
     setImageEntries(
       product.images.map((url) => ({ id: url, preview: url, url, status: "done" as const }))
     );
@@ -162,6 +174,8 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
       const newTags = editTags.split(/[\n,]+/).map((t) => t.trim()).filter(Boolean);
       if (JSON.stringify(newTags) !== JSON.stringify(editTarget.tags)) payload.tags = newTags;
       if (editCategoryId && editCategoryId !== editTarget.categoryId) payload.categoryId = editCategoryId;
+      if (JSON.stringify(editColors) !== JSON.stringify(editTarget.colors)) payload.colors = editColors;
+      if (JSON.stringify(editSizes) !== JSON.stringify(editTarget.sizes)) payload.sizes = editSizes;
       if (editBrandName.trim() !== editTarget.brand) payload.brandName = editBrandName.trim();
       if (editCollectionName.trim() !== (editTarget.collection ?? "")) payload.collectionName = editCollectionName.trim() || undefined;
       const currentImageUrls = imageEntries.filter((e) => e.status === "done" && e.url).map((e) => e.url!);
@@ -508,6 +522,37 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
             <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
               <TextField label="Brand" value={editBrandName} onChange={(e) => setEditBrandName(e.target.value)} />
               <TextField label="Collection" value={editCollectionName} onChange={(e) => setEditCollectionName(e.target.value)} />
+            </Box>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: editMainCategoryId ? "1fr 1fr" : "1fr" }}>
+              <Autocomplete
+                multiple
+                options={COLOR_OPTIONS}
+                value={editColors}
+                onChange={(_event, value) => setEditColors(value)}
+                renderInput={(params) => <TextField {...params} label="Colors" />}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const { key, ...tagProps } = getTagProps({ index });
+                    return <Chip key={key} label={option} size="small" {...tagProps} />;
+                  })
+                }
+              />
+              {editMainCategoryId ? (
+                <Autocomplete
+                  multiple
+                  options={editAvailableSizeOptions}
+                  groupBy={(option) => editSizeGroupByValue.get(option) ?? "Other"}
+                  value={editSizes}
+                  onChange={(_event, value) => setEditSizes(value)}
+                  renderInput={(params) => <TextField {...params} label="Sizes" />}
+                  renderTags={(value, getTagProps) =>
+                    value.map((option, index) => {
+                      const { key, ...tagProps } = getTagProps({ index });
+                      return <Chip key={key} label={option} size="small" {...tagProps} />;
+                    })
+                  }
+                />
+              ) : null}
             </Box>
             <TextField label="Badge" value={editBadge} onChange={(e) => setEditBadge(e.target.value)} fullWidth />
             <TextField label="Tags (comma-separated)" value={editTags} onChange={(e) => setEditTags(e.target.value)} fullWidth helperText="e.g. featured, new, sale" />

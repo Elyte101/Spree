@@ -25,10 +25,11 @@ import {
   Typography,
 } from "@mui/material";
 
-import { InfoOutlined } from "@mui/icons-material";
+import { InfoOutlined, WarningAmberRounded } from "@mui/icons-material";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
 import { calcCommission } from "@/lib/pricing";
+import { COLOR_OPTIONS, sizeGroupLookup, sizeValuesForSlug } from "@/lib/productTaxonomy";
 import { Brand, Category, Collection } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -49,43 +50,6 @@ interface ImageEntry {
 const ACCEPTED_MIME = ["image/jpeg", "image/png", "image/webp"];
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
-
-// Fixed, select-only option sets — colors and sizes are picked, never typed,
-// so listings stay consistent and filterable instead of accumulating one-off
-// spellings ("Navy" vs "navy blue" vs "Dark Blue").
-const COLOR_OPTIONS = [
-  "Black", "White", "Gray", "Silver", "Gold",
-  "Red", "Maroon", "Pink", "Orange", "Yellow",
-  "Green", "Olive", "Teal", "Turquoise", "Blue", "Navy",
-  "Purple", "Lavender", "Brown", "Beige", "Cream",
-  "Multicolor", "Ankara Print", "Kente Print",
-];
-
-const CLOTHING_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
-const SHOE_SIZES = ["36", "37", "38", "39", "40", "41", "42", "43", "44", "45", "46"];
-const KIDS_AGE_SIZES = [
-  "0-3 months", "3-6 months", "6-12 months",
-  "1-2 years", "2-4 years", "4-6 years", "6-8 years", "8-10 years", "10-12 years",
-];
-// Sold-by-length goods (fabric, rope, timber, wiring…) — covers every unit
-// these actually get cut/quoted in, rather than forcing one.
-const LENGTH_SIZES = [
-  "1 yard", "2 yards", "3 yards", "6 yards (full piece)",
-  "1 meter", "2 meters", "3 meters", "5 meters", "10 meters",
-  "12 inches", "24 inches", "36 inches",
-  "1 foot", "3 feet", "6 feet",
-];
-
-// Keyed by main-category slug (see backend/app/db/init_db.py's
-// _CATEGORY_TAXONOMY) — categories with no entry here simply show no Sizes
-// field at all, since a generic size concept doesn't apply to them.
-const SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG: Record<string, string[]> = {
-  "fashion-apparel": CLOTHING_SIZES,
-  "shoes-footwear": SHOE_SIZES,
-  "baby-kids": KIDS_AGE_SIZES,
-  "fabrics-textiles": LENGTH_SIZES,
-  "tools-hardware": LENGTH_SIZES,
-};
 
 const splitList = (value: string) =>
   value
@@ -139,9 +103,21 @@ export function ProductCreateForm({
   // nothing selectable.
   const hasNoSubcategories = Boolean(mainCategoryId) && subcategories.length === 0;
   const selectedMainCategory = mainCategories.find((c) => c.id === mainCategoryId);
-  const availableSizeOptions = selectedMainCategory
-    ? SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG[selectedMainCategory.slug] ?? []
-    : [];
+  // Every category gets a size set — categories with no specific mapping
+  // fall back to a generic one (One size / Small / Medium / Large) rather
+  // than hiding the field, so Sizes is always available once a category is
+  // chosen.
+  const availableSizeOptions = mainCategoryId ? sizeValuesForSlug(selectedMainCategory?.slug) : [];
+  const sizeGroupByValue = React.useMemo(
+    () => sizeGroupLookup(selectedMainCategory?.slug),
+    [selectedMainCategory?.slug]
+  );
+  // Switching category no longer wipes prior picks (they may still make
+  // sense, e.g. re-picking a sibling subcategory) — instead, flag whichever
+  // selections fell outside the new category's set so the seller can decide
+  // whether to remove them, rather than silently losing them or silently
+  // keeping an invalid combination.
+  const staleSizeSelections = sizeOptions.filter((value) => !availableSizeOptions.includes(value));
 
   const brandSuggestions = buildSuggestions(brands.map((brand) => brand.name));
   const collectionSuggestions = buildSuggestions(
@@ -614,7 +590,6 @@ export function ProductCreateForm({
                       onChange={(event) => {
                         setMainCategoryId(event.target.value);
                         setSubcategoryId("");
-                        setSizeOptions([]);
                       }}
                     >
                       {mainCategories.map((category) => (
@@ -728,14 +703,19 @@ export function ProductCreateForm({
                       })
                     }
                   />
-                  {availableSizeOptions.length ? (
+                  {mainCategoryId ? (
                     <Autocomplete
                       multiple
                       options={availableSizeOptions}
+                      groupBy={(option) => sizeGroupByValue.get(option) ?? "Other"}
                       value={sizeOptions}
                       onChange={(_event, value) => setSizeOptions(value)}
                       renderInput={(params) => (
-                        <TextField {...params} label="Sizes" helperText="Pick every size this item comes in" />
+                        <TextField
+                          {...params}
+                          label="Sizes"
+                          helperText={`Pick every size this item comes in — options shown for ${selectedMainCategory?.name ?? "this category"}`}
+                        />
                       )}
                       renderTags={(value, getTagProps) =>
                         value.map((option, index) => {
@@ -746,6 +726,14 @@ export function ProductCreateForm({
                     />
                   ) : null}
                 </Box>
+                {staleSizeSelections.length ? (
+                  <Alert severity="warning" icon={<WarningAmberRounded fontSize="small" />}>
+                    {(staleSizeSelections.length === 1
+                      ? `"${staleSizeSelections[0]}" isn't one of the size options for ${selectedMainCategory?.name ?? "this category"}.`
+                      : `${staleSizeSelections.map((s) => `"${s}"`).join(", ")} aren't size options for ${selectedMainCategory?.name ?? "this category"}.`
+                    ) + " Remove and re-pick from the current list, or leave as-is if it's still accurate."}
+                  </Alert>
+                ) : null}
                 <Divider />
                 <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
                   <FormControlLabel

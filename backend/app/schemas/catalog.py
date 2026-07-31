@@ -65,6 +65,8 @@ class ProductUpdateIn(BaseModel):
     stock: int | None = Field(default=None, ge=0)
     badge: str | None = Field(default=None, max_length=120)
     tags: list[str] | None = None
+    colors: list[str] | None = None
+    sizes: list[str] | None = None
 
 
 class ProductBlacklistIn(BaseModel):

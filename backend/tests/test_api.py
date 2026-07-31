@@ -92,7 +92,11 @@ def _create_product_payload() -> dict:
         "rating": 4.5,
         "reviewsCount": 8,
         "colors": ["Sand"],
-        "sizes": ["M", "L"],
+        # This fixture always creates a fresh ad-hoc category (random name
+        # above), which never matches a specific size taxonomy entry — it
+        # always falls to the generic fallback (see
+        # backend/app/core/size_taxonomy.py), so these must be valid there.
+        "sizes": ["Medium", "Large"],
         "tags": ["featured"],
     }
 
@@ -216,6 +220,10 @@ def test_filtering_by_main_category_includes_its_subcategory_products():
         payload = _create_product_payload()
         payload["categoryId"] = makeup_id
         del payload["categoryName"]
+        # Not testing sizes here, and the fixture's default ("Medium",
+        # "Large") isn't in Beauty & Personal Care's size set (volume/weight)
+        # — irrelevant to what this test checks, so just drop them.
+        payload["sizes"] = []
         create_response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
         assert create_response.status_code == 201
         created = create_response.json()
@@ -904,6 +912,87 @@ def test_admin_product_creation_requires_internal_api_key():
 
         unauthorized = client.post("/api/v1/products", json=payload)
         assert unauthorized.status_code == 401
+
+
+def test_product_creation_rejects_size_not_in_category_allowed_set():
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        payload = _create_product_payload()
+        payload["categoryId"] = categories["Shoes & Footwear"]["id"]
+        del payload["categoryName"]
+        payload["sizes"] = ["Medium"]  # a clothing/generic size, not a shoe size
+
+        response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+
+        assert response.status_code == 422
+        assert "Medium" in response.json()["detail"]
+
+
+def test_product_creation_accepts_category_specific_sizes():
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        payload = _create_product_payload()
+        payload["categoryId"] = categories["Fabrics & Textiles"]["id"]
+        del payload["categoryName"]
+        payload["sizes"] = ["4 yards", "6 yards"]
+
+        response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+
+        assert response.status_code == 201
+        created = response.json()
+        assert sorted(created["sizes"]) == ["4 yards", "6 yards"]
+
+
+def test_product_update_regenerates_variants_from_new_sizes_and_colors():
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        payload = _create_product_payload()
+        payload["categoryId"] = categories["Fashion & Apparel"]["id"]
+        del payload["categoryName"]
+        payload["sizes"] = ["S"]
+        payload["colors"] = ["Black"]
+
+        created = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS).json()
+        assert created["sizes"] == ["S"]
+
+        updated = client.put(
+            f"/api/v1/products/{created['id']}",
+            json={"sizes": ["S", "M", "L"], "colors": ["Black", "White"]},
+            headers=ADMIN_HEADERS,
+        )
+
+        assert updated.status_code == 200
+        body = updated.json()
+        assert sorted(body["sizes"]) == ["L", "M", "S"]
+        assert sorted(body["colors"]) == ["Black", "White"]
+        assert len(body["variants"]) == 6  # 2 colors x 3 sizes
+
+
+def test_product_update_rejects_size_not_in_category_allowed_set():
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        payload = _create_product_payload()
+        payload["categoryId"] = categories["Fashion & Apparel"]["id"]
+        del payload["categoryName"]
+        payload["sizes"] = ["S"]
+
+        created = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS).json()
+
+        updated = client.put(
+            f"/api/v1/products/{created['id']}",
+            json={"sizes": ["not-a-real-size"]},
+            headers=ADMIN_HEADERS,
+        )
+
+        assert updated.status_code == 422
+        # Original sizes must survive an invalid update attempt untouched.
+        unchanged = client.get(f"/api/v1/products/{created['id']}").json()
+        assert unchanged["sizes"] == ["S"]
+
+
+def test_admin_product_creation_succeeds_with_valid_payload():
+    with TestClient(app) as client:
+        payload = _create_product_payload()
 
         response = client.post(
             "/api/v1/products",

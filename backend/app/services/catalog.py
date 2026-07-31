@@ -9,6 +9,7 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
+from app.core.size_taxonomy import allowed_sizes_for_slug
 from app.db.models import (
     Brand,
     Category,
@@ -494,6 +495,31 @@ def _resolve_category(
     return category
 
 
+def _validate_sizes(category: Category, sizes: list[str]) -> None:
+    """Defense-in-depth backstop: the create/edit forms already restrict the
+    Sizes picker to the allowed set for whichever category is selected (see
+    lib/productTaxonomy.ts), so this only ever fires against a direct API
+    call bypassing that UI. main_category is category itself when it's
+    already top-level, or its parent when category is a subcategory (sizes
+    are keyed by main category, not subcategory — see
+    backend/app/core/size_taxonomy.py).
+    """
+    if not sizes:
+        return
+    main_category = category if category.parent_id is None else category.parent
+    allowed = set(allowed_sizes_for_slug(main_category.slug if main_category else None))
+    invalid = [size for size in sizes if size not in allowed]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Invalid size(s) for category "
+                f"'{main_category.name if main_category else category.name}': "
+                f"{', '.join(invalid)}"
+            ),
+        )
+
+
 def _resolve_brand(
     db: Session,
     brand_id: str | None,
@@ -690,6 +716,7 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
         )
 
     category = _resolve_category(db, payload.categoryId, payload.categoryName, images[0])
+    _validate_sizes(category, payload.sizes)
     brand = _resolve_brand(db, payload.brandId, payload.brandName, images[0])
     # G32: strip HTML from description to prevent XSS
     clean_description = _strip_html(payload.description)
@@ -1034,6 +1061,27 @@ def update_product(
             db, payload.collectionId, payload.collectionName, product.description or "", default_img
         )
         product.collection_id = product.collection.id if product.collection else None
+
+    # Colors/sizes aren't their own DB column — they're the distinct color/
+    # size values across product.variants (see _product_to_dict) — so
+    # "updating" them means regenerating the color x size variant grid, the
+    # same way create_product builds it. Only touched when the request
+    # actually supplies one of the two; product.category reflects any
+    # category change from earlier in this same call, so a simultaneous
+    # category + sizes edit validates sizes against the new category.
+    if payload.colors is not None or payload.sizes is not None:
+        existing_variants = product.variants or []
+        new_colors = payload.colors if payload.colors is not None else _extract_unique_values(existing_variants, "color")
+        new_sizes = payload.sizes if payload.sizes is not None else _extract_unique_values(existing_variants, "size")
+        _validate_sizes(product.category, new_sizes)
+        product.variants = _build_variants(
+            product.slug,
+            product.images or ["/product-placeholder.svg"],
+            product.stock,
+            [],
+            new_colors,
+            new_sizes,
+        )
 
     db.add(product)
     db.commit()

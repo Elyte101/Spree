@@ -97,6 +97,8 @@ export interface UpdateProductPayload {
   stock?: number;
   badge?: string | null;
   tags?: string[];
+  colors?: string[];
+  sizes?: string[];
 }
 
 export interface CommentPayload {
