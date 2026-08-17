@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default async function CheckoutRoute() {
   const session = await auth();
   if (!session?.user) {
-    redirect("/login?callbackUrl=/checkout");
+    redirect("/auth/sign-in?callbackUrl=/checkout");
   }
 
   const profile = await getUserProfile(session.user.id, {

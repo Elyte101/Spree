@@ -103,6 +103,16 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  async redirects() {
+    return [
+      {
+        source: "/login",
+        destination: "/auth/sign-in",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
