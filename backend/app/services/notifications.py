@@ -86,8 +86,13 @@ MANDATORY_EVENTS = {
     "order_placed_seller",
     "payout_released",
     "payout_failed",
-    # A6: a password-reset email must always be deliverable — it's a
-    # security-critical action, not a discretionary notification.
+}
+
+# Password reset must always be deliverable, but only over email — the reset
+# link has no business sitting in the in-app notification feed (a shared
+# device or over-the-shoulder view of "Notifications" would expose an active
+# reset link). Forced to email-only regardless of user prefs, never in_app.
+MANDATORY_EMAIL_ONLY_EVENTS = {
     "password_reset",
 }
 
@@ -100,6 +105,9 @@ def _get_user_prefs(user: User | None, event_type: str) -> dict[str, bool]:
     merged = {**defaults, **user_event_prefs}
     if event_type in MANDATORY_EVENTS:
         merged["in_app"] = True
+        merged["email"] = True
+    if event_type in MANDATORY_EMAIL_ONLY_EVENTS:
+        merged["in_app"] = False
         merged["email"] = True
     return merged
 

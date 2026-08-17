@@ -1,7 +1,13 @@
+import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Carrier tracking numbers: letters, digits, and internal hyphens only.
+# Rejects free text like phone numbers ("+233 55 123 4567") or stray
+# lowercase-word entries ("flipshipping952") that slipped in unvalidated.
+_TRACKING_NUMBER_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{4,34})[A-Za-z0-9]$")
 
 
 class OrderItemIn(BaseModel):
@@ -42,9 +48,20 @@ class OrderCreateIn(BaseModel):
 
 
 class OrderTrackingIn(BaseModel):
-    trackingNumber: str = Field(min_length=1, max_length=120)
+    trackingNumber: str = Field(min_length=6, max_length=36)
     carrier: str = Field(default="", max_length=80)
     estimatedDeliveryDays: int | None = Field(default=None, ge=1, le=365)
+
+    @field_validator("trackingNumber")
+    @classmethod
+    def validate_tracking_number(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not _TRACKING_NUMBER_RE.match(cleaned):
+            raise ValueError(
+                "Tracking number must be 6-36 alphanumeric characters (hyphens allowed, "
+                "not at the ends) — no spaces, phone numbers, or symbols"
+            )
+        return cleaned
 
 
 class ChargeMomoIn(OrderCreateIn):

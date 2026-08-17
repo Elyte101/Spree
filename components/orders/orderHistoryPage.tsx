@@ -126,7 +126,7 @@ function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
         >
           <Stack gap={0.5}>
             <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace" }}>
-              #{order.id.slice(0, 8).toUpperCase()}
+              #{order.id.slice(-8).toUpperCase()}
             </Typography>
             <Typography variant="body1" fontWeight={600}>
               {order.fullName}

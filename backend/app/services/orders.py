@@ -1557,7 +1557,27 @@ def get_order(db: Session, order_id: str, actor_id: str | None, actor_role: str)
     return _order_to_dict(order)
 
 
+# Orders left at status "pending" (awaiting payment) past this window are
+# almost certainly abandoned checkouts, not live payment attempts — expire
+# them lazily on read so the order lists stop filling up with stale test/
+# abandoned orders instead of needing a separate cron.
+_PENDING_PAYMENT_TTL = timedelta(hours=24)
+
+
+def _expire_stale_pending_orders(db: Session) -> None:
+    cutoff = datetime.now(timezone.utc) - _PENDING_PAYMENT_TTL
+    stale = db.scalars(
+        select(Order).where(Order.status == "pending", Order.created_at < cutoff)
+    ).all()
+    if not stale:
+        return
+    for order in stale:
+        order.status = "cancelled"
+    db.commit()
+
+
 def list_user_orders(db: Session, user_id: str) -> list[dict]:
+    _expire_stale_pending_orders(db)
     orders = db.scalars(
         select(Order).where(Order.user_id == user_id).order_by(Order.created_at.desc())
     ).all()
@@ -1577,6 +1597,7 @@ def list_seller_orders(db: Session, seller_id: str) -> list[dict]:
 
 
 def list_admin_orders(db: Session, page: int = 1, limit: int = 50) -> list[dict]:
+    _expire_stale_pending_orders(db)
     orders = db.scalars(
         select(Order)
         .order_by(Order.created_at.desc())
@@ -1774,24 +1795,30 @@ def confirm_delivery(db: Session, order_id: str, buyer_id: str) -> dict:
         payout_status = result["payout_status"]
         if payout_status == "released":
             payout_note = f"Your payout of {order.currency} {payout_ghs} has been sent to your account."
+            payout_state_label = "payout released"
+            email_subject = "Your Spree payout has been released"
         elif payout_status == "pending_account":
             payout_note = (
                 f"Your payout of {order.currency} {payout_ghs} is ready but we have no account on file. "
                 "Please add your payout details in your profile."
             )
+            payout_state_label = "payout pending account details"
+            email_subject = "Your Spree payout is ready — add your account details"
         else:
             payout_note = (
                 f"Your payout of {order.currency} {payout_ghs} has been initiated and is being processed."
             )
+            payout_state_label = "payout initiated"
+            email_subject = "Your Spree payout has been initiated"
         notify_safe(
             db,
             event_type="payout_released",
             recipient_id=sid,
-            title="Delivery confirmed — payout initiated",
+            title=f"Delivery confirmed — {payout_state_label}",
             body=f"The buyer confirmed receipt of their order. {payout_note}",
             notif_type="order",
             href="/dashboard/orders",
-            email_subject="Your Spree payout has been released",
+            email_subject=email_subject,
             cta_label="View orders",
             cta_url=f"{settings.frontend_url}/dashboard/orders",
         )

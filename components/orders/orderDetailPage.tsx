@@ -407,7 +407,7 @@ export function OrderDetailPage({
               >
                 <Box>
                   <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-                    ORDER #{order.id.slice(0, 8).toUpperCase()}
+                    ORDER #{order.id.slice(-8).toUpperCase()}
                   </Typography>
                   <Typography variant="h5" fontWeight={800} mt={0.5}>
                     Order Details
