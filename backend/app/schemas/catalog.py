@@ -83,7 +83,6 @@ class ProductOut(BaseModel):
     name: str
     description: str
     price: float
-    sellerPrice: float | None = None
     discount: float
     images: list[str]
     image: str
@@ -115,6 +114,14 @@ class ProductOut(BaseModel):
     colors: list[str]
     sizes: list[str]
     tags: list[str]
+
+
+class ProductAdminOut(ProductOut):
+    """Adds vendor/admin-only fields. Only used as response_model on
+    endpoints authenticated as the owning vendor or an admin — never on
+    public read endpoints (list/detail/related/search/home)."""
+
+    sellerPrice: float | None = None
     isBlacklisted: bool = False
 
 

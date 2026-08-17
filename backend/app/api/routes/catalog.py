@@ -11,6 +11,7 @@ from app.schemas.catalog import (
     CategoryOut,
     CollectionOut,
     HomeFeedOut,
+    ProductAdminOut,
     ProductBlacklistIn,
     ProductCreateIn,
     ProductFeaturedIn,
@@ -111,7 +112,7 @@ def products(
     )
 
 
-@router.post("/products", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
+@router.post("/products", response_model=ProductAdminOut, status_code=status.HTTP_201_CREATED)
 def products_create(
     payload: ProductCreateIn,
     db: DBSession,
@@ -133,7 +134,7 @@ def product_details(identifier: str, db: DBSession):
     return product
 
 
-@router.put("/products/{product_id}", response_model=ProductOut)
+@router.put("/products/{product_id}", response_model=ProductAdminOut)
 def product_update(
     product_id: str,
     payload: ProductUpdateIn,
@@ -156,7 +157,7 @@ def product_delete(
     delete_product(db, product_id, actor_user_id, actor_role)
 
 
-@router.patch("/products/{product_id}/blacklist", response_model=ProductOut)
+@router.patch("/products/{product_id}/blacklist", response_model=ProductAdminOut)
 def product_blacklist(
     product_id: str,
     payload: ProductBlacklistIn,
@@ -169,7 +170,7 @@ def product_blacklist(
     return toggle_product_blacklist(db, product_id, payload.blacklisted)
 
 
-@router.patch("/products/{product_id}/featured", response_model=ProductOut)
+@router.patch("/products/{product_id}/featured", response_model=ProductAdminOut)
 def product_featured(
     product_id: str,
     payload: ProductFeaturedIn,
