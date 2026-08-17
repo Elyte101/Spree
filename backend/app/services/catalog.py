@@ -148,6 +148,8 @@ def _product_to_dict(product: Product) -> dict:
         "category": product.category.name,
         "categoryId": product.category.id,
         "categorySlug": product.category.slug,
+        "categoryParent": product.category.parent.name if product.category.parent else None,
+        "categoryParentSlug": product.category.parent.slug if product.category.parent else None,
         "brand": product.brand.name,
         "brandId": product.brand.id,
         "brandSlug": product.brand.slug,
@@ -386,8 +388,22 @@ def _catalog_filters(db: Session) -> dict:
         price_min = 0
         price_max = 0
 
+    # Structured two-level taxonomy: one entry per main category (parent_id
+    # IS NULL) with its own subcategories nested underneath, instead of one
+    # flat array mixing ~24 main categories with ~100 subcategories.
+    category_rows = db.scalars(select(Category).order_by(Category.name.asc())).all()
+    subcategories_by_parent: dict[str, list[str]] = {}
+    for cat in category_rows:
+        if cat.parent_id:
+            subcategories_by_parent.setdefault(cat.parent_id, []).append(cat.name)
+    categories_tree = [
+        {"category": cat.name, "subcategories": sorted(subcategories_by_parent.get(cat.id, []))}
+        for cat in category_rows
+        if cat.parent_id is None
+    ]
+
     return {
-        "categories": sorted(db.scalars(select(Category.name).order_by(Category.name.asc())).all()),
+        "categories": categories_tree,
         "brands": sorted(db.scalars(select(Brand.name).order_by(Brand.name.asc())).all()),
         "tags": sorted({tag for tags in tag_rows for tag in (tags or [])}),
         "collections": sorted(db.scalars(select(Collection.slug).order_by(Collection.name.asc())).all()),

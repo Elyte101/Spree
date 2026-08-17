@@ -160,6 +160,28 @@ export function ProductDetailsPage({
             <Link component={NextLink} href="/products" underline="hover" color="inherit">
               Products
             </Link>
+            {product.categoryParent ? (
+              <>
+                <Link
+                  component={NextLink}
+                  href={`/products?category=${encodeURIComponent(product.categoryParent)}`}
+                  underline="hover"
+                  color="inherit"
+                >
+                  {product.categoryParent}
+                </Link>
+                <Typography color="text.secondary">{product.category}</Typography>
+              </>
+            ) : (
+              <Link
+                component={NextLink}
+                href={`/products?category=${encodeURIComponent(product.category)}`}
+                underline="hover"
+                color="inherit"
+              >
+                {product.category}
+              </Link>
+            )}
             <Typography color="text.primary">{product.name}</Typography>
           </Breadcrumbs>
         </Stack>

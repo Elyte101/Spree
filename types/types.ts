@@ -135,6 +135,8 @@ export interface Product {
   category: string;
   categoryId: string;
   categorySlug: string;
+  categoryParent?: string | null;
+  categoryParentSlug?: string | null;
   brand: string;
   brandId: string;
   brandSlug: string;
@@ -249,8 +251,13 @@ export interface HomeFeed {
   brands: Brand[];
 }
 
+export interface CategoryTaxonomy {
+  category: string;
+  subcategories: string[];
+}
+
 export interface CatalogFilters {
-  categories: string[];
+  categories: CategoryTaxonomy[];
   brands: string[];
   tags: string[];
   collections: string[];

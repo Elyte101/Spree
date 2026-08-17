@@ -89,6 +89,8 @@ class ProductOut(BaseModel):
     category: str
     categoryId: str
     categorySlug: str
+    categoryParent: str | None = None
+    categoryParentSlug: str | None = None
     brand: str
     brandId: str
     brandSlug: str
@@ -173,8 +175,13 @@ class PriceRangeOut(BaseModel):
     max: float
 
 
+class CategoryTaxonomyOut(BaseModel):
+    category: str
+    subcategories: list[str]
+
+
 class CatalogFiltersOut(BaseModel):
-    categories: list[str]
+    categories: list[CategoryTaxonomyOut]
     brands: list[str]
     tags: list[str]
     collections: list[str]
