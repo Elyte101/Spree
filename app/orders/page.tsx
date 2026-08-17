@@ -16,6 +16,9 @@ export default async function OrdersRoute() {
     redirect("/auth/sign-in?callbackUrl=%2Forders");
   }
 
-  const orders = await getOrders(session.user.id, session.user.role);
+  // Always request this user's own orders, regardless of role — /orders is
+  // "My Orders" and must never widen to the admin all-orders view even for
+  // an admin session. That view belongs at /dashboard (vendor/admin only).
+  const orders = await getOrders(session.user.id, "user");
   return <OrderHistoryPage orders={orders} />;
 }
