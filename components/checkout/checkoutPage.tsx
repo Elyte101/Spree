@@ -24,6 +24,7 @@ import {
   Paper,
   Radio,
   Select,
+  Skeleton,
   Stack,
   TextField,
   Typography,
@@ -154,7 +155,7 @@ function loadPaystackJS(): Promise<void> {
 }
 
 export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile | null }) {
-  const { cart, clearCart } = useCart();
+  const { cart, clearCart, hasHydrated } = useCart();
   const refreshPrices = useCartStore((s) => s.refreshPrices);
   const { showToast } = useToast();
 
@@ -546,6 +547,27 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
     border: "1px solid",
     borderColor: "divider",
   } as const;
+
+  // Cart lives in localStorage via Zustand persist, which is empty until the
+  // client rehydrates it after mount. Rendering real content off cart.items
+  // before hasHydrated flips true would show a false "cart is empty" state
+  // for a signed-in user with items — show a skeleton instead of guessing.
+  if (!hasHydrated) {
+    return (
+      <Box sx={{ minHeight: "100vh", px: { xs: 1.5, sm: 3, md: 5 }, py: { xs: 3, md: 5 } }}>
+        <Stack spacing={4}>
+          <Skeleton variant="rounded" height={120} sx={{ borderRadius: 3 }} />
+          <Stack direction={{ xs: "column", xl: "row" }} spacing={4}>
+            <Stack spacing={4} sx={{ flex: 1 }}>
+              <Skeleton variant="rounded" height={220} sx={{ borderRadius: 3 }} />
+              <Skeleton variant="rounded" height={220} sx={{ borderRadius: 3 }} />
+            </Stack>
+            <Skeleton variant="rounded" height={320} sx={{ borderRadius: 3, width: { xs: "100%", xl: 380 } }} />
+          </Stack>
+        </Stack>
+      </Box>
+    );
+  }
 
   return (
     <Box
