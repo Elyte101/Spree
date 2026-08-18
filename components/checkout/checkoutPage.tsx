@@ -40,12 +40,19 @@ import { formatPrice, COUNTRY_LIST, DEFAULT_COUNTRY, getRegionsForCountry, getRe
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
+// Content stays fully opaque at all times — the "hidden" state used to set
+// opacity: 0, which framer-motion applies synchronously in the render output
+// but can only reverse once its JS has mounted and run. Under real network/
+// cold-start latency that JS delay showed up as a multi-second blank page,
+// even though the DOM (with opacity: 0) was already there. A subtle
+// slide-in doesn't have that failure mode — it's a cosmetic offset, not a
+// visibility gate, so slow JS just means "no slide," not "invisible."
 const sectionVariants = {
-  hidden: { opacity: 0, y: 32 },
+  hidden: { opacity: 1, y: 16 },
   visible: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5, delay: i * 0.08, ease },
+    transition: { duration: 0.4, delay: i * 0.06, ease },
   }),
 };
 
