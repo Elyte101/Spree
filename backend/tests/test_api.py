@@ -928,6 +928,85 @@ def test_product_creation_rejects_size_not_in_category_allowed_set():
         assert "Medium" in response.json()["detail"]
 
 
+def test_product_creation_rejects_color_outside_canonical_set():
+    with TestClient(app) as client:
+        payload = _create_product_payload()
+        payload["colors"] = ["Chartreuse"]  # not in COLOR_OPTIONS
+
+        response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+
+        assert response.status_code == 422
+        assert "Chartreuse" in response.json()["detail"]
+
+
+def test_product_creation_accepts_canonical_colors_including_sand():
+    """Sand is a legitimately in-use color (reconciled into COLOR_OPTIONS
+    alongside enforcement — see app/core/color_taxonomy.py) — must not be
+    rejected now that validation is on."""
+    with TestClient(app) as client:
+        payload = _create_product_payload()
+        payload["colors"] = ["Sand"]
+
+        response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+
+        assert response.status_code == 201, response.text
+        assert response.json()["colors"] == ["Sand"]
+
+
+def test_product_update_rejects_color_outside_canonical_set():
+    with TestClient(app) as client:
+        payload = _create_product_payload()
+        created = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS).json()
+
+        updated = client.put(
+            f"/api/v1/products/{created['id']}",
+            json={"colors": ["not-a-real-color"]},
+            headers=ADMIN_HEADERS,
+        )
+
+        assert updated.status_code == 422
+        # Original colors must survive an invalid update attempt untouched.
+        unchanged = client.get(f"/api/v1/products/{created['id']}").json()
+        assert unchanged["colors"] == ["Sand"]
+
+
+def test_product_update_sizes_only_does_not_validate_carried_over_colors():
+    """A product with legacy non-canonical color data (pre-migration) must
+    still be editable for unrelated fields (e.g. sizes) — validation only
+    applies to colors the request itself is writing, not colors merely
+    carried over from existing variants untouched."""
+    with TestClient(app) as client:
+        categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
+        payload = _create_product_payload()
+        payload["categoryId"] = categories["Fashion & Apparel"]["id"]
+        del payload["categoryName"]
+        payload["sizes"] = ["S"]
+        created = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS).json()
+        product_id = created["id"]
+
+        # Simulate legacy dirty color data written before validation existed.
+        from app.db.models import Product
+        from app.db.session import SessionLocal
+
+        with SessionLocal() as db:
+            product = db.get(Product, product_id)
+            for variant in product.variants:
+                variant["color"] = "Navy blue"  # not canonical
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(product, "variants")
+            db.add(product)
+            db.commit()
+
+        updated = client.put(
+            f"/api/v1/products/{product_id}",
+            json={"sizes": ["M"]},
+            headers=ADMIN_HEADERS,
+        )
+
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["sizes"] == ["M"]
+
+
 def test_product_creation_accepts_category_specific_sizes():
     with TestClient(app) as client:
         categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}

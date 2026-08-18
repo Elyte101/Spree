@@ -9,6 +9,7 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
+from app.core.color_taxonomy import COLOR_OPTIONS
 from app.core.size_taxonomy import allowed_sizes_for_slug
 from app.core.stock import derive_stock, redistribute_stock
 from app.db.models import (
@@ -537,6 +538,23 @@ def _validate_sizes(category: Category, sizes: list[str]) -> None:
         )
 
 
+def _validate_colors(colors: list[str]) -> None:
+    """Defense-in-depth backstop, mirroring _validate_sizes above: the
+    create/edit forms already restrict the Colors picker to COLOR_OPTIONS
+    (lib/productTaxonomy.ts), so this only ever fires against a direct API
+    call bypassing that UI.
+    """
+    if not colors:
+        return
+    allowed = set(COLOR_OPTIONS)
+    invalid = [color for color in colors if color not in allowed]
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid color(s): {', '.join(invalid)}",
+        )
+
+
 def _resolve_brand(
     db: Session,
     brand_id: str | None,
@@ -734,6 +752,7 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
 
     category = _resolve_category(db, payload.categoryId, payload.categoryName, images[0])
     _validate_sizes(category, payload.sizes)
+    _validate_colors(payload.colors)
     brand = _resolve_brand(db, payload.brandId, payload.brandName, images[0])
     # G32: strip HTML from description to prevent XSS
     clean_description = _strip_html(payload.description)
@@ -1097,6 +1116,12 @@ def update_product(
         new_colors = payload.colors if payload.colors is not None else _extract_unique_values(existing_variants, "color")
         new_sizes = payload.sizes if payload.sizes is not None else _extract_unique_values(existing_variants, "size")
         _validate_sizes(product.category, new_sizes)
+        # Only validate colors the request is actually writing — not colors
+        # merely carried over from the existing variants (e.g. a sizes-only
+        # edit shouldn't 422 just because a product's pre-existing color data
+        # hasn't been through the normalize_variant_colors.py migration yet).
+        if payload.colors is not None:
+            _validate_colors(payload.colors)
         # Redistribute the new stock total (if this call also set one) across
         # the rebuilt grid; otherwise preserve the current derived total.
         rebuild_total = stock_override if stock_override is not None else derive_stock(existing_variants, product.stock)

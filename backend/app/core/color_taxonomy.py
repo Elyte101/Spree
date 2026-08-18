@@ -12,6 +12,6 @@ COLOR_OPTIONS = [
     "Black", "White", "Gray", "Silver", "Gold",
     "Red", "Maroon", "Pink", "Orange", "Yellow",
     "Green", "Olive", "Teal", "Turquoise", "Blue", "Navy",
-    "Purple", "Lavender", "Brown", "Beige", "Cream",
+    "Purple", "Lavender", "Brown", "Beige", "Cream", "Sand",
     "Multicolor", "Ankara Print", "Kente Print",
 ]
