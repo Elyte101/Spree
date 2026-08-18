@@ -23,21 +23,29 @@ Per-value decision, in order:
 
 NEEDS_REVIEW values are never written — only logged, for a human to look at.
 
+Idempotent: a value this script writes either (a) exactly matches a
+canonical preset (branch 1 forever after), or (b) is a reformatted real
+measurement whose second pass reformats to the identical string (_format is
+a pure function of the parsed number+unit) — either way, a second run
+performs zero further writes.
+
 Run from the backend directory:
-    python scripts/normalize_variant_sizes.py [--dry-run]
+    python scripts/normalize_variant_sizes.py             # dry-run (default)
+    python scripts/normalize_variant_sizes.py --apply      # actually write
 """
 
-import argparse
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for app.*
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for _migration_lib
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 
+from _migration_lib import build_arg_parser, print_table, resolve_dry_run
 from app.core.size_taxonomy import SIZE_OPTIONS_BY_MAIN_CATEGORY_SLUG, GENERIC_SIZES
 from app.db.models import Category, Product
 from app.db.session import SessionLocal
@@ -157,10 +165,12 @@ def normalize_one(raw: str, allowed: list[str]) -> tuple[str | None, str]:
     return nearest_raw, f"snapped {raw!r} -> nearest preset (had qualifier {trailing!r})"
 
 
-def run(dry_run: bool = False) -> None:
-    changed = 0
+def run(dry_run: bool = True) -> list[tuple[str, str, str, str]]:
+    """Returns the list of (product, slug, before, after) rows changed/found."""
+    rows: list[tuple[str, str, str, str]] = []
+    flagged: list[tuple[str, str, str]] = []
+    kept: list[tuple[str, str, str]] = []
     unchanged = 0
-    flagged = 0
 
     with SessionLocal() as db:
         products = db.scalars(
@@ -182,8 +192,7 @@ def run(dry_run: bool = False) -> None:
                     continue
                 new_value, reason = normalize_one(size, allowed)
                 if new_value is None:
-                    print(f"  {'[DRY] ' if dry_run else ''}FLAG  {product.name!r} ({product.slug}) size={size!r}: {reason}")
-                    flagged += 1
+                    flagged.append((product.name[:40], product.slug[:30], f"{size!r}: {reason}"))
                     continue
                 if new_value == size:
                     # A judgment call (reformat/snap) can still land back on
@@ -191,13 +200,13 @@ def run(dry_run: bool = False) -> None:
                     # — log it as reviewed, distinct from a value that was
                     # already an exact preset match and needed no judgment.
                     if reason != "already canonical":
-                        print(f"  {'[DRY] ' if dry_run else ''}KEEP  {product.name!r} ({product.slug}) size={size!r} unchanged [{reason}]")
+                        kept.append((product.name[:40], product.slug[:30], f"{size!r} [{reason}]"))
                     unchanged += 1
                     continue
-                print(f"  {'[DRY] ' if dry_run else ''}SET   {product.name!r} ({product.slug}) {size!r} -> {new_value!r} [{reason}]")
-                variant["size"] = new_value
-                dirty = True
-                changed += 1
+                rows.append((product.name[:40], product.slug[:30], size, new_value))
+                if not dry_run:
+                    variant["size"] = new_value
+                    dirty = True
 
             if dirty and not dry_run:
                 # In-place dict mutation inside a JSON column isn't enough
@@ -213,12 +222,20 @@ def run(dry_run: bool = False) -> None:
         if not dry_run:
             db.commit()
 
+    print_table(["product", "slug", "before", "after"], rows)
+    if kept:
+        print("\nReformatted-but-unchanged (judgment call landed on the same string):")
+        print_table(["product", "slug", "size"], kept)
+    if flagged:
+        print("\nFlagged for manual review (left unchanged):")
+        print_table(["product", "slug", "size"], flagged)
+
     verb = "Would change" if dry_run else "Changed"
-    print(f"\n{verb} {changed} size value(s); {unchanged} already canonical; {flagged} flagged for manual review.")
+    print(f"\n{verb} {len(rows)} size value(s); {unchanged} already canonical; {len(flagged)} flagged for manual review.")
+    return rows
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Normalize free-typed variant sizes to canonical values.")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing.")
+    parser = build_arg_parser("Normalize free-typed variant sizes to canonical values.")
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=resolve_dry_run(args))

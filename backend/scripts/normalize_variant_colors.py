@@ -16,19 +16,25 @@ Per-value decision, in order:
      and "Sky" are not, but "Navy" and "Royal" both mean blue).
   4. Anything else -> NEEDS_REVIEW, never written, only logged.
 
+Idempotent: every reachable output value (CANONICAL_COLORS entries, and
+every _SYNONYMS value) is itself in CANONICAL_COLORS, so a second pass
+always hits branch 1 ("already canonical") for anything this script wrote.
+
 Run from the backend directory:
-    python scripts/normalize_variant_colors.py [--dry-run]
+    python scripts/normalize_variant_colors.py             # dry-run (default)
+    python scripts/normalize_variant_colors.py --apply      # actually write
 """
 
-import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for app.*
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for _migration_lib
 
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from _migration_lib import build_arg_parser, print_table, resolve_dry_run
 from app.core.color_taxonomy import COLOR_OPTIONS as CANONICAL_COLORS
 from app.db.models import Product
 from app.db.session import SessionLocal
@@ -77,10 +83,11 @@ def normalize_one(raw: str) -> tuple[str | None, str]:
     return None, "NEEDS_REVIEW: no canonical match or known synonym"
 
 
-def run(dry_run: bool = False) -> None:
-    changed = 0
+def run(dry_run: bool = True) -> list[tuple[str, str, str, str]]:
+    """Returns the list of (product, slug, before, after) rows changed/found."""
+    rows: list[tuple[str, str, str, str]] = []
+    flagged: list[tuple[str, str, str]] = []
     unchanged = 0
-    flagged = 0
 
     with SessionLocal() as db:
         products = db.scalars(select(Product)).all()
@@ -97,32 +104,37 @@ def run(dry_run: bool = False) -> None:
                     continue
                 new_value, reason = normalize_one(color)
                 if new_value is None:
-                    print(f"  {'[DRY] ' if dry_run else ''}FLAG  {product.name!r} ({product.slug}) color={color!r}: {reason}")
-                    flagged += 1
+                    flagged.append((product.name[:40], product.slug[:30], color))
                     continue
                 if new_value == color:
                     unchanged += 1
                     continue
-                print(f"  {'[DRY] ' if dry_run else ''}SET   {product.name!r} ({product.slug}) {color!r} -> {new_value!r} [{reason}]")
-                variant["color"] = new_value
-                dirty = True
-                changed += 1
+                rows.append((product.name[:40], product.slug[:30], color, new_value))
+                if not dry_run:
+                    variant["color"] = new_value
+                    dirty = True
 
             if dirty and not dry_run:
-                # Same JSON-column mutation caveat as normalize_variant_sizes.py:
-                # in-place dict mutation needs flag_modified to be detected.
+                # In-place dict mutation inside a JSON column isn't enough
+                # for SQLAlchemy to detect a change — flag_modified forces it
+                # into the UPDATE regardless.
                 flag_modified(product, "variants")
                 db.add(product)
 
         if not dry_run:
             db.commit()
 
+    print_table(["product", "slug", "before", "after"], rows)
+    if flagged:
+        print("\nFlagged for manual review (left unchanged):")
+        print_table(["product", "slug", "color"], flagged)
+
     verb = "Would change" if dry_run else "Changed"
-    print(f"\n{verb} {changed} color value(s); {unchanged} already canonical; {flagged} flagged for manual review.")
+    print(f"\n{verb} {len(rows)} color value(s); {unchanged} already canonical; {len(flagged)} flagged for manual review.")
+    return rows
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Normalize free-typed variant colors to canonical values.")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing.")
+    parser = build_arg_parser("Normalize free-typed variant colors to canonical values.")
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=resolve_dry_run(args))

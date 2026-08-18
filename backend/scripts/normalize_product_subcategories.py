@@ -17,19 +17,25 @@ logged as NEEDS_REVIEW and left untouched. The keyword table only covers
 subcategories with a very unambiguous product-name signal; add more entries
 here as needed rather than loosening the matching to compensate.
 
+Idempotent: once a product's category_id points at a subcategory
+(parent_id is not None), it hits the "already at a leaf" skip on every
+later pass — it can never be reassigned twice.
+
 Run from the backend directory:
-    python scripts/normalize_product_subcategories.py [--dry-run]
+    python scripts/normalize_product_subcategories.py             # dry-run (default)
+    python scripts/normalize_product_subcategories.py --apply      # actually write
 """
 
-import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for app.*
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for _migration_lib
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from _migration_lib import build_arg_parser, print_table, resolve_dry_run
 from app.db.models import Category, Product
 from app.db.session import SessionLocal
 
@@ -59,9 +65,10 @@ def _keyword_matches(name_lower: str, subcategory_name: str) -> bool:
     return any(kw in name_lower for kw in keywords)
 
 
-def run(dry_run: bool = False) -> None:
-    changed = 0
-    flagged = 0
+def run(dry_run: bool = True) -> list[tuple[str, str, str, str]]:
+    """Returns the list of (product, slug, before, after) rows changed/found."""
+    rows: list[tuple[str, str, str, str]] = []
+    flagged: list[tuple[str, str, str]] = []
     skipped_leaf = 0
 
     with SessionLocal() as db:
@@ -93,35 +100,32 @@ def run(dry_run: bool = False) -> None:
 
             if len(matches) != 1:
                 reason = "no keyword match" if not matches else f"ambiguous ({', '.join(m.name for m in matches)})"
-                print(
-                    f"  {'[DRY] ' if dry_run else ''}FLAG  {product.name!r} ({product.slug}) "
-                    f"still under main category {category.name!r}: {reason}"
-                )
-                flagged += 1
+                flagged.append((product.name[:40], product.slug[:30], f"still under {category.name!r}: {reason}"))
                 continue
 
             target = matches[0]
-            print(
-                f"  {'[DRY] ' if dry_run else ''}SET   {product.name!r} ({product.slug}) "
-                f"{category.name!r} -> {target.name!r}"
-            )
+            rows.append((product.name[:40], product.slug[:30], category.name, target.name))
             if not dry_run:
                 product.category_id = target.id
                 db.add(product)
-            changed += 1
 
         if not dry_run:
             db.commit()
 
+    print_table(["product", "slug", "before", "after"], rows)
+    if flagged:
+        print("\nFlagged for manual review (left unchanged):")
+        print_table(["product", "slug", "reason"], flagged)
+
     verb = "Would move" if dry_run else "Moved"
     print(
-        f"\n{verb} {changed} product(s) into a subcategory; {flagged} flagged for manual review; "
+        f"\n{verb} {len(rows)} product(s) into a subcategory; {len(flagged)} flagged for manual review; "
         f"{skipped_leaf} already at a leaf/no-subcategory category."
     )
+    return rows
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Move products from a main category into a matching subcategory.")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing.")
+    parser = build_arg_parser("Move products from a main category into a matching subcategory.")
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=resolve_dry_run(args))

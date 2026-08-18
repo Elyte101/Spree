@@ -14,19 +14,25 @@ store name/slug a vendor already set for themselves via onboarding.
 Slug derivation: slugify(display name), e.g. "Lyte" -> "lyte". On collision
 with an existing store_slug, append -2, -3, ... until unique.
 
+Idempotent: the candidate query filters store_name IS NULL — once filled, an
+account can never be a candidate again, so a second run always reports zero
+candidates.
+
 Run from the backend directory:
-    python scripts/backfill_seller_store_identity.py [--dry-run]
+    python scripts/backfill_seller_store_identity.py             # dry-run (default)
+    python scripts/backfill_seller_store_identity.py --apply      # actually write
 """
 
-import argparse
 import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for app.*
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for _migration_lib
 
 from sqlalchemy import select
 
+from _migration_lib import build_arg_parser, print_table, resolve_dry_run
 from app.db.models import User
 from app.db.session import SessionLocal
 
@@ -45,7 +51,10 @@ def _unique_slug(base: str, taken: set[str]) -> str:
     return f"{base}-{n}"
 
 
-def run(dry_run: bool = False) -> None:
+def run(dry_run: bool = True) -> list[tuple[str, str, str]]:
+    """Returns the list of (user_id, storeName, storeSlug) rows filled/found."""
+    rows: list[tuple[str, str, str]] = []
+
     with SessionLocal() as db:
         all_slugs = {
             s for s in db.scalars(select(User.store_slug).where(User.store_slug.is_not(None))).all()
@@ -55,32 +64,27 @@ def run(dry_run: bool = False) -> None:
             select(User).where(User.role.in_(["vendor", "admin"]), User.store_name.is_(None))
         ).all()
 
-        if not candidates:
-            print("No accounts need a store identity backfill.")
-            return
-
-        filled = 0
         for user in candidates:
             base_name = (user.name or "").strip() or user.id
             slug = _unique_slug(_slugify(base_name), all_slugs)
             all_slugs.add(slug)
 
-            print(f"  {'[DRY] ' if dry_run else ''}SET user={user.id} storeName={base_name!r} storeSlug={slug!r}")
+            rows.append((user.id, base_name, slug))
             if not dry_run:
                 user.store_name = base_name
                 user.store_slug = slug
                 db.add(user)
-            filled += 1
 
         if not dry_run:
             db.commit()
 
+    print_table(["user_id", "storeName", "storeSlug"], rows)
     verb = "Would fill" if dry_run else "Filled"
-    print(f"\n{verb} store identity for {filled} account(s).")
+    print(f"\n{verb} store identity for {len(rows)} account(s).")
+    return rows
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Backfill store_name/store_slug for vendor/admin accounts missing them.")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing.")
+    parser = build_arg_parser("Backfill store_name/store_slug for vendor/admin accounts missing them.")
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=resolve_dry_run(args))

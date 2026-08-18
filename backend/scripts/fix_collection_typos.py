@@ -10,20 +10,28 @@ The slug is a public URL parameter (/products?collection=<slug>) — renaming
 it without a redirect would 404/silently-empty-filter existing shared links.
 next.config.ts carries a query-param redirect for the old slug (see the
 /login-style redirect added there), so this script only needs to fix the DB
-row; it does not need to preserve the old slug as a second alias.
+row; it does not need to preserve the old slug as a second alias. Confirm
+the redirect is deployed BEFORE running this with --apply — see
+run_production_migrations.md.
+
+Idempotent: the slug rename is looked up by the OLD slug, which no longer
+matches after the rename; the text fixes are string replacements that are
+no-ops against already-fixed text. A second run finds nothing to change.
 
 Run from the backend directory:
-    python scripts/fix_collection_typos.py [--dry-run]
+    python scripts/fix_collection_typos.py             # dry-run (default)
+    python scripts/fix_collection_typos.py --apply      # actually write
 """
 
-import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for app.*
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for _migration_lib
 
 from sqlalchemy import select
 
+from _migration_lib import build_arg_parser, print_table, resolve_dry_run
 from app.db.models import Collection
 from app.db.session import SessionLocal
 
@@ -39,8 +47,9 @@ _TEXT_FIXES = [
 ]
 
 
-def run(dry_run: bool = False) -> None:
-    changed = 0
+def run(dry_run: bool = True) -> list[tuple[str, str, str, str]]:
+    """Returns the list of (field, id, before, after) rows changed/found."""
+    rows: list[tuple[str, str, str, str]] = []
 
     with SessionLocal() as db:
         collections = db.scalars(select(Collection)).all()
@@ -49,13 +58,11 @@ def run(dry_run: bool = False) -> None:
             match = next((c for c in collections if c.slug == old_slug), None)
             if match is None:
                 continue
-            print(f"  {'[DRY] ' if dry_run else ''}RENAME collection {match.id}: "
-                  f"{match.name!r}/{match.slug!r} -> {new_name!r}/{new_slug!r}")
+            rows.append(("name/slug", match.id, f"{match.name!r}/{match.slug!r}", f"{new_name!r}/{new_slug!r}"))
             if not dry_run:
                 match.name = new_name
                 match.slug = new_slug
                 db.add(match)
-            changed += 1
 
         for collection in collections:
             original = collection.description or ""
@@ -64,22 +71,21 @@ def run(dry_run: bool = False) -> None:
                 fixed = fixed.replace(old, new)
             fixed = " ".join(fixed.split())  # collapse whitespace left by "---" removal
             if fixed != original:
-                print(f"  {'[DRY] ' if dry_run else ''}FIX description on {collection.id} ({collection.slug}): "
-                      f"{original!r} -> {fixed!r}")
+                rows.append(("description", collection.id, original, fixed))
                 if not dry_run:
                     collection.description = fixed
                     db.add(collection)
-                changed += 1
 
         if not dry_run:
             db.commit()
 
+    print_table(["field", "collection_id", "before", "after"], rows)
     verb = "Would change" if dry_run else "Changed"
-    print(f"\n{verb} {changed} collection field(s).")
+    print(f"\n{verb} {len(rows)} collection field(s).")
+    return rows
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fix known typos in Collection name/slug/description.")
-    parser.add_argument("--dry-run", action="store_true", help="Print changes without writing.")
+    parser = build_arg_parser("Fix known typos in Collection name/slug/description.")
     args = parser.parse_args()
-    run(dry_run=args.dry_run)
+    run(dry_run=resolve_dry_run(args))
