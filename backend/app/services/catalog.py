@@ -1015,7 +1015,13 @@ def get_admin_overview(db: Session) -> dict:
                 "id": product.id,
                 "slug": product.slug,
                 "name": product.name,
-                "price": _money_str(Decimal(str(product.price))),
+                # Buyer-facing price — matches what /dashboard/products (the
+                # public-shaped product list) shows for the same product.
+                # This used to be the raw seller payout instead, so the two
+                # dashboard surfaces silently disagreed on an unlabeled
+                # number for the same product.
+                "price": _money_str(pricing.buyer_price(Decimal(str(product.price)))),
+                "sellerPrice": _money_str(Decimal(str(product.price))),
                 "stock": product.stock,
                 "createdAt": product.created_at,
             }

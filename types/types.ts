@@ -287,6 +287,7 @@ export interface AdminProductSummary {
   slug: string;
   name: string;
   price: number;
+  sellerPrice: number;
   stock: number;
   createdAt: string;
 }

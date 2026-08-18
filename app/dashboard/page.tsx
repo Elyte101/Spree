@@ -60,7 +60,19 @@ export default async function Dashboard() {
       : Promise.resolve(null),
   ]);
   const firstName = userName.split(" ")[0] ?? userName;
-  const recentProducts =
+  // sellerPrice (payout) is only ever present via the admin-only overview
+  // endpoint — the public product list this falls back to for non-admin
+  // vendors never includes it (see ProductOut vs ProductAdminOut). Both
+  // branches show `price`, which is buyer-facing in both cases now.
+  const recentProducts: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    price: number | string;
+    sellerPrice?: number | string;
+    stock: number;
+    createdAt: string;
+  }> =
     overview?.recentProducts ??
     catalog?.items.map((product) => ({
       id: product.id,
@@ -246,8 +258,15 @@ export default async function Dashboard() {
                           </Box>
                           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                             <Chip label={`Stock ${product.stock}`} size="small" />
+                            {product.sellerPrice !== undefined ? (
+                              <Chip
+                                label={`Your payout ${formatPrice(product.sellerPrice)}`}
+                                size="small"
+                                variant="outlined"
+                              />
+                            ) : null}
                             <Chip
-                              label={formatPrice(product.price)}
+                              label={`Buyer pays ${formatPrice(product.price)}`}
                               size="small"
                               variant="outlined"
                             />

@@ -220,6 +220,12 @@ class AdminProductSummaryOut(BaseModel):
     slug: str
     name: str
     price: float
+    # Admin-only surface (AdminOverviewOut, never the public product list —
+    # see ProductOut vs ProductAdminOut) — safe to include the seller's own
+    # payout price alongside the buyer-facing one so the dashboard can label
+    # both instead of showing one unlabeled number that silently disagreed
+    # with what /dashboard/products showed for the same product.
+    sellerPrice: float
     stock: int
     createdAt: datetime
 

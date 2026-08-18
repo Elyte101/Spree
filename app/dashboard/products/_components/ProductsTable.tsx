@@ -323,7 +323,7 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
               <TableCell>Product</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Inventory</TableCell>
-              <TableCell>Price</TableCell>
+              <TableCell>Buyer pays</TableCell>
               <TableCell>Tags</TableCell>
               <TableCell>Created</TableCell>
               <TableCell>Actions</TableCell>
