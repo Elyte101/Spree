@@ -29,17 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
+from app.core.color_taxonomy import COLOR_OPTIONS as CANONICAL_COLORS
 from app.db.models import Product
 from app.db.session import SessionLocal
 
-# Mirrors lib/productTaxonomy.ts COLOR_OPTIONS — keep in sync manually.
-CANONICAL_COLORS = [
-    "Black", "White", "Gray", "Silver", "Gold",
-    "Red", "Maroon", "Pink", "Orange", "Yellow",
-    "Green", "Olive", "Teal", "Turquoise", "Blue", "Navy",
-    "Purple", "Lavender", "Brown", "Beige", "Cream",
-    "Multicolor", "Ankara Print", "Kente Print",
-]
 _CANONICAL_LOWER = {c.lower(): c for c in CANONICAL_COLORS}
 
 # Hand-picked synonyms seen in live data. Left-hand side is matched
