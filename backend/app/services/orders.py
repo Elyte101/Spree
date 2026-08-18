@@ -4,11 +4,13 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core import pricing as pricing_svc
 from app.core.config import settings
+from app.core.stock import derive_stock
 from app.db.models import LedgerEntry, Order, OrderItem, Product, User
 from app.schemas.order import ChargeMomoIn, OrderCreateIn, OrderTrackingIn
 from app.services import dev_notifier
@@ -265,10 +267,19 @@ _LOW_STOCK_THRESHOLD = 5
 
 def _decrement_stock(db: Session, order: Order) -> None:
     """
-    Atomically decrement stock for every order item using a conditional UPDATE.
-    The WHERE stock >= quantity guard prevents the column going negative if two
-    concurrent payments arrive for the same last unit.  An oversell is logged
-    as a warning for manual review rather than blocking the already-taken payment.
+    Decrement stock for every order item, keeping variant stock authoritative
+    (app/core/stock.py) — the matching color/size variant is decremented and
+    product.stock is re-derived from the full variant list, instead of the
+    product.stock column drifting away from sum(variants) the way a flat
+    column-only UPDATE would.
+
+    Row-locks the product (SELECT ... FOR UPDATE, same pattern as
+    add_tracking elsewhere in this file) instead of the previous atomic
+    conditional UPDATE, so concurrent payments for the same last unit still
+    can't oversell — the second transaction blocks until the first commits
+    and then sees the reduced stock. An oversell (rare: only when data
+    already disagrees with reality) is logged as a warning for manual review
+    rather than blocking the already-taken payment.
 
     After decrement, fires a low-stock in-app + email alert to the vendor if the
     product stock falls to or below _LOW_STOCK_THRESHOLD.
@@ -276,13 +287,27 @@ def _decrement_stock(db: Session, order: Order) -> None:
     for item in order.items:
         if not item.product_id or item.quantity <= 0:
             continue
-        result = db.execute(
-            sa_update(Product)
-            .where(Product.id == item.product_id, Product.stock >= item.quantity)
-            .values(stock=Product.stock - item.quantity)
-            .execution_options(synchronize_session=False)
+        product = db.scalar(
+            select(Product).where(Product.id == item.product_id).with_for_update()
         )
-        if result.rowcount == 0:
+        if product is None:
+            continue
+
+        variants = product.variants or []
+        target_variant = None
+        if item.color or item.size:
+            for variant in variants:
+                if (variant.get("color") or None) == item.color and (variant.get("size") or None) == item.size:
+                    target_variant = variant
+                    break
+        elif len(variants) == 1:
+            # Unambiguous even with no color/size on the order item.
+            target_variant = variants[0]
+
+        if product.stock < item.quantity:
+            # Matches the previous atomic-UPDATE behavior: on oversell, stock
+            # is left exactly as-is (not clamped/forced) — just logged for
+            # manual review — since the payment is already taken either way.
             logger.warning(
                 "oversell: order=%s product=%s qty=%d — stock exhausted at payment confirmation",
                 order.id,
@@ -291,11 +316,20 @@ def _decrement_stock(db: Session, order: Order) -> None:
             )
             continue
 
+        if target_variant is not None:
+            target_variant["stock"] = max(int(target_variant.get("stock", 0)) - item.quantity, 0)
+            flag_modified(product, "variants")
+            product.stock = derive_stock(variants, product.stock - item.quantity)
+        else:
+            # Multiple variants but no way to tell which was ordered (legacy
+            # order data with no color/size recorded) — fall back to the
+            # flat decrement rather than guessing which variant to touch.
+            product.stock = product.stock - item.quantity
+        db.add(product)
+
         # Check for low-stock condition and alert the vendor
-        product = db.get(Product, item.product_id)
         if (
-            product is not None
-            and product.seller_id
+            product.seller_id
             and 0 < product.stock <= _LOW_STOCK_THRESHOLD
         ):
             notify_safe(

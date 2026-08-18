@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
 from app.core.size_taxonomy import allowed_sizes_for_slug
+from app.core.stock import derive_stock, redistribute_stock
 from app.db.models import (
     Brand,
     Category,
@@ -758,7 +759,11 @@ def create_product(db: Session, payload: ProductCreateIn, actor_user_id: str | N
         payload.colors,
         payload.sizes,
     )
-    stock = max(payload.stock, sum(variant["stock"] for variant in variants))
+    # Variant stock is authoritative (see app/core/stock.py) — _build_variants
+    # already turned payload.stock into per-variant stock (either explicit
+    # payload.variants, or an even split across the color x size grid), so
+    # deriving the total back from variants can never drift from it.
+    stock = derive_stock(variants, payload.stock)
 
     product = Product(
         id=f"prod-{uuid4().hex[:12]}",
@@ -1054,8 +1059,10 @@ def update_product(
             product.images = images
             if removed:
                 _refresh_stale_cover_images(db, removed)
-    if payload.stock is not None:
-        product.stock = max(payload.stock, 0)
+    # Applied after the colors/sizes block below, once we know whether the
+    # variant grid is being rebuilt this call — see the stock/variant sync
+    # comment further down.
+    stock_override = payload.stock
     if payload.badge is not None:
         product.badge = payload.badge.strip() or None
     if payload.tags is not None:
@@ -1090,14 +1097,32 @@ def update_product(
         new_colors = payload.colors if payload.colors is not None else _extract_unique_values(existing_variants, "color")
         new_sizes = payload.sizes if payload.sizes is not None else _extract_unique_values(existing_variants, "size")
         _validate_sizes(product.category, new_sizes)
+        # Redistribute the new stock total (if this call also set one) across
+        # the rebuilt grid; otherwise preserve the current derived total.
+        rebuild_total = stock_override if stock_override is not None else derive_stock(existing_variants, product.stock)
         product.variants = _build_variants(
             product.slug,
             product.images or ["/product-placeholder.svg"],
-            product.stock,
+            rebuild_total,
             [],
             new_colors,
             new_sizes,
         )
+        product.stock = derive_stock(product.variants, rebuild_total)
+        stock_override = None  # already applied above
+
+    if stock_override is not None:
+        # Stock-only edit (e.g. the dashboard's quick "edit stock" action),
+        # no colors/sizes change this call. Variant stock stays authoritative:
+        # a product with an existing variant grid gets the new total spread
+        # across its current variants (there's no way to know which specific
+        # variant a flat number was meant for) instead of product.stock
+        # silently drifting away from sum(variants) — see app/core/stock.py.
+        if product.variants:
+            product.variants = redistribute_stock(product.variants, stock_override)
+            product.stock = derive_stock(product.variants, stock_override)
+        else:
+            product.stock = max(stock_override, 0)
 
     db.add(product)
     db.commit()

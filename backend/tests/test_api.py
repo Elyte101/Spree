@@ -2948,3 +2948,85 @@ def test_seller_summary_rating_and_reviews_endpoints():
                 if u:
                     db.delete(u)
             db.commit()
+
+
+def test_product_stock_always_equals_sum_of_variant_stock():
+    """Data-integrity regression: product.stock must never drift from
+    sum(variant.stock) — variant stock is the source of truth (see
+    app/core/stock.py). Exercises the three write paths that used to be able
+    to drift it apart: creation, a stock-only edit with no colors/sizes
+    (the dashboard's quick "edit stock" action — app/dashboard/products/
+    _components/ProductsTable.tsx sends exactly {"stock": N} alone), and
+    order-placement decrement.
+    """
+    from app.db.models import Product
+    from app.db.session import SessionLocal
+
+    def assert_consistent(product_id: str, *, expected_stock: int | None = None):
+        with SessionLocal() as db:
+            product = db.get(Product, product_id)
+            variant_sum = sum(v.get("stock", 0) for v in (product.variants or []))
+            assert product.stock == variant_sum, (
+                f"product.stock={product.stock} != sum(variant.stock)={variant_sum}"
+            )
+            if expected_stock is not None:
+                assert product.stock == expected_stock
+
+    with TestClient(app) as client:
+        payload = _create_product_payload()
+        payload["stock"] = 20  # 2 colors would split unevenly; force an exact split below
+        payload["colors"] = ["Sand"]
+        payload["sizes"] = ["Medium", "Large"]
+        create_resp = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+        assert create_resp.status_code == 201, create_resp.text
+        product_id = create_resp.json()["id"]
+
+        # 1. Right after creation: stock=20 split across 2 variants (10/10).
+        assert_consistent(product_id, expected_stock=20)
+
+        # 2. Stock-only edit, no colors/sizes in the payload — the exact shape
+        #    ProductsTable.tsx's quick "edit stock" dialog sends. Must
+        #    redistribute across the existing variants, not just overwrite
+        #    the product.stock column.
+        update_resp = client.put(
+            f"/api/v1/products/{product_id}",
+            json={"stock": 40},
+            headers=ADMIN_HEADERS,
+        )
+        assert update_resp.status_code == 200, update_resp.text
+        assert_consistent(product_id, expected_stock=40)
+
+        # 3. Order placement decrements stock — must decrement the matching
+        #    variant and re-derive product.stock, not just the flat column.
+        order_payload = {
+            "userId": None,
+            "fullName": "Stock Invariant Buyer",
+            "email": "stockinvariant@test.com",
+            "phone": "0240000001",
+            "addressLine1": "1 Invariant Street",
+            "city": "Accra",
+            "state": "Greater Accra",
+            "postalCode": "00233",
+            "country": "Ghana",
+            "shippingMethod": "standard",
+            "paymentMethod": "card",
+            "subtotal": 1.00,
+            "shippingCost": 0.00,
+            "tax": 0.00,
+            "total": 1.00,
+            "currency": "GHS",
+            "items": [
+                {
+                    "productId": product_id,
+                    "name": payload["name"],
+                    "image": "/img/test.jpg",
+                    "price": 1.00,
+                    "quantity": 3,
+                    "color": "Sand",
+                    "size": "Medium",
+                }
+            ],
+        }
+        order_resp = client.post("/api/v1/orders", json=order_payload, headers=ADMIN_HEADERS)
+        assert order_resp.status_code == 201, order_resp.text
+        assert_consistent(product_id, expected_stock=37)
