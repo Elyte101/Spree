@@ -434,8 +434,15 @@ def _build_variants(
     sizes: list[str],
 ) -> list[dict]:
     if payload_variants:
+        # A variant's image must be one of the product's own gallery images —
+        # an arbitrary URL here would show shoppers an image the product
+        # detail page's gallery never displays (e.g. a stale image from a
+        # since-changed gallery, or a client bug sending the wrong URL).
+        # Falls back to the lead image rather than rejecting outright, same
+        # as an unset image.
         variants: list[dict] = []
         for index, variant in enumerate(payload_variants, start=1):
+            requested_image = variant.get("image")
             variants.append(
                 {
                     "id": f"{product_slug}-variant-{index}",
@@ -444,7 +451,7 @@ def _build_variants(
                     "color": variant.get("color"),
                     "size": variant.get("size"),
                     "stock": int(variant.get("stock", 0)),
-                    "image": variant.get("image") or images[0],
+                    "image": requested_image if requested_image in images else images[0],
                 }
             )
         return variants

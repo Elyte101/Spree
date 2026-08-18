@@ -1047,6 +1047,30 @@ def test_product_update_regenerates_variants_from_new_sizes_and_colors():
         assert len(body["variants"]) == 6  # 2 colors x 3 sizes
 
 
+def test_product_creation_constrains_variant_image_to_the_gallery():
+    """A variant.image outside the product's own images[] gallery (stale
+    reference, or a client sending the wrong URL) must fall back to the
+    lead image, not be stored verbatim — the product detail page's gallery
+    would never show it, so a shopper picking that variant would see an
+    image absent from the gallery they were just browsing."""
+    with TestClient(app) as client:
+        payload = _create_product_payload()
+        payload["images"] = ["/products/gallery-a.jpg", "/products/gallery-b.jpg"]
+        payload["variants"] = [
+            {"label": "Black", "color": "Black", "stock": 5, "image": "/products/gallery-b.jpg"},
+            {"label": "White", "color": "White", "stock": 5, "image": "https://evil.example.com/not-in-gallery.jpg"},
+        ]
+
+        response = client.post("/api/v1/products", json=payload, headers=ADMIN_HEADERS)
+
+        assert response.status_code == 201, response.text
+        variants = {v["color"]: v["image"] for v in response.json()["variants"]}
+        # In-gallery image is honored as-is.
+        assert variants["Black"] == "/products/gallery-b.jpg"
+        # Out-of-gallery image falls back to the lead (first) gallery image.
+        assert variants["White"] == "/products/gallery-a.jpg"
+
+
 def test_product_update_rejects_size_not_in_category_allowed_set():
     with TestClient(app) as client:
         categories = {c["name"]: c for c in client.get("/api/v1/categories").json()}
