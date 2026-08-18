@@ -166,6 +166,11 @@ export const api = {
   getProductComments: (productId: string) =>
     requestJson<ProductComment[]>(`/api/products/${productId}/comments`),
 
+  getReviewEligibility: (productId: string) =>
+    requestJson<{ eligible: boolean; alreadyReviewed: boolean }>(
+      `/api/products/${productId}/review-eligibility`
+    ),
+
   postComment: (productId: string, payload: CommentPayload) =>
     requestJson<ProductComment>(`/api/products/${productId}/comments`, {
       method: "POST",

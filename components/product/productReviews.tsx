@@ -37,6 +37,27 @@ export function ProductReviews({ productId, initialComments }: ProductReviewsPro
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [eligible, setEligible] = React.useState<boolean | null>(null);
+
+  // Server-side already rejects a review from a user with no delivered order
+  // for this product (403) — this just decides whether to show the form at
+  // all, instead of showing one that would always fail on submit for an
+  // ineligible signed-in user (e.g. purchaseCount 0 for them).
+  React.useEffect(() => {
+    if (status !== "authenticated") {
+      setEligible(null);
+      return;
+    }
+    let cancelled = false;
+    api.getReviewEligibility(productId).then((result) => {
+      if (!cancelled) setEligible(result.eligible);
+    }).catch(() => {
+      if (!cancelled) setEligible(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [status, productId]);
 
   const myComment = session?.user
     ? comments.find((c) => c.userId === session.user.id)
@@ -128,7 +149,15 @@ export function ProductReviews({ productId, initialComments }: ProductReviewsPro
         </Paper>
       )}
 
-      {status === "authenticated" && (myComment === undefined || isEditing) && (
+      {status === "authenticated" && myComment === undefined && eligible === false && (
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          Reviews are limited to buyers who&apos;ve purchased and received this product — once your
+          order is delivered, you&apos;ll be able to leave a review here.
+        </Alert>
+      )}
+
+      {status === "authenticated" &&
+        (isEditing || (myComment === undefined && eligible === true)) && (
         <Paper
           elevation={0}
           sx={{ p: 2.5, borderRadius: 2, border: "1px solid", borderColor: "divider" }}

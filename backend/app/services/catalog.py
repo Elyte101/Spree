@@ -1308,6 +1308,23 @@ def _has_verified_purchase(db: Session, product_id: str, user_id: str) -> bool:
     ) is not None
 
 
+def get_review_eligibility(db: Session, product_id: str, user_id: str | None) -> dict:
+    """Whether the current user is allowed to review this product — same
+    check create_comment enforces server-side (_has_verified_purchase), so
+    the client can hide/disable the review form up front instead of showing
+    an open form that a 403 on submit would contradict.
+    """
+    if not user_id:
+        return {"eligible": False, "alreadyReviewed": False}
+    already_reviewed = db.scalar(
+        select(Comment.id).where(Comment.product_id == product_id, Comment.user_id == user_id)
+    ) is not None
+    return {
+        "eligible": _has_verified_purchase(db, product_id, user_id) and not already_reviewed,
+        "alreadyReviewed": already_reviewed,
+    }
+
+
 def list_comments(db: Session, product_id: str) -> list[dict]:
     """Return non-flagged comments for a product, newest first."""
     comments = db.scalars(

@@ -1757,6 +1757,59 @@ def test_comment_allowed_after_delivered_order():
         assert resp.status_code == 201
 
 
+def test_review_eligibility_matches_the_server_side_review_gate():
+    """GET /products/{id}/review-eligibility must agree with what POST
+    /products/{id}/comments actually allows — it exists so the client can
+    hide the review form instead of showing one that would 403 on submit."""
+    with TestClient(app) as client:
+        uid, product_id = _make_verified_buyer_and_product(client)
+
+        # No order at all yet.
+        resp = client.get(
+            f"/api/v1/products/{product_id}/review-eligibility",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"eligible": False, "alreadyReviewed": False}
+
+        # Paid but not delivered.
+        _create_order_for(uid, product_id, "paid")
+        resp = client.get(
+            f"/api/v1/products/{product_id}/review-eligibility",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+        )
+        assert resp.json() == {"eligible": False, "alreadyReviewed": False}
+
+        # Delivered — now eligible, and posting a comment must succeed.
+        _create_order_for(uid, product_id, "delivered")
+        resp = client.get(
+            f"/api/v1/products/{product_id}/review-eligibility",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+        )
+        assert resp.json() == {"eligible": True, "alreadyReviewed": False}
+
+        post_resp = client.post(
+            f"/api/v1/products/{product_id}/comments",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+            json={"body": "Great product!", "rating": 5},
+        )
+        assert post_resp.status_code == 201, post_resp.text
+
+        # Already reviewed — no longer eligible for a new one.
+        resp = client.get(
+            f"/api/v1/products/{product_id}/review-eligibility",
+            headers={**INTERNAL_HEADERS, "X-Actor-Token": actor_token(uid)},
+        )
+        assert resp.json() == {"eligible": False, "alreadyReviewed": True}
+
+        # Anonymous caller (no actor token at all) is never eligible.
+        anon_resp = client.get(
+            f"/api/v1/products/{product_id}/review-eligibility",
+            headers=INTERNAL_HEADERS,
+        )
+        assert anon_resp.json() == {"eligible": False, "alreadyReviewed": False}
+
+
 def test_stream_webhook_accepts_non_message_events():
     """POST /webhooks/stream should return 200 for non-message events."""
     with TestClient(app) as client:

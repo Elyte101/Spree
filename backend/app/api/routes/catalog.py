@@ -32,6 +32,7 @@ from app.services.catalog import (
     get_product,
     get_product_likes,
     get_related_products,
+    get_review_eligibility,
     list_brands,
     list_categories,
     list_collections,
@@ -231,6 +232,15 @@ def admin_overview(db: DBSession, _: InternalAPIKey, actor_role: ActorRole):
 def get_comments(product_id: str, db: DBSession):
     """Return all non-flagged comments for a product."""
     return list_comments(db, product_id)
+
+
+@router.get("/products/{product_id}/review-eligibility")
+def review_eligibility(product_id: str, db: DBSession, actor_id: ActorUserId):
+    """Whether the signed-in caller can review this product — lets the
+    client hide/disable the review form instead of showing one that would
+    just 403 on submit for a user with no delivered order for this product.
+    """
+    return get_review_eligibility(db, product_id, actor_id)
 
 
 @router.post("/products/{product_id}/comments", status_code=status.HTTP_201_CREATED)
