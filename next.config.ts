@@ -110,6 +110,16 @@ const nextConfig: NextConfig = {
         destination: "/auth/sign-in",
         permanent: true,
       },
+      {
+        // The "phone-accesories" collection slug was renamed to the correctly
+        // spelled "phone-accessories" (see backend/scripts/fix_collection_typos.py) —
+        // redirect existing shared /products?collection=phone-accesories links
+        // instead of letting them silently filter to nothing.
+        source: "/products",
+        has: [{ type: "query", key: "collection", value: "phone-accesories" }],
+        destination: "/products?collection=phone-accessories",
+        permanent: true,
+      },
     ];
   },
 
