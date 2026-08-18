@@ -150,10 +150,9 @@ export function ProductReviews({ productId, initialComments }: ProductReviewsPro
       )}
 
       {status === "authenticated" && myComment === undefined && eligible === false && (
-        <Alert severity="info" sx={{ borderRadius: 2 }}>
-          Reviews are limited to buyers who&apos;ve purchased and received this product — once your
-          order is delivered, you&apos;ll be able to leave a review here.
-        </Alert>
+        <Typography variant="body2" color="text.secondary">
+          Only buyers who&apos;ve received this order can leave a review.
+        </Typography>
       )}
 
       {status === "authenticated" &&
@@ -228,7 +227,9 @@ export function ProductReviews({ productId, initialComments }: ProductReviewsPro
 
       {comments.length === 0 ? (
         <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
-          No reviews yet — be the first to share your experience.
+          {status === "authenticated" && eligible === true
+            ? "No reviews yet — be the first to share your experience."
+            : "No reviews yet."}
         </Typography>
       ) : (
         <Stack spacing={1.5}>
