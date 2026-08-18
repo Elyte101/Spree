@@ -391,9 +391,19 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
                 <TableCell sx={{ minWidth: 180 }}>
                   <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
                     {product.tags.length ? (
-                      product.tags.slice(0, 3).map((tag) => (
-                        <Chip key={tag} label={tag} size="small" variant="outlined" />
-                      ))
+                      <>
+                        {product.tags.slice(0, 3).map((tag) => (
+                          <Chip key={tag} label={tag} size="small" variant="outlined" />
+                        ))}
+                        {product.tags.length > 3 ? (
+                          <Chip
+                            label={`+${product.tags.length - 3}`}
+                            size="small"
+                            variant="outlined"
+                            title={product.tags.slice(3).join(", ")}
+                          />
+                        ) : null}
+                      </>
                     ) : (
                       <Typography variant="body2" color="text.secondary">No tags</Typography>
                     )}
