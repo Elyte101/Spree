@@ -24,6 +24,7 @@ import {
 } from "@mui/material";
 
 import type { OrderDetail, OrderStatus } from "@/types/types";
+import { formatOrderNumber } from "@/lib/orderNumber";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -191,7 +192,7 @@ export function OrderTrackingPage({ order }: { order: OrderDetail }) {
                 })}
               >
                 <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-                  ORDER #{order.id.slice(-8).toUpperCase()}
+                  ORDER {formatOrderNumber(order.id)}
                 </Typography>
                 <Typography variant="h5" fontWeight={800} mt={0.5}>
                   Track your delivery

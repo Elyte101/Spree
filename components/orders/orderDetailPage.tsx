@@ -30,6 +30,8 @@ import {
 } from "@mui/material";
 
 import type { OrderDetail, OrderStatus } from "@/types/types";
+import { formatOrderNumber } from "@/lib/orderNumber";
+import { getOrderStatusMeta, type OrderStatusColor } from "@/lib/orderStatus";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -42,56 +44,20 @@ const sectionVariants = {
   }),
 };
 
-const statusMeta: Record<
-  OrderStatus,
-  { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
-> = {
-  pending: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
-  },
-  pending_payment: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
-  },
-  paid: {
-    label: "Payment confirmed",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 16 }} />,
-  },
-  in_transit: {
-    label: "In transit",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 16 }} />,
-  },
-  delivered: {
-    label: "Delivered",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
-  },
-  confirmed: {
-    label: "Delivery confirmed",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
-  },
-  paid_out: {
-    label: "Payout released",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 16 }} />,
-  },
-  cancelled: {
-    label: "Cancelled",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 16 }} />,
-  },
-  refunded: {
-    label: "Refunded",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 16 }} />,
-  },
-};
+function statusIcon(color: OrderStatusColor) {
+  const sx = { fontSize: 16 };
+  switch (color) {
+    case "info":
+      return <LocalShippingOutlined sx={sx} />;
+    case "success":
+      return <CheckCircleOutlined sx={sx} />;
+    case "error":
+      return <CancelOutlined sx={sx} />;
+    case "warning":
+    default:
+      return <PaymentOutlined sx={sx} />;
+  }
+}
 
 const statusSteps: { key: OrderStatus; label: string }[] = [
   { key: "paid", label: "Order placed" },
@@ -337,7 +303,7 @@ export function OrderDetailPage({
     }
   };
 
-  const meta = statusMeta[order.status];
+  const meta = getOrderStatusMeta(order.status, "buyer");
 
   return (
     <Box
@@ -407,7 +373,7 @@ export function OrderDetailPage({
               >
                 <Box>
                   <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-                    ORDER #{order.id.slice(-8).toUpperCase()}
+                    ORDER {formatOrderNumber(order.id)}
                   </Typography>
                   <Typography variant="h5" fontWeight={800} mt={0.5}>
                     Order Details
@@ -418,7 +384,7 @@ export function OrderDetailPage({
                 </Box>
                 <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
                   <Chip
-                    icon={meta.icon}
+                    icon={statusIcon(meta.color)}
                     label={meta.label}
                     color={meta.color}
                     variant="outlined"

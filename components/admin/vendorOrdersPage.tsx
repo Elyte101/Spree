@@ -20,8 +20,10 @@ import {
   Typography,
 } from "@mui/material";
 
-import type { OrderListItem, OrderStatus } from "@/types/types";
+import type { OrderListItem } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
+import { formatOrderNumber } from "@/lib/orderNumber";
+import { getOrderStatusMeta, type OrderStatusColor } from "@/lib/orderStatus";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -34,73 +36,21 @@ const rowVariants = {
   }),
 };
 
-const DEFAULT_STATUS_META = {
-  label: "Unknown",
-  color: "default" as const,
-  icon: <ReceiptLongOutlined sx={{ fontSize: 14 }} />,
-};
-
-const statusMeta: Record<
-  string,
-  { label: string; color: "warning" | "info" | "success" | "error" | "default"; icon: React.ReactElement }
-> = {
-  pending: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  pending_payment: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  paid: {
-    label: "Awaiting shipment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  in_transit: {
-    label: "In transit",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
-  },
-  delivered: {
-    label: "Delivered",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  confirmed: {
-    label: "Delivery confirmed",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  paid_out: {
-    label: "Payout released",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  cancelled: {
-    label: "Cancelled",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 14 }} />,
-  },
-  refunded: {
-    label: "Refunded",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 14 }} />,
-  },
-  // Legacy statuses in DB from before the spec-aligned state machine
-  shipped: {
-    label: "Shipped",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
-  },
-  completed: {
-    label: "Completed",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-};
+function statusIcon(color: OrderStatusColor) {
+  const sx = { fontSize: 14 };
+  switch (color) {
+    case "info":
+      return <LocalShippingOutlined sx={sx} />;
+    case "success":
+      return <CheckCircleOutlined sx={sx} />;
+    case "error":
+      return <CancelOutlined sx={sx} />;
+    case "warning":
+      return <PaymentOutlined sx={sx} />;
+    default:
+      return <ReceiptLongOutlined sx={sx} />;
+  }
+}
 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GH", {
@@ -110,7 +60,7 @@ const formatDate = (iso: string) =>
   });
 
 function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
-  const meta = statusMeta[order.status] ?? DEFAULT_STATUS_META;
+  const meta = getOrderStatusMeta(order.status, "vendor");
 
   return (
     <motion.div custom={index} initial="hidden" animate="visible" variants={rowVariants}>
@@ -140,7 +90,7 @@ function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
         >
           <Stack gap={0.5}>
             <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-              #{order.id.slice(0, 8).toUpperCase()}
+              {formatOrderNumber(order.id)}
             </Typography>
             <Typography variant="body1" fontWeight={600}>
               {order.fullName}
@@ -166,7 +116,7 @@ function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
             </Typography>
             <Chip
               size="small"
-              icon={meta.icon}
+              icon={statusIcon(meta.color)}
               label={meta.label}
               color={meta.color}
               variant="outlined"

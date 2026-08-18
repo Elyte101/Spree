@@ -21,7 +21,9 @@ import {
   Typography,
 } from "@mui/material";
 
-import type { OrderListItem, OrderStatus } from "@/types/types";
+import type { OrderListItem } from "@/types/types";
+import { formatOrderNumber } from "@/lib/orderNumber";
+import { getOrderStatusMeta, type OrderStatusColor } from "@/lib/orderStatus";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -34,56 +36,20 @@ const rowVariants = {
   }),
 };
 
-const statusMeta: Record<
-  OrderStatus,
-  { label: string; color: "warning" | "info" | "success" | "error"; icon: React.ReactElement }
-> = {
-  pending: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  pending_payment: {
-    label: "Pending payment",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  paid: {
-    label: "Payment confirmed",
-    color: "warning",
-    icon: <PaymentOutlined sx={{ fontSize: 14 }} />,
-  },
-  in_transit: {
-    label: "In transit",
-    color: "info",
-    icon: <LocalShippingOutlined sx={{ fontSize: 14 }} />,
-  },
-  delivered: {
-    label: "Delivered",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  confirmed: {
-    label: "Delivery confirmed",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  paid_out: {
-    label: "Payout released",
-    color: "success",
-    icon: <CheckCircleOutlined sx={{ fontSize: 14 }} />,
-  },
-  cancelled: {
-    label: "Cancelled",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 14 }} />,
-  },
-  refunded: {
-    label: "Refunded",
-    color: "error",
-    icon: <CancelOutlined sx={{ fontSize: 14 }} />,
-  },
-};
+function statusIcon(color: OrderStatusColor) {
+  const sx = { fontSize: 14 };
+  switch (color) {
+    case "info":
+      return <LocalShippingOutlined sx={sx} />;
+    case "success":
+      return <CheckCircleOutlined sx={sx} />;
+    case "error":
+      return <CancelOutlined sx={sx} />;
+    case "warning":
+    default:
+      return <PaymentOutlined sx={sx} />;
+  }
+}
 
 const formatPrice = (n: number) =>
   new Intl.NumberFormat("en-GH", { style: "currency", currency: "GHS" }).format(n);
@@ -96,7 +62,7 @@ const formatDate = (iso: string) =>
   });
 
 function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
-  const meta = statusMeta[order.status];
+  const meta = getOrderStatusMeta(order.status, "buyer");
 
   return (
     <motion.div custom={index} initial="hidden" animate="visible" variants={rowVariants}>
@@ -126,7 +92,7 @@ function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
         >
           <Stack gap={0.5}>
             <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "monospace" }}>
-              #{order.id.slice(-8).toUpperCase()}
+              {formatOrderNumber(order.id)}
             </Typography>
             <Typography variant="body1" fontWeight={600}>
               {order.fullName}
@@ -148,7 +114,7 @@ function OrderRow({ order, index }: { order: OrderListItem; index: number }) {
             </Typography>
             <Chip
               size="small"
-              icon={meta.icon}
+              icon={statusIcon(meta.color)}
               label={meta.label}
               color={meta.color}
               variant="outlined"
