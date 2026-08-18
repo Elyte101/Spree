@@ -21,12 +21,17 @@ export default async function Home() {
     ? ratedItems.reduce((sum, product) => sum + product.rating, 0) / ratedItems.length
     : 0;
 
-  // Deduplicate: never show the same product in both Featured and Just In.
+  // Featured and Fresh arrivals are independent curations (is_featured flag
+  // vs. recency) and can legitimately overlap — a product can be both. This
+  // used to exclude anything already in the first 4 Featured products from
+  // Fresh arrivals, which meant Fresh arrivals silently became "products not
+  // in Featured" instead of "newest products": with every current product
+  // tagged featured, whichever one didn't make the top-4 Featured slice
+  // (which sorts featured desc, created_at desc, rating desc — not purely by
+  // recency) ended up as the only "fresh arrival" shown, regardless of how
+  // old it actually was.
   const featuredProducts = homeFeed.featuredProducts.slice(0, 4);
-  const featuredIds = new Set(featuredProducts.map((p) => p.id));
-  const newArrivals = homeFeed.newArrivals
-    .filter((p) => !featuredIds.has(p.id))
-    .slice(0, 3);
+  const newArrivals = homeFeed.newArrivals.slice(0, 3);
 
   return (
     <LandingPage
