@@ -1,10 +1,11 @@
 # Production data migration runbook
 
-Seven one-off scripts in `backend/scripts/` fix data drift confirmed live on
+Eight one-off scripts in `backend/scripts/` fix data drift confirmed live on
 spreecommerce.vercel.app (2026-08-17): stock/variant disagreement, orphaned
 variant images, non-canonical colors/sizes, products sitting at the main
-category instead of a subcategory, a collection typo, and missing seller
-store identity.
+category instead of a subcategory, a collection typo, missing seller store
+identity, and (added 2026-11-17) 24 main categories that should be grouped
+into 11 umbrellas for a less cluttered storefront.
 
 **Every script defaults to dry-run.** A bare invocation only prints a
 before/after table and changes nothing. Pass `--apply` to actually write.
@@ -42,10 +43,10 @@ a time — they are not a substitute for a real backup of the whole database.
 python3 scripts/verify_data_integrity.py
 ```
 
-Read-only. Reports current drift across all seven categories in one pass —
+Read-only. Reports current drift across all eight categories in one pass —
 this is what "confirmed live" in the summary above was reconstructed from.
 Run this first so you have a concrete before-picture, and keep the output —
-you'll diff it against the Step 8 run.
+you'll diff it against the Step 9 run.
 
 ## Order, and why
 
@@ -57,10 +58,14 @@ you'll diff it against the Step 8 run.
 | 4 | `normalize_variant_sizes.py` | Same as above. |
 | 5 | `normalize_product_subcategories.py` | Reassigns `category_id` — independent of the `variants` column steps 1–4 touch, but run after them so a `--dry-run` diff of this step isn't also showing unrelated variant-JSON noise if you're reviewing column-level diffs. |
 | 6 | `fix_collection_typos.py` | Renames a collection slug — **do not run until the redirect below is confirmed live**, since the rename is what makes the redirect start mattering. |
-| 7 | `backfill_seller_store_identity.py` | Lowest risk (additive — only fills NULL columns, never overwrites). Last because it's the least urgent: nothing else depends on it, and it's the easiest to verify visually (`/seller/<slug>` resolving) once everything else is settled. |
+| 7 | `backfill_seller_store_identity.py` | Lowest risk (additive — only fills NULL columns, never overwrites). Runs before step 8 only because it was requested first; the two don't interact. |
+| 8 | `create_category_umbrellas.py` | **Must run after step 5** — it sets `parent_id` on every existing main category, which would make step 5's "already at a leaf" check misfire on any old main category if run first. No interaction with steps 1–4, 6, or 7. |
 
-This matches the requested order — no reordering needed. The one hard
-dependency is step 6 on the redirect check immediately below it.
+The original seven-step order (steps 1–7) matches the order it was
+requested in — no reordering needed there. Step 8 (added later) has one
+hard dependency: it must come after step 5. The other hard dependency,
+unrelated to ordering among these scripts, is step 6 on the redirect check
+immediately below it.
 
 ## Before step 6: confirm the redirect is live
 
@@ -376,7 +381,86 @@ curl -sI "https://spreecommerce.vercel.app/seller/spree-admin" | head -1   # exp
 
 ---
 
-## Step 8 — Post-flight check
+## Step 8 — Category umbrellas (narrow 24 main categories to 11)
+
+```bash
+python3 scripts/create_category_umbrellas.py
+python3 scripts/create_category_umbrellas.py --apply
+```
+
+**Must run after step 5, never before.** Step 5 (subcategory assignment)
+treats a product's category as "already at a leaf" once its `parent_id` is
+set — this step sets `parent_id` on all 24 existing main categories, so
+running it first would make step 5 silently stop finding anything to do.
+(`normalize_product_subcategories.py` was also hardened to recognize an
+old main's parent as an umbrella rather than a real subcategory, so running
+step 5 again *after* step 8 — e.g. for a newly added product later — still
+works; this ordering note is about getting the clean first pass right, not
+a one-way door.)
+
+**Changes:** creates up to 11 new top-level `Category` rows (the
+umbrellas: 🛍️ Fashion, 📱 Electronics, 🏠 Home & Living, 🍎 Groceries, 💄
+Beauty & Health, 👶 Baby, Kids & Toys, 🚗 Automotive, 🐶 Pets, ⚽ Sports &
+Outdoors, 🌱 Agriculture, 🎨 Hobbies & Entertainment — see
+`app/core/category_taxonomy.py` for the exact grouping), then sets
+`parent_id` on each of the 24 existing main categories to point at its
+umbrella. Nothing about an existing category's own name, slug,
+subcategories, or any product's `category_id` changes.
+
+Two of the umbrellas ("Home & Living", "Automotive") would otherwise
+collide with an existing main category's own name/slug (`Category.name`
+and `Category.slug` are both globally unique) — resolved by giving every
+umbrella name an emoji prefix, which no existing category has. The
+existing "Home & Living" and "Automotive" categories keep their plain
+names unchanged; only the new umbrella rows carry the emoji.
+
+**Expected:** exactly 11 "create umbrella" rows and 24 "reparent" rows (one
+per existing main category — see `UMBRELLA_CATEGORIES` in
+`app/core/category_taxonomy.py` for the full existing-category → umbrella
+mapping) on a first run against the real production taxonomy; 0 flagged
+for review, since every one of the 24 existing main categories has a home
+in exactly one umbrella.
+
+**Backup/rollback:**
+```sql
+CREATE TABLE categories_backup_YYYYMMDD AS
+SELECT id, parent_id FROM categories;
+
+-- Rollback: restore every category's parent_id, then delete the 11 new
+-- umbrella rows this step created (safe only once nothing references them
+-- as a parent — the UPDATE above already took care of that).
+UPDATE categories c SET parent_id = b.parent_id
+FROM categories_backup_YYYYMMDD b
+WHERE c.id = b.id;
+
+DELETE FROM categories WHERE slug IN (
+  'fashion', 'electronics', 'home-and-living', 'groceries', 'beauty-health',
+  'baby-kids-toys', 'automotive-group', 'pets', 'sports-outdoors',
+  'agriculture', 'hobbies-entertainment'
+);
+```
+
+**Verify:**
+```bash
+curl -s "https://spreecommerce.vercel.app/api/categories" | python3 -c "
+import json, sys
+cats = json.load(sys.stdin)
+mains = [c for c in cats if c['parentId'] is None]
+print(f'{len(mains)} top-level categories (expect 11):')
+for c in mains:
+    print(' -', c['name'], c['itemCount'])
+"
+```
+Also re-check the storefront: the homepage category tile row and
+`/products`' category filter chips should now show 11 entries instead of
+24, and each umbrella's item count should reflect its subcategories'
+products too (not 0 — `list_categories`' itemCount now aggregates across
+a category's direct products plus its children's and grandchildren's, for
+exactly this reason).
+
+---
+
+## Step 9 — Post-flight check
 
 ```bash
 python3 scripts/verify_data_integrity.py
@@ -396,6 +480,13 @@ something worth investigating before considering this done.
 - `/dashboard` price chips still read "Your payout" / "Buyer pays".
 - `/products` category filter chip sequence (All → a category → All →
   another category → All) still keeps chip, URL, and list in agreement —
-  step 5 changes `category_id` on 5 products, which is the one step here
-  with any plausible interaction with filtering/counts.
+  step 5 changes `category_id` on 5 products, and step 8 adds a 3rd
+  taxonomy level, which are the two steps here with any plausible
+  interaction with filtering/counts.
+- Filtering by one of the 11 new umbrella chips surfaces products filed
+  two levels down (an old subcategory under an old main under the
+  umbrella), not just ones filed directly under an old main.
+- Homepage category tiles and `/products`' filter chips show 11 entries,
+  not 24, and none show a 0 item count despite having real products under
+  one of their subcategories.
 - `curl -I` on `/`, `/products`, `/cart`, `/orders` still 200.

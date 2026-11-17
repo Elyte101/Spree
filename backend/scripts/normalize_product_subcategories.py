@@ -17,9 +17,19 @@ logged as NEEDS_REVIEW and left untouched. The keyword table only covers
 subcategories with a very unambiguous product-name signal; add more entries
 here as needed rather than loosening the matching to compensate.
 
-Idempotent: once a product's category_id points at a subcategory
-(parent_id is not None), it hits the "already at a leaf" skip on every
-later pass — it can never be reassigned twice.
+Idempotent: once a product's category_id points at a real subcategory, it
+hits the "already at a leaf" skip on every later pass — it can never be
+reassigned twice.
+
+"Already at a leaf" is umbrella-aware (create_category_umbrellas.py,
+app/core/category_taxonomy.py): a product filed directly under an old main
+category (e.g. "Phones & Accessories") must still be a candidate for
+reassignment even after that old main gets reparented under a new umbrella
+(e.g. "Electronics") — otherwise this script would silently stop doing
+anything for every old main the moment umbrellas exist, since
+category.parent_id is no longer None for any of them. A category only
+counts as "already a leaf" when its parent is neither absent nor an
+umbrella.
 
 Run from the backend directory:
     python scripts/normalize_product_subcategories.py             # dry-run (default)
@@ -36,8 +46,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from _migration_lib import build_arg_parser, print_table, resolve_dry_run
+from app.core.category_taxonomy import UMBRELLA_SLUGS
 from app.db.models import Category, Product
 from app.db.session import SessionLocal
+
+
+def _is_old_main(category: Category) -> bool:
+    """True when `category` is an original main category — either never
+    reparented (parent_id is None) or reparented under an umbrella (its
+    parent is one of the 11 umbrella slugs). False for a genuine leaf
+    subcategory, whose parent is neither."""
+    return category.parent_id is None or (category.parent is not None and category.parent.slug in UMBRELLA_SLUGS)
 
 # subcategory name -> keywords checked against the product name, case-insensitive.
 # Only add an entry here when the keyword is essentially unambiguous for that
@@ -84,8 +103,8 @@ def run(dry_run: bool = True) -> list[tuple[str, str, str, str]]:
 
         for product in products:
             category = product.category
-            if category is None or category.parent_id is not None:
-                # Already a subcategory (or no category at all) — nothing to do.
+            if category is None or not _is_old_main(category):
+                # Already a real subcategory (or no category at all) — nothing to do.
                 skipped_leaf += 1
                 continue
 

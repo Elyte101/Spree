@@ -1,6 +1,6 @@
 """
 Read-only pre-flight / post-flight check: reports current data drift across
-every category the seven backend/scripts/ migrations cover, without
+every category the eight backend/scripts/ migrations cover, without
 changing anything. Always runs in dry-run mode — there is no --apply for
 this script, on purpose.
 
@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # backend/ — for
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # scripts/ — for sibling scripts
 
 import backfill_seller_store_identity
+import create_category_umbrellas
 import fix_collection_typos
 import fix_orphaned_variant_images
 import normalize_product_subcategories
@@ -36,6 +37,7 @@ _CHECKS = [
     (normalize_product_subcategories, "5. Products at main-category level"),
     (fix_collection_typos, "6. Collection typos"),
     (backfill_seller_store_identity, "7. Missing store identity"),
+    (create_category_umbrellas, "8. Main categories not yet grouped into an umbrella"),
 ]
 
 

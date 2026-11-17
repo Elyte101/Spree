@@ -9,6 +9,7 @@ from sqlalchemy import String, cast, distinct, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import pricing
+from app.core.category_taxonomy import UMBRELLA_SLUGS
 from app.core.color_taxonomy import COLOR_OPTIONS
 from app.core.size_taxonomy import allowed_sizes_for_slug
 from app.core.stock import derive_stock, redistribute_stock
@@ -264,15 +265,28 @@ def _apply_product_filters(statement, params: ProductListParams):
         # selecting "Beauty & Personal Care" must also surface products filed
         # under its "Makeup"/"Wigs & Hair Extensions"/etc. subcategories, not
         # just ones assigned directly to the main category itself.
+        #
+        # The taxonomy is now up to 3 levels deep — umbrella (e.g. "Electronics",
+        # app/core/category_taxonomy.py) -> old main (e.g. "Phones &
+        # Accessories") -> old subcategory (e.g. "Smartphones") — so matching
+        # only direct children would miss every product filed two levels
+        # under an umbrella. Depth is a known, fixed bound (umbrellas never
+        # nest further), so two explicit child/grandchild subqueries cover it
+        # without a recursive CTE.
         normalized_category = params.category.strip().lower()
         category_match = or_(
             Category.id == params.category,
             Category.slug == params.category,
             func.lower(Category.name) == normalized_category,
         )
-        descendant_of_match = select(Category.id).where(category_match)
+        children_of_match = select(Category.id).where(category_match)
+        grandchildren_of_match = select(Category.id).where(Category.parent_id.in_(children_of_match))
         statement = statement.where(
-            or_(category_match, Category.parent_id.in_(descendant_of_match))
+            or_(
+                category_match,
+                Category.parent_id.in_(children_of_match),
+                Category.parent_id.in_(grandchildren_of_match),
+            )
         )
 
     if params.brand:
@@ -524,14 +538,25 @@ def _validate_sizes(category: Category, sizes: list[str]) -> None:
     """Defense-in-depth backstop: the create/edit forms already restrict the
     Sizes picker to the allowed set for whichever category is selected (see
     lib/productTaxonomy.ts), so this only ever fires against a direct API
-    call bypassing that UI. main_category is category itself when it's
-    already top-level, or its parent when category is a subcategory (sizes
-    are keyed by main category, not subcategory — see
-    backend/app/core/size_taxonomy.py).
+    call bypassing that UI. Sizes are keyed by the original ("old main")
+    category, not by whatever umbrella groups it or whatever subcategory
+    sits under it (see backend/app/core/size_taxonomy.py) — resolving that
+    now needs to look past the umbrella layer (app/core/category_taxonomy.py):
+      - category itself is top-level (an umbrella, or any still-unparented
+        category) -> itself.
+      - category's parent is an umbrella -> category is an old main,
+        already the right level -> itself.
+      - otherwise -> category is an old subcategory -> its parent (the old
+        main) is the right level.
     """
     if not sizes:
         return
-    main_category = category if category.parent_id is None else category.parent
+    if category.parent_id is None:
+        main_category = category
+    elif category.parent is not None and category.parent.slug in UMBRELLA_SLUGS:
+        main_category = category
+    else:
+        main_category = category.parent
     allowed = set(allowed_sizes_for_slug(main_category.slug if main_category else None))
     invalid = [size for size in sizes if size not in allowed]
     if invalid:
@@ -857,17 +882,45 @@ def list_categories(db: Session, main_only: bool = False) -> list[dict]:
     sidebar), which would otherwise be flooded with every subcategory. The
     full main+sub tree (main_only=False, the default) backs the /categories
     endpoint the seller-facing create-product form's cascading picker uses.
+
+    itemCount is aggregated across each category's own direct products plus
+    every descendant's — not just products assigned to that exact row.
+    Without this, an umbrella (app/core/category_taxonomy.py) or an old main
+    category would always show 0/undercounted: no product is ever assigned
+    directly to an umbrella, and once normalize_product_subcategories.py
+    moves a product from an old main into one of its subcategories, a
+    direct-only count would silently drop it from the old main's own total.
+    Depth is a known, fixed bound (umbrella -> old main -> old subcategory),
+    so this loads every category + a single grouped product count (two
+    queries total, not one per category) and sums descendants in Python.
     """
-    query = (
-        select(Category, func.count(Product.id))
-        .outerjoin(Product, Product.category_id == Category.id)
-        .group_by(Category.id)
-        .order_by(Category.name.asc())
-    )
+    query = select(Category).order_by(Category.name.asc())
     if main_only:
         query = query.where(Category.parent_id.is_(None))
-    rows = db.execute(query).all()
-    return [_category_to_dict(category, count) for category, count in rows]
+    categories = db.scalars(query).all()
+
+    all_categories = db.scalars(select(Category)).all()
+    children_by_parent: dict[str, list[str]] = {}
+    for cat in all_categories:
+        if cat.parent_id:
+            children_by_parent.setdefault(cat.parent_id, []).append(cat.id)
+
+    def self_and_descendant_ids(category_id: str) -> set[str]:
+        direct_children = children_by_parent.get(category_id, [])
+        grandchildren = [gc for child_id in direct_children for gc in children_by_parent.get(child_id, [])]
+        return {category_id, *direct_children, *grandchildren}
+
+    direct_counts = dict(
+        db.execute(select(Product.category_id, func.count(Product.id)).group_by(Product.category_id)).all()
+    )
+
+    return [
+        _category_to_dict(
+            category,
+            sum(direct_counts.get(cid, 0) for cid in self_and_descendant_ids(category.id)),
+        )
+        for category in categories
+    ]
 
 
 def list_brands(db: Session) -> list[dict]:
