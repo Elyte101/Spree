@@ -11,10 +11,11 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:backend": "cd backend && ./.venv/bin/pytest",
+    "test:backend:preflight": "bash backend/scripts/check_prod_imports.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:backend"
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run test:backend && npm run test:backend:preflight"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

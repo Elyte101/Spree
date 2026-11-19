@@ -3,6 +3,12 @@ uvicorn[standard]>=0.35.0,<1.0.0
 sqlalchemy>=2.0.44,<3.0.0
 psycopg[binary]>=3.2.10,<4.0.0
 pydantic-settings>=2.10.1,<3.0.0
+# Imported directly at module scope in app/core/config.py and ~11 other
+# modules (BaseModel, Field, model_validator, etc.) — not just used through
+# pydantic-settings. Already present transitively via fastapi and
+# pydantic-settings; pinned here anyway to record the major version this
+# code actually targets (v2 APIs), not to guard against it disappearing.
+pydantic>=2.12.5,<3.0.0
 python-multipart>=0.0.9,<1.0.0
 python-dotenv>=1.0.0,<2.0.0
 resend>=2.0.0,<3.0.0
@@ -14,6 +20,14 @@ pywebpush>=2.0.0,<3.0.0
 # broke the Vercel build (`uv lock` resolves strictly; pip silently ignored
 # the conflict locally, which is why this wasn't caught by local pip installs).
 cryptography>=49.0.0,<50.0.0
+# Used directly by app/services/paystack.py (httpx, not requests — avoids
+# Cloudflare's bot filter blocking requests with a missing/default
+# User-Agent). Was only in requirements-dev.txt, so `pip install -r
+# requirements.txt` alone — what Vercel's build actually runs — never
+# installed it: every route 500'd in production (ModuleNotFoundError,
+# imported transitively via app.services.auth), while local runs worked
+# fine from the dev venv's extras.
+httpx>=0.27,<1.0
 # Stream Chat — real-time messaging
 stream-chat>=4.0.0
 # Anthropic Claude — AI support auto-replies
