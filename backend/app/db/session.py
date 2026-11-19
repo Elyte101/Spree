@@ -1,9 +1,11 @@
 import logging
 import os
+import uuid
 from collections.abc import Generator
 
 from fastapi import HTTPException, status
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 
@@ -62,6 +64,26 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except OperationalError as exc:
+        # create_engine() is lazy — a bad/unreachable DATABASE_URL (wrong
+        # host, rotated credentials, the Postgres instance paused or
+        # unreachable from this network) only surfaces here, on the first
+        # real query, as an unhandled exception — not at startup. Left
+        # uncaught, this propagated straight through FastAPI and out to
+        # Vercel's generic function-crash wrapper, which replaced it with an
+        # opaque "A server error has occurred" / FUNCTION_INVOCATION_FAILED
+        # response and discarded the real cause entirely. Log the real
+        # error with a correlation id (safe server-side — OperationalError's
+        # message can include the connection target) and fail closed with a
+        # clean, honest 503 instead, matching the "DATABASE_URL not set"
+        # case above.
+        db.rollback()
+        request_id = uuid.uuid4().hex[:12]
+        logger.error("[db] query failed (request_id=%s): %s", request_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database is temporarily unreachable (request_id={request_id}).",
+        ) from exc
     except Exception:
         db.rollback()
         raise

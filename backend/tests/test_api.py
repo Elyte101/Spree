@@ -164,6 +164,25 @@ def test_readiness_endpoint_checks_database():
         assert response.json() == {"status": "ready"}
 
 
+def test_readiness_endpoint_reports_503_when_database_unreachable():
+    """Regression: engine being non-None only means create_engine() parsed
+    the URL successfully at startup (lazy — no real connection attempt yet),
+    not that the database is actually reachable. /readyz used to report
+    "ready" unconditionally whenever engine was non-None, so it would have
+    shown no signal at all during the 2026-11-19 outage (a real connection
+    failure only surfaced at query time, not at startup)."""
+    from unittest.mock import patch
+
+    from app.db import session as db_session
+
+    with TestClient(app) as client:
+        with patch.object(db_session.engine, "connect", side_effect=Exception("could not connect to server")):
+            response = client.get("/readyz")
+
+        assert response.status_code == 503
+        assert response.json()["status"] == "unavailable"
+
+
 def test_products_endpoint_returns_valid_catalog_shape():
     with TestClient(app) as client:
         response = client.get("/api/v1/products?sort=rating&limit=4")
@@ -3186,3 +3205,39 @@ def test_product_stock_always_equals_sum_of_variant_stock():
         order_resp = client.post("/api/v1/orders", json=order_payload, headers=ADMIN_HEADERS)
         assert order_resp.status_code == 201, order_resp.text
         assert_consistent(product_id, expected_stock=37)
+
+
+def test_db_connectivity_failure_returns_clean_503_not_a_raw_crash():
+    """Incident regression (2026-11-19 prod outage): create_engine() is lazy
+    — a database that's unreachable only at query time (wrong/rotated
+    credentials, the Postgres instance paused or unreachable from the
+    deployment's network) used to surface as a raw, unhandled
+    sqlalchemy.exc.OperationalError. Locally that's an ugly traceback;
+    deployed on Vercel it was caught by the platform's own generic
+    function-crash wrapper, which discarded the real cause entirely and
+    returned an opaque "A server error has occurred" with no way to
+    correlate it to a log line. get_db() (app/db/session.py) now catches
+    this specifically, logs the real error, and fails closed with an
+    honest 503 instead."""
+    from unittest.mock import patch
+
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+
+    with TestClient(app) as client:
+        fake_error = OperationalError(
+            "SELECT 1", {}, Exception("could not connect to server: Connection timed out")
+        )
+        with patch.object(Session, "scalars", side_effect=fake_error):
+            response = client.get("/api/v1/products")
+
+        assert response.status_code == 503, response.text
+        body = response.json()
+        assert "temporarily unreachable" in body["detail"]
+        assert "request_id=" in body["detail"]
+
+        # The DB must still work normally on the next request — get_db()
+        # rolled back and closed the broken session rather than leaving
+        # anything poisoned for later requests.
+        recovered = client.get("/api/v1/products")
+        assert recovered.status_code == 200, recovered.text

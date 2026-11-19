@@ -1,11 +1,12 @@
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from app.api.router import api_router
 from app.api.routes.chat import webhook_router
@@ -16,6 +17,7 @@ from app.db.session import engine
 
 configure_logging()
 _startup_log = logging.getLogger("app.startup")
+_error_log = logging.getLogger("spree.api")  # same logger name request_logging_middleware uses
 
 
 def _check_payment_config() -> None:
@@ -100,6 +102,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Backstop for anything that isn't an intentional HTTPException (those
+    are handled by FastAPI's own default handler and never reach here).
+
+    Without this, an unhandled exception propagates past request_logging_
+    middleware (which already logs it, but that log is only visible with
+    Vercel log access) straight out to the platform's own generic crash
+    response — opaque to the client and to anyone without log access, and
+    with no way to correlate a bug report back to the matching log line.
+    This logs the real exception with a request id and returns that same id
+    to the client, so a report of "it's broken" can be matched to the exact
+    log line without guessing.
+    """
+    request_id = uuid.uuid4().hex[:12]
+    _error_log.exception(
+        "Unhandled exception for %s %s (request_id=%s)", request.method, request.url.path, request_id
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"An unexpected error occurred (request_id={request_id})."},
+    )
+
+
 if settings.trusted_hosts != ["*"]:
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 
@@ -128,9 +155,27 @@ def healthcheck():
 
 
 @app.get("/readyz")
-def readiness_check():
+def readiness_check(response: Response):
+    """Actually probes the database, not just whether the engine object was
+    constructed — create_engine() is lazy, so engine being non-None only
+    means DATABASE_URL parsed as a valid URL at startup, not that the
+    database is reachable right now. During the 2026-11-19 outage this
+    endpoint would have reported "ready" the entire time a real connection
+    attempt was failing, since engine was never None — a monitor polling it
+    would have seen no signal at all.
+    """
     if engine is None:
+        response.status_code = 503
         return {"status": "unavailable", "reason": "DATABASE_URL not configured"}
+    try:
+        from sqlalchemy import text
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:
+        _startup_log.error("[readyz] database probe failed: %s", exc)
+        response.status_code = 503
+        return {"status": "unavailable", "reason": "database is not reachable"}
     return {"status": "ready"}
 
 
