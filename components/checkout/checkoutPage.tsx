@@ -171,6 +171,25 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
   const [stage, setStage] = React.useState<PaymentStage>("idle");
   const [submitting, setSubmitting] = React.useState(false);
   const [submitError, setSubmitError] = React.useState<string | null>(null);
+  const [verificationEmail, setVerificationEmail] = React.useState<"idle" | "sending" | "sent">("idle");
+
+  // Matches the backend's require_email_verified() 403 detail. Switching
+  // payment method can't fix this one — the account itself is gated.
+  const needsEmailVerification = submitError?.startsWith("Please verify your email") ?? false;
+
+  const resendVerificationEmail = async () => {
+    setVerificationEmail("sending");
+    try {
+      const res = await fetch("/api/auth/send-verification", { method: "POST" });
+      const data = await res.json().catch(() => ({})) as { detail?: string };
+      if (!res.ok) throw new Error(data.detail ?? "Couldn't send the verification email.");
+      setVerificationEmail("sent");
+      showToast({ message: "Verification email sent — check your inbox, then come back to pay.", type: "success" });
+    } catch (err) {
+      setVerificationEmail("idle");
+      showToast({ message: err instanceof Error ? err.message : "Couldn't send the verification email.", type: "error" });
+    }
+  };
 
   // MoMo fields
   const [momoPhone, setMomoPhone] = React.useState("");
@@ -1176,7 +1195,25 @@ export function CheckoutPage({ initialProfile }: { initialProfile?: UserProfile 
                 {submitError && (
                   <Alert severity="error" onClose={() => setSubmitError(null)} sx={{ borderRadius: 2 }}>
                     {submitError}
-                    {paymentMethod === "momo" && (
+                    {needsEmailVerification && (
+                      <Box mt={1}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          color="inherit"
+                          sx={{ borderRadius: 999, textTransform: "none", fontWeight: 700 }}
+                          disabled={verificationEmail !== "idle"}
+                          onClick={resendVerificationEmail}
+                        >
+                          {verificationEmail === "sent"
+                            ? "Email sent — check your inbox"
+                            : verificationEmail === "sending"
+                              ? "Sending…"
+                              : "Resend verification email"}
+                        </Button>
+                      </Box>
+                    )}
+                    {paymentMethod === "momo" && !needsEmailVerification && (
                       <Box mt={1}>
                         <Button
                           size="small"
