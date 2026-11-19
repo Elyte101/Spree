@@ -498,6 +498,19 @@ def _build_variants(
     return variants
 
 
+def _reject_umbrella(category: Category) -> Category:
+    """Umbrellas (app/core/category_taxonomy.py) are storefront departments
+    that only group categories — no product is ever filed directly under
+    one. list_categories' itemCount, _validate_sizes and the seller forms'
+    Department -> Category -> Subcategory picker all assume that."""
+    if category.slug in UMBRELLA_SLUGS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f'"{category.name}" is a department — pick a category within it.',
+        )
+    return category
+
+
 def _resolve_category(
     db: Session,
     category_id: str | None,
@@ -508,7 +521,7 @@ def _resolve_category(
         category = db.get(Category, category_id)
         if category is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
-        return category
+        return _reject_umbrella(category)
 
     normalized_name = (category_name or "").strip()
     normalized_slug = _slugify(normalized_name)
@@ -521,7 +534,7 @@ def _resolve_category(
         )
     )
     if category is not None:
-        return category
+        return _reject_umbrella(category)
 
     category = Category(
         id=f"cat-{uuid4().hex[:12]}",

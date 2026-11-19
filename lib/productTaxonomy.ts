@@ -10,6 +10,8 @@
  * single shared source across the TypeScript/Python split.
  */
 
+import type { Category } from "@/types/types";
+
 export const COLOR_OPTIONS = [
   "Black", "White", "Gray", "Silver", "Gold",
   "Red", "Maroon", "Pink", "Orange", "Yellow",
@@ -94,4 +96,63 @@ export function sizeValuesForSlug(slug: string | undefined | null): string[] {
 
 export function sizeGroupLookup(slug: string | undefined | null): Map<string, string> {
   return new Map(sizePresetsForSlug(slug).map((p) => [p.value, p.group]));
+}
+
+// Since the umbrella migration (backend/app/core/category_taxonomy.py) the
+// category tree is three levels deep: department (umbrella, e.g.
+// "📱 Electronics") -> category (the old main, e.g. "Phones & Accessories")
+// -> subcategory (e.g. "Smartphones"). Both seller forms pick down that path.
+export interface CategoryPath {
+  departmentId: string;
+  categoryId: string;
+  subcategoryId: string;
+}
+
+export const EMPTY_CATEGORY_PATH: CategoryPath = { departmentId: "", categoryId: "", subcategoryId: "" };
+
+export interface CategoryPicker {
+  departments: Category[];
+  categoryOptions: Category[];
+  subcategoryOptions: Category[];
+  /**
+   * The middle level — what sizes are keyed on (SIZE_PRESETS_BY_MAIN_CATEGORY_SLUG),
+   * mirroring the backend's _validate_sizes.
+   */
+  sizeCategory: Category | undefined;
+  /** The id to save on the product: the deepest level available. "" until the path is complete. */
+  productCategoryId: string;
+}
+
+export function categoryPicker(categories: Category[], path: CategoryPath): CategoryPicker {
+  const childrenOf = (parentId: string) => (parentId ? categories.filter((c) => c.parentId === parentId) : []);
+  const departments = categories.filter((c) => !c.parentId);
+  const categoryOptions = childrenOf(path.departmentId);
+  const subcategoryOptions = childrenOf(path.categoryId);
+  // A top-level category with nothing under it (a stray unparented category,
+  // never an umbrella) stands in as its own category rather than bricking the form.
+  const effectiveCategoryId =
+    path.categoryId || (path.departmentId && categoryOptions.length === 0 ? path.departmentId : "");
+  const productCategoryId = !effectiveCategoryId
+    ? ""
+    : subcategoryOptions.length > 0
+      ? path.subcategoryId
+      : effectiveCategoryId;
+  return {
+    departments,
+    categoryOptions,
+    subcategoryOptions,
+    sizeCategory: categories.find((c) => c.id === effectiveCategoryId),
+    productCategoryId,
+  };
+}
+
+/** Rebuilds the picker path for a product's stored categoryId (the edit dialog's starting point). */
+export function categoryPathFor(categories: Category[], productCategoryId: string): CategoryPath {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const chain: string[] = [];
+  for (let c = byId.get(productCategoryId); c && chain.length < 3; c = c.parentId ? byId.get(c.parentId) : undefined) {
+    chain.unshift(c.id);
+  }
+  const [departmentId = "", categoryId = "", subcategoryId = ""] = chain;
+  return { departmentId, categoryId, subcategoryId };
 }

@@ -35,7 +35,14 @@ import {
 } from "@mui/material";
 
 import { api, ApiClientError, UpdateProductPayload } from "@/lib/api";
-import { COLOR_OPTIONS, sizeGroupLookup, sizeValuesForSlug } from "@/lib/productTaxonomy";
+import {
+  COLOR_OPTIONS,
+  EMPTY_CATEGORY_PATH,
+  categoryPathFor,
+  categoryPicker,
+  sizeGroupLookup,
+  sizeValuesForSlug,
+} from "@/lib/productTaxonomy";
 import { Category, Product, UserRole } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -107,8 +114,7 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
   const [editStock, setEditStock] = React.useState("");
   const [editBadge, setEditBadge] = React.useState("");
   const [editTags, setEditTags] = React.useState("");
-  const [editMainCategoryId, setEditMainCategoryId] = React.useState("");
-  const [editCategoryId, setEditCategoryId] = React.useState("");
+  const [editCategoryPath, setEditCategoryPath] = React.useState(EMPTY_CATEGORY_PATH);
   const [editBrandName, setEditBrandName] = React.useState("");
   const [editCollectionName, setEditCollectionName] = React.useState("");
   const [editColors, setEditColors] = React.useState<string[]>([]);
@@ -121,13 +127,17 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
 
   const canManage = (p: Product) => isAdmin || p.sellerId === userId;
 
-  const editMainCategories = categories.filter((c) => !c.parentId);
-  const editSubcategories = categories.filter((c) => c.parentId === editMainCategoryId);
-  const editSelectedMainCategory = editMainCategories.find((c) => c.id === editMainCategoryId);
-  const editAvailableSizeOptions = editMainCategoryId ? sizeValuesForSlug(editSelectedMainCategory?.slug) : [];
+  const {
+    departments: editDepartments,
+    categoryOptions: editCategoryOptions,
+    subcategoryOptions: editSubcategoryOptions,
+    sizeCategory: editSizeCategory,
+    productCategoryId: editCategoryId,
+  } = categoryPicker(categories, editCategoryPath);
+  const editAvailableSizeOptions = editSizeCategory ? sizeValuesForSlug(editSizeCategory.slug) : [];
   const editSizeGroupByValue = React.useMemo(
-    () => sizeGroupLookup(editSelectedMainCategory?.slug),
-    [editSelectedMainCategory?.slug]
+    () => sizeGroupLookup(editSizeCategory?.slug),
+    [editSizeCategory?.slug]
   );
 
   const openEdit = (product: Product) => {
@@ -139,9 +149,7 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
     setEditStock(String(product.stock));
     setEditBadge(product.badge ?? "");
     setEditTags(product.tags.join(", "));
-    const currentCategory = categories.find((c) => c.id === product.categoryId);
-    setEditMainCategoryId(currentCategory?.parentId ?? currentCategory?.id ?? "");
-    setEditCategoryId(product.categoryId);
+    setEditCategoryPath(categoryPathFor(categories, product.categoryId));
     setEditBrandName(product.brand);
     setEditCollectionName(product.collection ?? "");
     setEditColors(product.colors);
@@ -498,32 +506,46 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
               <TextField label="Discount %" type="number" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} slotProps={{ input: { inputProps: { min: 0, max: 90, step: 1 } } }} />
               <TextField label="Stock" type="number" value={editStock} onChange={(e) => setEditStock(e.target.value)} slotProps={{ input: { inputProps: { min: 0, step: 1 } } }} />
             </Box>
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr 1fr" }}>
               <FormControl>
-                <InputLabel id="edit-main-category-label">Category</InputLabel>
+                <InputLabel id="edit-department-label">Department</InputLabel>
                 <Select
-                  labelId="edit-main-category-label"
-                  value={editMainCategoryId}
-                  label="Category"
-                  onChange={(e) => {
-                    setEditMainCategoryId(e.target.value);
-                    setEditCategoryId("");
-                  }}
+                  labelId="edit-department-label"
+                  value={editCategoryPath.departmentId}
+                  label="Department"
+                  onChange={(e) =>
+                    setEditCategoryPath({ departmentId: e.target.value, categoryId: "", subcategoryId: "" })
+                  }
                 >
-                  {editMainCategories.map((category) => (
+                  {editDepartments.map((category) => (
                     <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-              <FormControl disabled={!editMainCategoryId}>
+              <FormControl disabled={!editCategoryPath.departmentId || editCategoryOptions.length === 0}>
+                <InputLabel id="edit-category-label">Category</InputLabel>
+                <Select
+                  labelId="edit-category-label"
+                  value={editCategoryPath.categoryId}
+                  label="Category"
+                  onChange={(e) =>
+                    setEditCategoryPath((path) => ({ ...path, categoryId: e.target.value, subcategoryId: "" }))
+                  }
+                >
+                  {editCategoryOptions.map((category) => (
+                    <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl disabled={!editCategoryPath.categoryId || editSubcategoryOptions.length === 0}>
                 <InputLabel id="edit-subcategory-label">Subcategory</InputLabel>
                 <Select
                   labelId="edit-subcategory-label"
-                  value={editCategoryId}
+                  value={editCategoryPath.subcategoryId}
                   label="Subcategory"
-                  onChange={(e) => setEditCategoryId(e.target.value)}
+                  onChange={(e) => setEditCategoryPath((path) => ({ ...path, subcategoryId: e.target.value }))}
                 >
-                  {editSubcategories.map((category) => (
+                  {editSubcategoryOptions.map((category) => (
                     <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                   ))}
                 </Select>
@@ -533,7 +555,7 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
               <TextField label="Brand" value={editBrandName} onChange={(e) => setEditBrandName(e.target.value)} />
               <TextField label="Collection" value={editCollectionName} onChange={(e) => setEditCollectionName(e.target.value)} />
             </Box>
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: editMainCategoryId ? "1fr 1fr" : "1fr" }}>
+            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: editSizeCategory ? "1fr 1fr" : "1fr" }}>
               <Autocomplete
                 multiple
                 options={COLOR_OPTIONS}
@@ -547,7 +569,7 @@ export function ProductsTable({ products, filter, role, userId, categories }: Pr
                   })
                 }
               />
-              {editMainCategoryId ? (
+              {editSizeCategory ? (
                 <Autocomplete
                   multiple
                   options={editAvailableSizeOptions}

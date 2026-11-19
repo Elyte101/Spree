@@ -29,7 +29,13 @@ import { InfoOutlined, WarningAmberRounded } from "@mui/icons-material";
 import { ResponsiveDisclosurePanel } from "@/components/ui/responsiveDisclosurePanel";
 import { api, ApiClientError } from "@/lib/api";
 import { calcCommission } from "@/lib/pricing";
-import { COLOR_OPTIONS, sizeGroupLookup, sizeValuesForSlug } from "@/lib/productTaxonomy";
+import {
+  COLOR_OPTIONS,
+  EMPTY_CATEGORY_PATH,
+  categoryPicker,
+  sizeGroupLookup,
+  sizeValuesForSlug,
+} from "@/lib/productTaxonomy";
 import { Brand, Category, Collection } from "@/types/types";
 import { formatPrice } from "@/lib/ghana";
 
@@ -80,8 +86,7 @@ export function ProductCreateForm({
   const [price, setPrice] = React.useState("");
   const [discount, setDiscount] = React.useState("0");
   const [stock, setStock] = React.useState("");
-  const [mainCategoryId, setMainCategoryId] = React.useState("");
-  const [subcategoryId, setSubcategoryId] = React.useState("");
+  const [categoryPath, setCategoryPath] = React.useState(EMPTY_CATEGORY_PATH);
   const [brandName, setBrandName] = React.useState("");
   const [collectionName, setCollectionName] = React.useState("");
   const [badge, setBadge] = React.useState("");
@@ -94,23 +99,16 @@ export function ProductCreateForm({
   const [featureOnHomepage, setFeatureOnHomepage] = React.useState(false);
   const [markAsNewArrival, setMarkAsNewArrival] = React.useState(false);
 
-  const mainCategories = categories.filter((c) => !c.parentId);
-  const subcategories = categories.filter((c) => c.parentId === mainCategoryId);
-  // A category should always have subcategories (seeded server-side — see
-  // _CATEGORY_TAXONOMY in backend/app/db/init_db.py), but a stray orphan
-  // main category with none must not brick the form: Subcategory disables
-  // itself and stops being required rather than staying required with
-  // nothing selectable.
-  const hasNoSubcategories = Boolean(mainCategoryId) && subcategories.length === 0;
-  const selectedMainCategory = mainCategories.find((c) => c.id === mainCategoryId);
+  const { departments, categoryOptions, subcategoryOptions, sizeCategory, productCategoryId } =
+    categoryPicker(categories, categoryPath);
   // Every category gets a size set — categories with no specific mapping
   // fall back to a generic one (One size / Small / Medium / Large) rather
   // than hiding the field, so Sizes is always available once a category is
   // chosen.
-  const availableSizeOptions = mainCategoryId ? sizeValuesForSlug(selectedMainCategory?.slug) : [];
+  const availableSizeOptions = sizeCategory ? sizeValuesForSlug(sizeCategory.slug) : [];
   const sizeGroupByValue = React.useMemo(
-    () => sizeGroupLookup(selectedMainCategory?.slug),
-    [selectedMainCategory?.slug]
+    () => sizeGroupLookup(sizeCategory?.slug),
+    [sizeCategory?.slug]
   );
   // Switching category no longer wipes prior picks (they may still make
   // sense, e.g. re-picking a sibling subcategory) — instead, flag whichever
@@ -150,8 +148,7 @@ export function ProductCreateForm({
       description.trim() &&
       Number(price) > 0 &&
       stock.trim() !== "" &&
-      mainCategoryId &&
-      (hasNoSubcategories || subcategoryId) &&
+      productCategoryId &&
       brandName.trim() &&
       uploadedImages.length
   );
@@ -226,9 +223,7 @@ export function ProductCreateForm({
       price: Number(price),
       discount: Number(discount),
       images: uploadedImages,
-      // Falls back to the main category itself on the rare orphan-category
-      // edge case (hasNoSubcategories) where there's no subcategory to pick.
-      categoryId: subcategoryId || mainCategoryId,
+      categoryId: productCategoryId,
       brandName: brandName.trim(),
       collectionName: collectionName.trim() || undefined,
       stock: Number(stock),
@@ -578,39 +573,61 @@ export function ProductCreateForm({
                   sx={{
                     display: "grid",
                     gap: 2,
-                    gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+                    gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
                   }}
                 >
                   <FormControl required>
-                    <InputLabel id="create-main-category-label">Category</InputLabel>
+                    <InputLabel id="create-department-label">Department</InputLabel>
                     <Select
-                      labelId="create-main-category-label"
-                      value={mainCategoryId}
-                      label="Category"
-                      onChange={(event) => {
-                        setMainCategoryId(event.target.value);
-                        setSubcategoryId("");
-                      }}
+                      labelId="create-department-label"
+                      value={categoryPath.departmentId}
+                      label="Department"
+                      onChange={(event) =>
+                        setCategoryPath({ departmentId: event.target.value, categoryId: "", subcategoryId: "" })
+                      }
                     >
-                      {mainCategories.map((category) => (
+                      {departments.map((category) => (
                         <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                       ))}
                     </Select>
                   </FormControl>
-                  <FormControl required={!hasNoSubcategories} disabled={!mainCategoryId || hasNoSubcategories}>
-                    <InputLabel id="create-subcategory-label">Subcategory</InputLabel>
+                  <FormControl
+                    required={categoryOptions.length > 0}
+                    disabled={!categoryPath.departmentId || categoryOptions.length === 0}
+                  >
+                    <InputLabel id="create-category-label">Category</InputLabel>
                     <Select
-                      labelId="create-subcategory-label"
-                      value={subcategoryId}
-                      label="Subcategory"
-                      onChange={(event) => setSubcategoryId(event.target.value)}
+                      labelId="create-category-label"
+                      value={categoryPath.categoryId}
+                      label="Category"
+                      onChange={(event) =>
+                        setCategoryPath((path) => ({ ...path, categoryId: event.target.value, subcategoryId: "" }))
+                      }
                     >
-                      {subcategories.map((category) => (
+                      {categoryOptions.map((category) => (
                         <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
                       ))}
                     </Select>
-                    {hasNoSubcategories ? (
-                      <FormHelperText>No subcategories available for this category</FormHelperText>
+                  </FormControl>
+                  <FormControl
+                    required={subcategoryOptions.length > 0}
+                    disabled={!categoryPath.categoryId || subcategoryOptions.length === 0}
+                  >
+                    <InputLabel id="create-subcategory-label">Subcategory</InputLabel>
+                    <Select
+                      labelId="create-subcategory-label"
+                      value={categoryPath.subcategoryId}
+                      label="Subcategory"
+                      onChange={(event) =>
+                        setCategoryPath((path) => ({ ...path, subcategoryId: event.target.value }))
+                      }
+                    >
+                      {subcategoryOptions.map((category) => (
+                        <MenuItem key={category.id} value={category.id}>{category.name}</MenuItem>
+                      ))}
+                    </Select>
+                    {categoryPath.categoryId && subcategoryOptions.length === 0 ? (
+                      <FormHelperText>No subcategories for this category</FormHelperText>
                     ) : null}
                   </FormControl>
                 </Box>
@@ -703,7 +720,7 @@ export function ProductCreateForm({
                       })
                     }
                   />
-                  {mainCategoryId ? (
+                  {sizeCategory ? (
                     <Autocomplete
                       multiple
                       options={availableSizeOptions}
@@ -714,7 +731,7 @@ export function ProductCreateForm({
                         <TextField
                           {...params}
                           label="Sizes"
-                          helperText={`Pick every size this item comes in — options shown for ${selectedMainCategory?.name ?? "this category"}`}
+                          helperText={`Pick every size this item comes in — options shown for ${sizeCategory?.name ?? "this category"}`}
                         />
                       )}
                       renderTags={(value, getTagProps) =>
@@ -729,8 +746,8 @@ export function ProductCreateForm({
                 {staleSizeSelections.length ? (
                   <Alert severity="warning" icon={<WarningAmberRounded fontSize="small" />}>
                     {(staleSizeSelections.length === 1
-                      ? `"${staleSizeSelections[0]}" isn't one of the size options for ${selectedMainCategory?.name ?? "this category"}.`
-                      : `${staleSizeSelections.map((s) => `"${s}"`).join(", ")} aren't size options for ${selectedMainCategory?.name ?? "this category"}.`
+                      ? `"${staleSizeSelections[0]}" isn't one of the size options for ${sizeCategory?.name ?? "this category"}.`
+                      : `${staleSizeSelections.map((s) => `"${s}"`).join(", ")} aren't size options for ${sizeCategory?.name ?? "this category"}.`
                     ) + " Remove and re-pick from the current list, or leave as-is if it's still accurate."}
                   </Alert>
                 ) : null}

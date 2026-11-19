@@ -183,7 +183,8 @@ export interface Category {
   slug: string;
   image: string;
   itemCount: number;
-  // null/undefined = main category; set = subcategory of that main category.
+  // null/undefined = top-level department (umbrella); set = a category or
+  // subcategory under it. See lib/productTaxonomy.ts's categoryPicker.
   parentId?: string | null;
 }
 

@@ -404,3 +404,50 @@ def test_category_filter_and_size_validation_work_through_the_umbrella_layer():
         reject_resp = client.post("/api/v1/products", json=bad_size_payload, headers=test_api.ADMIN_HEADERS)
         assert reject_resp.status_code == 422, reject_resp.text
         assert "Phones & Accessories" in reject_resp.json()["detail"]
+
+
+def test_products_cannot_be_filed_directly_under_an_umbrella():
+    """Umbrellas only group categories. Filing a product straight under one
+    would bypass the Department -> Category -> Subcategory picker and leave
+    it with no meaningful size set — rejected on create (by id or by name)
+    and on update."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+    import test_api
+
+    import create_category_umbrellas
+
+    create_category_umbrellas.run(dry_run=False)
+
+    with TestClient(app) as client:
+        categories = {c["slug"]: c for c in client.get("/api/v1/categories").json()}
+        electronics = categories["electronics"]
+        smartphones = categories["phones-accessories-smartphones"]
+
+        payload = test_api._create_product_payload()
+        payload["name"] = "Umbrella Filing Test Phone"
+        payload["categoryId"] = electronics["id"]
+        del payload["categoryName"]
+        payload["sizes"] = []
+        by_id = client.post("/api/v1/products", json=payload, headers=test_api.ADMIN_HEADERS)
+        assert by_id.status_code == 422, by_id.text
+        assert "department" in by_id.json()["detail"]
+
+        by_name = dict(payload)
+        del by_name["categoryId"]
+        by_name["categoryName"] = electronics["name"]
+        name_resp = client.post("/api/v1/products", json=by_name, headers=test_api.ADMIN_HEADERS)
+        assert name_resp.status_code == 422, name_resp.text
+
+        payload["categoryId"] = smartphones["id"]
+        created = client.post("/api/v1/products", json=payload, headers=test_api.ADMIN_HEADERS)
+        assert created.status_code == 201, created.text
+        product_id = created.json()["id"]
+
+        update = client.put(
+            f"/api/v1/products/{product_id}",
+            json={"categoryId": electronics["id"]},
+            headers=test_api.ADMIN_HEADERS,
+        )
+        assert update.status_code == 422, update.text
+        assert client.get(f"/api/v1/products/{product_id}").json()["category"] == "Smartphones"
